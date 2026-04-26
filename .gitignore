@@ -1,0 +1,13 @@
+.DS_Store
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+*.log
+*.local
+*.tsbuildinfo
+release/
+artifacts/*
+artifacts/.*
+!artifacts/DataMoat-*-macos-*.dmg

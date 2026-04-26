@@ -1,0 +1,2506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DataMoat</title>
+<style>
+  :root {
+    --bg:        #080b0f;
+    --surface:   #0e1318;
+    --border:    #1c2430;
+    --border2:   #243040;
+    --text:      #c8d8e8;
+    --muted:     #4a6070;
+    --accent:    #00c8a0;
+    --accent2:   #0088ff;
+    --warn:      #ffaa00;
+    --claude:    #cc7830;
+    --codex:     #3888e0;
+    --openclaw:  #a060d0;
+    --app:       #20a840;
+    --think-bg:  #0a1208;
+    --think-border: #1a3020;
+    --think-text:   #5a9060;
+    --font-mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex: 0 0 auto;
+  }
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.05em;
+    white-space: nowrap;
+  }
+  .logo span { color: var(--muted); font-weight: 300; }
+  .search-wrap {
+    flex: 1;
+    max-width: 480px;
+    position: relative;
+  }
+  .search-wrap svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+  }
+  #search {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 7px 12px 7px 34px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #search:focus { border-color: var(--accent); }
+  #search::placeholder { color: var(--muted); }
+
+  .filters {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+  }
+  .filter-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all 0.12s;
+    letter-spacing: 0.04em;
+  }
+  .filter-btn:hover { border-color: var(--border2); color: var(--text); }
+  .filter-btn.active { color: #fff; border-color: transparent; }
+  .filter-btn[data-src="all"].active    { background: #1a2530; color: var(--text); border-color: var(--border2); }
+  .filter-btn[data-src="claude-cli"].active  { background: #2a1a08; color: var(--claude); border-color: var(--claude); }
+  .filter-btn[data-src="codex-cli"].active   { background: #081828; color: var(--codex); border-color: var(--codex); }
+  .filter-btn[data-src="claude-app"].active  { background: #081808; color: var(--app); border-color: var(--app); }
+  .filter-btn[data-src="openclaw"].active    { background: #180828; color: var(--openclaw); border-color: var(--openclaw); }
+
+  .stat {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .stat strong { color: var(--text); }
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .header-link,
+  .header-icon-btn {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    white-space: nowrap;
+    background: transparent;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .header-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 28px;
+    cursor: pointer;
+  }
+  .header-link:hover,
+  .header-icon-btn:hover {
+    color: var(--accent);
+    border-color: var(--border2);
+    background: #10161d;
+  }
+  .notice-banner {
+    display: none;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 10px 18px;
+    border-bottom: 1px solid #5b4310;
+    background: #171108;
+    color: #f5d38a;
+    font-size: 12px;
+    line-height: 1.6;
+    flex: 0 0 auto;
+  }
+  .notice-banner.show { display: flex; }
+  .notice-banner strong {
+    color: #ffcf66;
+    font-weight: 600;
+  }
+  .notice-copy {
+    flex: 1;
+    min-width: 0;
+  }
+  .notice-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .notice-action {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #08110a;
+    border: 1px solid rgba(0, 200, 160, 0.4);
+    border-radius: 4px;
+    background: rgba(0, 200, 160, 0.9);
+    padding: 5px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .notice-action:hover {
+    background: rgba(0, 200, 160, 1);
+  }
+  .notice-action[hidden] { display: none; }
+  [hidden] { display: none !important; }
+  .notice-dismiss {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #f5d38a;
+    border: 1px solid #7a5a16;
+    border-radius: 4px;
+    background: transparent;
+    padding: 5px 8px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .notice-dismiss:hover {
+    background: rgba(255, 207, 102, 0.08);
+  }
+  .recovery-reset-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: grid;
+    place-items: center;
+    padding: 24px;
+    background: rgba(3, 8, 12, 0.72);
+    backdrop-filter: blur(8px);
+  }
+  .recovery-reset-panel {
+    width: min(520px, 100%);
+    background: #0d141b;
+    border: 1px solid var(--border2);
+    border-radius: 18px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+    overflow: hidden;
+  }
+  .recovery-reset-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .recovery-reset-title {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    color: var(--text);
+    letter-spacing: 0.02em;
+  }
+  .recovery-reset-body {
+    display: grid;
+    gap: 14px;
+    padding: 20px;
+  }
+  .recovery-reset-copy {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--muted2);
+  }
+  .recovery-reset-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .recovery-reset-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 11px 12px;
+    outline: none;
+  }
+  .recovery-reset-input:focus {
+    border-color: var(--accent);
+  }
+  .recovery-reset-hint {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .recovery-reset-error {
+    min-height: 18px;
+    color: #ff8d82;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .recovery-reset-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding-top: 4px;
+  }
+  .recovery-reset-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 8px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border: 1px solid var(--border2);
+    background: transparent;
+    color: var(--muted2);
+  }
+  .recovery-reset-btn:hover {
+    border-color: var(--border3);
+    color: var(--text);
+    background: rgba(255,255,255,0.03);
+  }
+  .recovery-reset-btn.primary {
+    color: #07110d;
+    background: rgba(0, 200, 160, 0.9);
+    border-color: rgba(0, 200, 160, 0.4);
+  }
+  .recovery-reset-btn.primary:hover {
+    background: rgba(0, 200, 160, 1);
+  }
+  .recovery-reset-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  /* ── Layout ── */
+  .layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    height: auto;
+    min-height: 0;
+  }
+
+  /* ── Session list ── */
+  .session-list {
+    width: 340px;
+    min-width: 240px;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    flex-shrink: 0;
+    height: 100%;
+    min-height: 0;
+    overscroll-behavior: contain;
+  }
+  .session-list::-webkit-scrollbar { width: 4px; }
+  .session-list::-webkit-scrollbar-track { background: transparent; }
+  .session-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .session-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    position: relative;
+  }
+  .session-item:hover { background: var(--surface); }
+  .session-item.active { background: var(--surface); }
+  .session-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 2px;
+    background: var(--accent);
+  }
+
+  .session-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .source-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .source-dot.claude-cli  { background: var(--claude); }
+  .source-dot.codex-cli   { background: var(--codex); }
+  .source-dot.claude-app  { background: var(--app); }
+  .source-dot.openclaw    { background: var(--openclaw); }
+
+  .session-model {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .thinking-badge {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--think-text);
+    border: 1px solid var(--think-border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: var(--think-bg);
+    flex-shrink: 0;
+  }
+  .session-cwd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 3px;
+  }
+  .session-account {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 5px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: #0b1117;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    max-width: 100%;
+  }
+  .session-account-label {
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+  .session-account-value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .search-excerpt {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.4;
+    margin: 3px 0;
+    font-family: var(--font-sans);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-left: 2px solid var(--accent);
+    padding-left: 6px;
+  }
+  .session-meta {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  /* ── Conversation view ── */
+  .conversation {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 32px;
+    height: 100%;
+    min-height: 0;
+    overscroll-behavior: contain;
+  }
+  .conversation::-webkit-scrollbar { width: 4px; }
+  .conversation::-webkit-scrollbar-track { background: transparent; }
+  .conversation::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .conv-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .conv-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 8px;
+    word-break: break-all;
+  }
+  .conv-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .badge {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+  }
+  .badge.source { }
+  .badge.claude-cli  { color: var(--claude); border-color: var(--claude); background: #2a1a0820; }
+  .badge.codex-cli   { color: var(--codex); border-color: var(--codex); background: #08182820; }
+  .badge.claude-app  { color: var(--app); border-color: var(--app); background: #08180820; }
+  .badge.openclaw    { color: var(--openclaw); border-color: var(--openclaw); background: #18082820; }
+
+  /* ── Messages ── */
+  .message { margin-bottom: 20px; }
+  .message.tool,
+  .message.system {
+    padding-left: 12px;
+    border-left: 2px solid var(--border2);
+  }
+  .message-role {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .message-role.user  { color: var(--accent2); }
+  .message-role.assistant { color: var(--accent); }
+  .message-role.tool { color: var(--warn); }
+  .message-role.system { color: #d080ff; }
+  .msg-time {
+    font-size: 10px;
+    color: var(--muted);
+    font-weight: 300;
+  }
+
+  .thinking-block {
+    background: var(--think-bg);
+    border: 1px solid var(--think-border);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .thinking-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    cursor: pointer;
+    user-select: none;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--think-text);
+  }
+  .thinking-toggle:hover { background: #0f1f10; }
+  .thinking-arrow {
+    font-size: 10px;
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  .thinking-arrow.open { transform: rotate(90deg); }
+  .thinking-content {
+    display: none;
+    padding: 10px 14px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--think-text);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-top: 1px solid var(--think-border);
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .thinking-content.open { display: block; }
+
+  .text-block {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.7;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .text-block code {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    color: var(--accent);
+  }
+
+  .tool-block {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    padding: 8px 12px;
+    margin: 6px 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .tool-name { color: var(--warn); font-weight: 500; }
+  .tool-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    flex-wrap: wrap;
+  }
+  .tool-kind {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .detail-block {
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    background: #0a0f14;
+  }
+  .detail-block summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 8px 10px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    user-select: none;
+  }
+  .detail-block summary::-webkit-details-marker { display: none; }
+  .detail-block summary:hover { background: #101821; }
+  .detail-pre {
+    margin: 0;
+    padding: 10px 12px 12px;
+    border-top: 1px solid var(--border);
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+  .other-block {
+    background: #0c1117;
+    border: 1px dashed var(--border2);
+    border-radius: 5px;
+    padding: 8px 12px;
+    margin: 6px 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .usage-line {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 6px;
+    display: flex;
+    gap: 12px;
+  }
+  .usage-line span { color: var(--text); }
+
+  /* ── Empty states ── */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 12px;
+    color: var(--muted);
+    text-align: center;
+  }
+  .empty-icon { font-size: 32px; opacity: 0.3; }
+  .empty-title { font-family: var(--font-mono); font-size: 14px; }
+  .empty-sub { font-size: 12px; max-width: 280px; line-height: 1.6; }
+
+  .no-session {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    gap: 8px;
+    color: var(--muted);
+  }
+  .no-session-icon { font-size: 28px; opacity: 0.2; }
+  .no-session-text { font-family: var(--font-mono); font-size: 12px; }
+
+  .settings-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(4, 8, 12, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 200;
+  }
+  .settings-backdrop[hidden] { display: none; }
+  .settings-panel {
+    width: min(560px, calc(100vw - 32px));
+    max-height: min(720px, calc(100vh - 32px));
+    overflow: auto;
+    border-radius: 14px;
+    border: 1px solid var(--border2);
+    background: linear-gradient(180deg, #10161d 0%, #0b1015 100%);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+  }
+  .settings-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .settings-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text);
+    letter-spacing: 0.06em;
+  }
+  .settings-close {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .settings-close:hover {
+    color: var(--text);
+    border-color: var(--border2);
+    background: #10161d;
+  }
+  .settings-body {
+    display: grid;
+    gap: 16px;
+    padding: 18px 20px 20px;
+  }
+  .switch-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #0a1016;
+    color: inherit;
+    cursor: pointer;
+    text-align: left;
+  }
+  .switch-row.disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+  .switch-track {
+    width: 42px;
+    height: 24px;
+    border-radius: 999px;
+    border: 1px solid var(--border2);
+    background: #121922;
+    position: relative;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .switch-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    background: #b9c6d5;
+    transition: transform 0.15s ease;
+  }
+  .switch-row.enabled .switch-track {
+    background: rgba(0, 200, 160, 0.16);
+    border-color: rgba(0, 200, 160, 0.45);
+  }
+  .switch-row.enabled .switch-knob {
+    transform: translateX(18px);
+    background: var(--accent);
+  }
+  .switch-copy {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+  .switch-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text);
+  }
+  .switch-subtitle {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+  .settings-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .settings-btn {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border2);
+    background: #10161d;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .settings-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .settings-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+  .settings-btn.primary {
+    background: rgba(0, 200, 160, 0.08);
+    border-color: rgba(0, 200, 160, 0.4);
+  }
+  .settings-btn.warn {
+    background: rgba(255, 170, 0, 0.08);
+    border-color: rgba(255, 170, 0, 0.35);
+  }
+  .settings-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .settings-card {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #0a1016;
+    padding: 12px;
+  }
+  .settings-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+  .settings-value {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  .settings-message {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted);
+    border-left: 2px solid var(--accent);
+    padding-left: 10px;
+  }
+  .settings-message.is-error {
+    color: #ffb1a8;
+    border-left-color: #ff6a52;
+  }
+  .source-field {
+    display: grid;
+    gap: 8px;
+  }
+  .source-label {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+  }
+  .source-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 10px 12px;
+    outline: none;
+  }
+  .source-input:focus {
+    border-color: var(--accent);
+  }
+  .source-help {
+    font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .backup-paths {
+    display: grid;
+    gap: 10px;
+  }
+  .backup-path-group {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #0a1016;
+    padding: 12px;
+  }
+  .backup-path-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+  }
+  .backup-path-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    flex-shrink: 0;
+  }
+  .backup-path-dot.claude-cli { background: var(--claude); }
+  .backup-path-dot.codex-cli { background: var(--codex); }
+  .backup-path-dot.claude-app { background: var(--app); }
+  .backup-path-dot.openclaw { background: var(--openclaw); }
+  .backup-path-items {
+    display: grid;
+    gap: 8px;
+  }
+  .backup-path-item {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    background: rgba(255,255,255,0.02);
+    padding: 8px 10px;
+  }
+  .backup-path-account {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    margin-bottom: 4px;
+    letter-spacing: 0.04em;
+    word-break: break-word;
+  }
+  .backup-path-value {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.6;
+    word-break: break-all;
+  }
+
+  @media (max-width: 1120px) {
+    header {
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .search-wrap {
+      order: 2;
+      min-width: 220px;
+      max-width: none;
+    }
+    .filters {
+      order: 3;
+      margin-left: 0;
+      flex-wrap: wrap;
+    }
+    .header-actions {
+      margin-left: auto;
+    }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">data<span>moat</span></div>
+  <div class="search-wrap">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+    </svg>
+    <input id="search" type="text" placeholder="search conversations..." autocomplete="off">
+  </div>
+  <div class="filters">
+    <button class="filter-btn active" data-src="all">all</button>
+    <button class="filter-btn" data-src="claude-cli">claude cli</button>
+    <button class="filter-btn" data-src="codex-cli">codex</button>
+    <button class="filter-btn" data-src="claude-app">claude app</button>
+    <button class="filter-btn" data-src="openclaw">openclaw</button>
+  </div>
+  <div class="stat" id="stat">loading…</div>
+  <div class="header-actions">
+    <button id="open-settings-btn" class="header-icon-btn" type="button" aria-label="Open settings">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="3.2"></circle>
+        <path d="M19.4 15a1 1 0 0 0 .2 1.1l.1.1a2 2 0 0 1-2.8 2.8l-.1-.1a1 1 0 0 0-1.1-.2 1 1 0 0 0-.6.9V20a2 2 0 0 1-4 0v-.2a1 1 0 0 0-.7-.9 1 1 0 0 0-1.1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1 1 0 0 0 .2-1.1 1 1 0 0 0-.9-.6H4a2 2 0 0 1 0-4h.2a1 1 0 0 0 .9-.7 1 1 0 0 0-.2-1.1l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1 1 0 0 0 1.1.2 1 1 0 0 0 .6-.9V4a2 2 0 0 1 4 0v.2a1 1 0 0 0 .7.9 1 1 0 0 0 1.1-.2l.1-.1a2 2 0 0 1 2.8 2.8l-.1.1a1 1 0 0 0-.2 1.1 1 1 0 0 0 .9.6H20a2 2 0 0 1 0 4h-.2a1 1 0 0 0-.9.7Z"></path>
+      </svg>
+    </button>
+    <a href="/about" class="header-link">about</a>
+  </div>
+</header>
+
+<div id="notice-banner" class="notice-banner" role="status" aria-live="polite">
+  <div id="notice-banner-text" class="notice-copy"></div>
+  <div class="notice-actions">
+    <button id="notice-action-btn" class="notice-action" type="button" hidden></button>
+    <button id="notice-dismiss-btn" class="notice-dismiss" type="button">dismiss</button>
+  </div>
+</div>
+
+<div id="recovery-reset-backdrop" class="recovery-reset-backdrop" hidden>
+  <div class="recovery-reset-panel" role="dialog" aria-modal="true" aria-labelledby="recovery-reset-title">
+    <div class="recovery-reset-head">
+      <div class="recovery-reset-title" id="recovery-reset-title">Reset Master Password</div>
+    </div>
+    <div class="recovery-reset-body">
+      <div id="recovery-reset-copy" class="recovery-reset-copy">
+        You unlocked this vault with recovery access. Do you want to set a new master password now?
+      </div>
+      <div>
+        <div class="recovery-reset-label">New Password</div>
+        <input id="recovery-reset-password" class="recovery-reset-input" type="password" placeholder="Enter a strong password (min 8 chars)" autocomplete="new-password">
+      </div>
+      <div>
+        <div class="recovery-reset-label">Confirm Password</div>
+        <input id="recovery-reset-confirm" class="recovery-reset-input" type="password" placeholder="Re-enter password" autocomplete="new-password">
+      </div>
+      <div class="recovery-reset-hint">Requires: 8+ chars, uppercase, lowercase, number</div>
+      <div id="recovery-reset-error" class="recovery-reset-error"></div>
+      <div class="recovery-reset-actions">
+        <button id="recovery-reset-later" class="recovery-reset-btn" type="button">Later</button>
+        <button id="recovery-reset-save" class="recovery-reset-btn primary" type="button">Save Password</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="session-list" id="session-list">
+    <div class="empty">
+      <div class="empty-icon">⬡</div>
+      <div class="empty-title">loading sessions</div>
+    </div>
+  </div>
+  <div class="conversation" id="conversation">
+    <div class="no-session">
+      <div class="no-session-icon">←</div>
+      <div class="no-session-text">select a session</div>
+    </div>
+  </div>
+</div>
+
+<div id="settings-backdrop" class="settings-backdrop" hidden>
+  <div class="settings-panel" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <div class="settings-head">
+      <div class="settings-title" id="settings-title">Settings</div>
+      <button id="close-settings-btn" class="settings-close" type="button" aria-label="Close settings">×</button>
+    </div>
+    <div class="settings-body">
+      <button id="update-toggle" class="switch-row" type="button" role="switch" aria-checked="true">
+        <span class="switch-track"><span class="switch-knob"></span></span>
+        <span class="switch-copy">
+          <span class="switch-title">Auto-update</span>
+          <span class="switch-subtitle">Only live git source installs can update in place. Other installs stay on manual download for safety for now and will not auto-update directly.</span>
+        </span>
+      </button>
+
+      <div class="settings-actions">
+        <button id="update-check-btn" class="settings-btn" type="button">Check Now</button>
+        <button id="update-apply-btn" class="settings-btn primary" type="button">Update Now</button>
+        <button id="update-install-latest-btn" class="settings-btn primary" type="button" hidden>Download Latest Version</button>
+        <button id="update-reinstall-btn" class="settings-btn warn" type="button" hidden>Reinstall From Source</button>
+      </div>
+
+      <div class="settings-grid">
+        <div class="settings-card">
+          <div class="settings-label">Current Install</div>
+          <div class="settings-value" id="update-install-type">detecting…</div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-label">App Version</div>
+          <div class="settings-value" id="update-app-version">detecting…</div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-label">Update Method</div>
+          <div class="settings-value" id="update-path">detecting…</div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-label">Update Status</div>
+          <div class="settings-value" id="update-state">not checked</div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-label">Last Checked</div>
+          <div class="settings-value" id="update-last-checked">never</div>
+        </div>
+        <div class="settings-card">
+          <div class="settings-label">Last Applied</div>
+          <div class="settings-value" id="update-last-applied">never</div>
+        </div>
+        <div class="settings-card" id="update-source-check-card" hidden>
+          <div class="settings-label">Source Check</div>
+          <div class="settings-value" id="update-git-status">not checked</div>
+        </div>
+      </div>
+
+      <div class="settings-message" id="update-message">This app is working normally. Only live git source installs update in place; other installs open the latest download page instead.</div>
+
+      <div class="source-field" id="reinstall-source-field" hidden>
+        <label class="source-label" for="reinstall-source-path">Source Folder</label>
+        <input id="reinstall-source-path" class="source-input" type="text" placeholder="/path/to/live/git/checkout">
+        <div class="source-help" id="reinstall-source-help">You can paste a DataMoat source folder here. If it is a live git checkout, future automatic updates can be enabled.</div>
+      </div>
+
+      <div class="settings-card" id="backup-paths-card" hidden>
+        <div class="settings-label">Current Backup Paths</div>
+        <div class="settings-value" style="margin-bottom:10px;">Only sources with captured conversations appear here.</div>
+        <div id="backup-paths-list" class="backup-paths"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let sessions = []
+let activeId = null
+let activeMeta = null
+let activeLoadSeq = 0
+let filterSrc = 'all'
+let searchQ = ''
+let contentMatches = {}  // sessionId -> excerpt from full-text search
+let searchTimer = null
+let contentSearchPending = false
+let contentSearchSeq = 0
+let lastExecutedSearchQ = ''
+let recoveryPasswordResetPrompt = null
+let lastActivityPingAt = 0
+let pingInFlight = false
+let settingsOpen = false
+let updateSettings = null
+let updateState = null
+let updatePanelBusy = false
+let reinstallInfo = null
+let updatePanelMessage = ''
+let updatePanelMessageIsError = false
+let releasesUrl = ''
+let settingsAppVersion = ''
+let noticeActionHandler = null
+let activeNoticeKey = ''
+let touchIdUpgradeCheckStarted = false
+const TOUCH_ID_UPGRADE_DISMISSED_KEY = 'dm_touchid_upgrade_dismissed'
+const UPDATE_READY_DISMISSED_KEY = 'dm_update_ready_dismissed_version'
+const UPDATE_APPLIED_NOTICE_KEY = 'dm_update_applied_notice_version'
+
+const SOURCE_LABELS = {
+  'claude-cli': 'Claude CLI',
+  'codex-cli': 'Codex',
+  'claude-app': 'Claude App',
+  'openclaw': 'OpenClaw',
+}
+
+function sessionSourceLabel(session) {
+  if (session?.source === 'codex-cli' && session?.sourceClient) {
+    return session.sourceClient
+  }
+  return SOURCE_LABELS[session?.source] || session?.source || 'unknown'
+}
+
+function dmCookie(name) {
+  const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-/\\\\^$*+?.()|[\\]{}]/g, '\\\\$&') + '=([^;]+)'))
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
+async function apiFetch(url, options) {
+  const opts = options ? { ...options } : {}
+  const method = ((opts.method || 'GET') || 'GET').toUpperCase()
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const token = dmCookie('dm_csrf')
+    if (token) {
+      const headers = new Headers(opts.headers || {})
+      if (!headers.has('X-DM-CSRF')) {
+        headers.set('X-DM-CSRF', token)
+      }
+      opts.headers = headers
+    }
+  }
+  if (!('cache' in opts)) opts.cache = 'no-store'
+  const res = await fetch(url, opts)
+  if (res.status === 401) {
+    window.location.replace('/unlock')
+    throw new Error('authentication required')
+  }
+  return res
+}
+
+async function jsonOrThrow(res) {
+  const contentType = res.headers.get('content-type') || ''
+  const data = contentType.includes('application/json')
+    ? await res.json().catch(() => ({}))
+    : {}
+  if (!res.ok) {
+    throw new Error(data.error || `request failed (${res.status})`)
+  }
+  return data
+}
+
+async function relockOnReload() {
+  const nav = performance.getEntriesByType('navigation')[0]
+  if (nav && nav.type === 'reload') {
+    try { await apiFetch('/api/auth/logout', { method: 'POST' }) } catch {}
+    window.location.replace('/unlock')
+    throw new Error('relocked after reload')
+  }
+}
+
+const bootParams = new URLSearchParams(window.location.search)
+if (bootParams.has('refresh')) {
+  history.replaceState(null, '', '/')
+}
+
+function showNotice(message, options = {}) {
+  const banner = document.getElementById('notice-banner')
+  const text = document.getElementById('notice-banner-text')
+  const actionBtn = document.getElementById('notice-action-btn')
+  if (!banner || !text || !actionBtn) return
+  activeNoticeKey = typeof options.noticeKey === 'string' ? options.noticeKey : ''
+  text.innerHTML = `<strong>Notice:</strong> ${esc(message)}`
+  if (options.actionLabel && typeof options.onAction === 'function') {
+    actionBtn.textContent = options.actionLabel
+    actionBtn.hidden = false
+    actionBtn.disabled = false
+    noticeActionHandler = options.onAction
+  } else {
+    actionBtn.hidden = true
+    actionBtn.disabled = false
+    actionBtn.textContent = ''
+    noticeActionHandler = null
+  }
+  banner.classList.add('show')
+}
+
+function dismissNotice() {
+  const banner = document.getElementById('notice-banner')
+  const actionBtn = document.getElementById('notice-action-btn')
+  if (!banner || !actionBtn) return
+  if (activeNoticeKey === 'touchid-upgrade') {
+    persistTouchIdUpgradeDismissed()
+  } else if (activeNoticeKey.startsWith('update-ready:')) {
+    persistUpdateReadyDismissed(activeNoticeKey.slice('update-ready:'.length))
+  }
+  banner.classList.remove('show')
+  actionBtn.hidden = true
+  actionBtn.disabled = false
+  actionBtn.textContent = ''
+  noticeActionHandler = null
+  activeNoticeKey = ''
+}
+
+function touchIdUpgradeDismissed() {
+  try {
+    return localStorage.getItem(TOUCH_ID_UPGRADE_DISMISSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function persistTouchIdUpgradeDismissed() {
+  try { localStorage.setItem(TOUCH_ID_UPGRADE_DISMISSED_KEY, '1') } catch {}
+}
+
+function clearTouchIdUpgradeDismissed() {
+  try { localStorage.removeItem(TOUCH_ID_UPGRADE_DISMISSED_KEY) } catch {}
+}
+
+function updateReadyDismissedVersion() {
+  try {
+    return localStorage.getItem(UPDATE_READY_DISMISSED_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function persistUpdateReadyDismissed(version) {
+  try { localStorage.setItem(UPDATE_READY_DISMISSED_KEY, version || '') } catch {}
+}
+
+function clearUpdateReadyDismissed(version) {
+  try {
+    if (!version || localStorage.getItem(UPDATE_READY_DISMISSED_KEY) === version) {
+      localStorage.removeItem(UPDATE_READY_DISMISSED_KEY)
+    }
+  } catch {}
+}
+
+function updateAppliedNoticeVersion() {
+  try {
+    return localStorage.getItem(UPDATE_APPLIED_NOTICE_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function persistUpdateAppliedNoticeVersion(version) {
+  try { localStorage.setItem(UPDATE_APPLIED_NOTICE_KEY, version || '') } catch {}
+}
+
+function syncPackagedUpdateNotice() {
+  const isPackaged = updateState?.installMode === 'packaged' && updateState?.updateStrategy === 'packaged-auto-update'
+  if (!isPackaged) return
+
+  const downloadedVersion = updateState?.downloadedVersion || updateState?.availableVersion || ''
+  if (updateState?.lastResult === 'downloaded' && downloadedVersion) {
+    if (updateReadyDismissedVersion() === downloadedVersion) return
+    showNotice(
+      `DataMoat ${downloadedVersion} has been downloaded and is ready to install.`,
+      {
+        noticeKey: `update-ready:${downloadedVersion}`,
+        actionLabel: 'Update Now',
+        onAction: applyUpdateNow,
+      },
+    )
+    return
+  }
+
+  if (updateState?.lastResult === 'updated' && updateState?.currentVersion) {
+    clearUpdateReadyDismissed(updateState.currentVersion)
+    if (updateAppliedNoticeVersion() !== updateState.currentVersion) {
+      persistUpdateAppliedNoticeVersion(updateState.currentVersion)
+      showNotice(`DataMoat has been updated to version ${updateState.currentVersion}.`)
+      return
+    }
+  }
+
+  if (activeNoticeKey.startsWith('update-ready:') && updateState?.lastResult !== 'downloaded') {
+    dismissNotice()
+  }
+}
+
+function loadRecoveryPasswordResetPrompt() {
+  try {
+    const raw = sessionStorage.getItem('dm_recovery_password_reset_prompt')
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return typeof parsed === 'object' && parsed ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function clearRecoveryPasswordResetPrompt() {
+  recoveryPasswordResetPrompt = null
+  try { sessionStorage.removeItem('dm_recovery_password_reset_prompt') } catch {}
+}
+
+function recoveryPasswordResetCopy(flow) {
+  if (flow === 'mnemonic') {
+    return 'You unlocked this vault with the 24-word recovery phrase. Set a new master password now so future unlocks can use a normal password again.'
+  }
+  if (flow === 'recovery_code') {
+    return 'You unlocked this vault with a recovery code. Set a new master password now so future unlocks can use a normal password again.'
+  }
+  return 'You unlocked this vault with recovery access. Set a new master password now so future unlocks can use a normal password again.'
+}
+
+function openRecoveryPasswordResetPrompt(payload) {
+  recoveryPasswordResetPrompt = payload || { flow: 'recovery' }
+  const backdrop = document.getElementById('recovery-reset-backdrop')
+  const copy = document.getElementById('recovery-reset-copy')
+  const password = document.getElementById('recovery-reset-password')
+  const confirm = document.getElementById('recovery-reset-confirm')
+  const error = document.getElementById('recovery-reset-error')
+  if (!backdrop || !copy || !password || !confirm || !error) return
+  copy.textContent = recoveryPasswordResetCopy(recoveryPasswordResetPrompt?.flow)
+  password.value = ''
+  confirm.value = ''
+  error.textContent = ''
+  backdrop.hidden = false
+  password.focus()
+}
+
+function closeRecoveryPasswordResetPrompt(clearFlag = false) {
+  const backdrop = document.getElementById('recovery-reset-backdrop')
+  const error = document.getElementById('recovery-reset-error')
+  if (backdrop) backdrop.hidden = true
+  if (error) error.textContent = ''
+  if (clearFlag) clearRecoveryPasswordResetPrompt()
+}
+
+async function submitRecoveryPasswordReset() {
+  const password = document.getElementById('recovery-reset-password')
+  const confirm = document.getElementById('recovery-reset-confirm')
+  const saveButton = document.getElementById('recovery-reset-save')
+  const laterButton = document.getElementById('recovery-reset-later')
+  const error = document.getElementById('recovery-reset-error')
+  if (!(password instanceof HTMLInputElement) || !(confirm instanceof HTMLInputElement) || !saveButton || !laterButton || !error) return
+
+  const nextPassword = password.value
+  const confirmPassword = confirm.value
+  error.textContent = ''
+
+  if (nextPassword !== confirmPassword) {
+    error.textContent = 'Passwords do not match'
+    confirm.focus()
+    return
+  }
+
+  saveButton.disabled = true
+  laterButton.disabled = true
+  const originalSaveText = saveButton.textContent
+  saveButton.textContent = 'Saving…'
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: nextPassword }),
+    }))
+    if (data.ok) {
+      closeRecoveryPasswordResetPrompt(true)
+      if (typeof data.captureWarning === 'string' && data.captureWarning.trim()) {
+        showNotice(data.captureWarning.trim())
+      } else if (data.backgroundStarted === true) {
+        showNotice('Master password updated. Background capture is active on this Mac, including while the vault is locked.')
+      } else {
+        showNotice('Master password updated. Future unlocks can use the new password.')
+      }
+      return
+    }
+    error.textContent = 'Password reset failed'
+  } catch (err) {
+    error.textContent = err instanceof Error ? err.message : String(err)
+  } finally {
+    saveButton.disabled = false
+    laterButton.disabled = false
+    saveButton.textContent = originalSaveText
+  }
+}
+
+document.getElementById('notice-dismiss-btn').addEventListener('click', () => dismissNotice())
+document.getElementById('notice-action-btn').addEventListener('click', async () => {
+  if (typeof noticeActionHandler !== 'function') return
+  const actionBtn = document.getElementById('notice-action-btn')
+  if (actionBtn) actionBtn.disabled = true
+  try {
+    await noticeActionHandler()
+  } finally {
+    if (actionBtn) actionBtn.disabled = false
+  }
+})
+
+try {
+  const bootNotice = sessionStorage.getItem('dm_notice')
+  if (bootNotice) {
+    sessionStorage.removeItem('dm_notice')
+    showNotice(bootNotice)
+  }
+} catch {}
+recoveryPasswordResetPrompt = loadRecoveryPasswordResetPrompt()
+if (recoveryPasswordResetPrompt) openRecoveryPasswordResetPrompt(recoveryPasswordResetPrompt)
+
+async function sendActivityPing(force = false) {
+  const now = Date.now()
+  if (!force && now - lastActivityPingAt < 30000) return
+  if (pingInFlight) return
+  lastActivityPingAt = now
+  pingInFlight = true
+  try {
+    const res = await apiFetch('/api/auth/ping', { method: 'POST' })
+    if (res.status === 401) window.location.replace('/unlock')
+  } catch {
+    // Ignore transient local errors; the next protected request will re-check auth.
+  } finally {
+    pingInFlight = false
+  }
+}
+
+async function loadSessions() {
+  await relockOnReload()
+  sessions = await fetchSessionsSnapshot()
+  renderList()
+  renderBackupPathsPanel()
+  await refreshUpdatePanel()
+  void checkTouchIdUpgradeOffer()
+  void refreshActiveSessionIfChanged()
+}
+
+async function fetchSessionsSnapshot() {
+  const res = await apiFetch('/api/sessions')
+  return await res.json()
+}
+
+async function enableTouchIdUpgrade() {
+  try {
+    showNotice('Waiting for Touch ID approval on this Mac…')
+    const data = await jsonOrThrow(await apiFetch('/api/auth/touchid-upgrade', { method: 'POST' }))
+    if (data.ok) {
+      clearTouchIdUpgradeDismissed()
+      showNotice('Touch ID + Secure Enclave is now enabled for this Mac. It will appear on the next unlock screen.')
+      return
+    }
+    showNotice('Touch ID could not be enabled right now.')
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function checkTouchIdUpgradeOffer() {
+  if (touchIdUpgradeCheckStarted) return
+  touchIdUpgradeCheckStarted = true
+  if (touchIdUpgradeDismissed()) return
+  if (updateState?.installMode === 'packaged' && ['downloaded', 'installing'].includes(updateState?.lastResult || '')) return
+  if (activeNoticeKey && activeNoticeKey.startsWith('update-ready:')) return
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/auth/touchid-upgrade'))
+    if (!data.available) return
+    showNotice(
+      'This Mac can add Touch ID + Secure Enclave unlock to your existing vault. Your current password and recovery methods stay unchanged.',
+      {
+        noticeKey: 'touchid-upgrade',
+        actionLabel: 'Enable Touch ID',
+        onAction: enableTouchIdUpgrade,
+      },
+    )
+  } catch {
+    // ignore; upgrade prompt is optional
+  }
+}
+
+function renderList() {
+  const list = document.getElementById('session-list')
+  const preservedScrollTop = list.scrollTop
+  const hasContentMatches = Object.keys(contentMatches).length > 0
+
+  const filtered = sessions.filter(s => {
+    if (filterSrc !== 'all' && s.source !== filterSrc) return false
+    if (searchQ) {
+      const sessionKey = s.uid || s.id
+      const q = searchQ.toLowerCase()
+      const metaMatch = s.model.toLowerCase().includes(q) ||
+                        s.cwd.toLowerCase().includes(q) ||
+                        s.id.toLowerCase().includes(q)
+      if (metaMatch) return true
+      if (hasContentMatches) return sessionKey in contentMatches
+      return false
+    }
+    return true
+  }).sort((a, b) => {
+    const aTime = Date.parse(a.lastTimestamp || '') || 0
+    const bTime = Date.parse(b.lastTimestamp || '') || 0
+    if (bTime !== aTime) return bTime - aTime
+    const aFirst = Date.parse(a.firstTimestamp || '') || 0
+    const bFirst = Date.parse(b.firstTimestamp || '') || 0
+    if (bFirst !== aFirst) return bFirst - aFirst
+    return (b.messageCount || 0) - (a.messageCount || 0)
+  })
+
+  document.getElementById('stat').innerHTML =
+    `<strong>${filtered.length}</strong> / ${sessions.length} sessions`
+
+  if (filtered.length === 0) {
+    const emptyTitle = searchQ
+      ? (contentSearchPending ? 'searching content…' : 'no results')
+      : 'no results'
+    const emptySub = searchQ && !contentSearchPending
+      ? `No conversations matched "${esc(searchQ)}".`
+      : ''
+    list.innerHTML = `<div class="empty">
+      <div class="empty-icon">∅</div>
+      <div class="empty-title">${emptyTitle}</div>
+      ${emptySub ? `<div class="empty-sub">${emptySub}</div>` : ''}
+    </div>`
+  } else {
+    list.innerHTML = filtered.map(s => {
+      const sessionKey = s.uid || s.id
+      const excerpt = contentMatches[sessionKey]
+      const safeSessionId = escAttr(sessionKey)
+      const safeModel = esc(s.model)
+      const safeCwd = esc(s.cwd ? shortPath(s.cwd) : s.id.slice(0,16)+'…')
+      const safeSource = esc(s.source)
+      const sourceLabel = sessionSourceLabel(s)
+      const safeSourceLabel = esc(s.sourceAccount ? `${sourceLabel} · ${s.sourceAccount}` : sourceLabel)
+      const safeSourceAccount = s.sourceAccount
+        ? `<div class="session-account"><span class="session-account-label">account</span><span class="session-account-value">${esc(s.sourceAccount)}</span></div>`
+        : ''
+      return `
+      <div class="session-item ${sessionKey === activeId ? 'active' : ''}" data-session-id="${safeSessionId}" tabindex="0" role="button" aria-label="Open session ${safeSessionId}">
+        <div class="session-header">
+          <span class="source-dot ${s.source}"></span>
+          <span class="session-model">${safeModel}</span>
+          ${s.hasThinking ? '<span class="thinking-badge">thinking</span>' : ''}
+        </div>
+        <div class="session-cwd">${safeCwd}</div>
+        ${safeSourceAccount}
+        ${excerpt ? `<div class="search-excerpt">${esc(excerpt)}</div>` : ''}
+        <div class="session-meta">
+          <span>${safeSourceLabel}</span>
+          <span>${s.messageCount} msgs · ${reltime(s.lastTimestamp)}</span>
+        </div>
+      </div>`
+    }).join('')
+  }
+  list.scrollTop = preservedScrollTop
+}
+
+async function doContentSearch(q) {
+  if (q.length < 2) {
+    contentSearchPending = false
+    contentMatches = {}
+    lastExecutedSearchQ = ''
+    renderList()
+    return
+  }
+  if (q === lastExecutedSearchQ && !contentSearchPending) {
+    renderList()
+    return
+  }
+  const seq = ++contentSearchSeq
+  contentSearchPending = true
+  renderList()
+  const res = await apiFetch('/api/search?q=' + encodeURIComponent(q))
+  const hits = await res.json()
+  if (seq !== contentSearchSeq || q !== searchQ) return
+  const knownSessionIds = new Set(sessions.map(s => s.uid || s.id))
+  if (hits.some(h => !knownSessionIds.has(h.id))) {
+    sessions = await fetchSessionsSnapshot()
+    if (seq !== contentSearchSeq || q !== searchQ) return
+  }
+  contentSearchPending = false
+  lastExecutedSearchQ = q
+  contentMatches = {}
+  for (const h of hits) contentMatches[h.id] = h.excerpt
+  renderList()
+}
+
+async function selectSession(id) {
+  activeId = id
+  activeMeta = null
+  renderList()
+
+  const conv = document.getElementById('conversation')
+  conv.scrollTop = 0
+  conv.innerHTML = '<div class="no-session"><div class="no-session-text">loading…</div></div>'
+
+  const seq = ++activeLoadSeq
+  const res = await apiFetch(`/api/session/${id}`)
+  const { session, messages } = await res.json()
+  if (seq !== activeLoadSeq || activeId !== id) return
+  activeMeta = { id: session.uid || session.id, lastTimestamp: session.lastTimestamp, messageCount: session.messageCount }
+
+  renderConversation(session, messages, { resetScroll: true })
+}
+
+function renderConversation(session, messages, opts = {}) {
+  const conv = document.getElementById('conversation')
+  const resetScroll = !!opts.resetScroll
+  const prevScrollTop = conv.scrollTop
+  const prevScrollHeight = conv.scrollHeight
+  const nearBottom = prevScrollHeight - (conv.clientHeight + prevScrollTop) < 80
+
+  if (!messages || messages.length === 0) {
+    conv.innerHTML = '<div class="no-session"><div class="no-session-text">no messages found</div></div>'
+    if (resetScroll) conv.scrollTop = 0
+    return
+  }
+
+  const srcClass = session.source
+  const safeTitle = esc(session.cwd || session.id)
+  const safeSource = esc(session.source)
+  const safeSourceAccount = session.sourceAccount ? `<span class="badge ${srcClass}">${esc(session.sourceAccount)}</span>` : ''
+  const safeModel = esc(session.model)
+  const safeVersion = esc(session.appVersion)
+  conv.innerHTML = `
+    <div class="conv-header">
+      <div class="conv-title">${safeTitle}</div>
+      <div class="conv-badges">
+        <span class="badge ${srcClass}">${safeSource}</span>
+        ${safeSourceAccount}
+        <span class="badge">${safeModel}</span>
+        ${session.appVersion ? `<span class="badge">v${safeVersion}</span>` : ''}
+        <span class="badge">${session.messageCount} messages</span>
+        <span class="badge">${fmtDate(session.firstTimestamp)}</span>
+      </div>
+    </div>
+    ${messages.map(renderMessage).join('')}
+  `
+  if (resetScroll) {
+    conv.scrollTop = 0
+    requestAnimationFrame(() => { conv.scrollTop = 0 })
+  } else if (nearBottom) {
+    conv.scrollTop = conv.scrollHeight
+  } else {
+    conv.scrollTop = prevScrollTop
+  }
+}
+
+async function refreshActiveSessionIfChanged() {
+  if (!activeId) return
+  const current = sessions.find(s => (s.uid || s.id) === activeId)
+  if (!current) return
+  const changed = !activeMeta ||
+    activeMeta.lastTimestamp !== current.lastTimestamp ||
+    activeMeta.messageCount !== current.messageCount
+  if (!changed) return
+
+  const seq = ++activeLoadSeq
+  const res = await apiFetch(`/api/session/${activeId}`)
+  const { session, messages } = await res.json()
+  const sessionKey = session.uid || session.id
+  if (seq !== activeLoadSeq || activeId !== sessionKey) return
+  activeMeta = { id: sessionKey, lastTimestamp: session.lastTimestamp, messageCount: session.messageCount }
+  renderConversation(session, messages, { resetScroll: false })
+}
+
+function renderMessage(msg) {
+  const blocks = msg.content.map(block => {
+    if (block.type === 'thinking') {
+      const id = 'th_' + Math.random().toString(36).slice(2)
+      return `<div class="thinking-block">
+        <div class="thinking-toggle" onclick="toggleThinking('${id}')">
+          <span class="thinking-arrow" id="arr_${id}">▶</span>
+          <span>thinking block</span>
+          <span style="margin-left:auto;opacity:.5">${wordCount(block.thinking)} words</span>
+        </div>
+        <div class="thinking-content" id="${id}">${esc(block.thinking)}</div>
+      </div>`
+    }
+    if (block.type === 'text' && block.text?.trim()) {
+      return `<div class="text-block">${esc(block.text)}</div>`
+    }
+    if (block.type === 'tool_use') {
+      const rawInput = pretty(block.input ?? block.text ?? '')
+      return `<div class="tool-block">
+        <div class="tool-meta">
+          <span class="tool-kind">tool call</span>
+          <span class="tool-name">${esc(block.name || 'tool')}</span>
+        </div>
+        <details class="detail-block" open>
+          <summary>arguments</summary>
+          <pre class="detail-pre">${esc(rawInput)}</pre>
+        </details>
+      </div>`
+    }
+    if (block.type === 'tool_result') {
+      const imgs = block.attachmentIds || []
+      const imageHtml = imgs.map(id =>
+        `<div class="attachment-block"><img src="/api/attachment/${attachmentPath(id)}" alt="screenshot" style="max-width:100%;max-height:480px;border-radius:4px;border:1px solid var(--border);display:block;margin:4px 0"></div>`
+      ).join('')
+      const rawOutput = pretty(block.content ?? block.text ?? '')
+      return `<div class="tool-block">
+        <div class="tool-meta">
+          <span class="tool-kind">tool output</span>
+          <span class="tool-name">${esc(block.name || 'result')}</span>
+        </div>
+        ${rawOutput ? `<details class="detail-block" open>
+          <summary>output</summary>
+          <pre class="detail-pre">${esc(rawOutput)}</pre>
+        </details>` : ''}
+        ${imageHtml}
+      </div>`
+    }
+    if (block.type === 'image') {
+      if (block.attachmentId) {
+        return `<div class="attachment-block"><img src="/api/attachment/${attachmentPath(block.attachmentId)}" alt="image" style="max-width:100%;max-height:480px;border-radius:4px;border:1px solid var(--border)"></div>`
+      }
+      return `<div class="tool-block" style="color:var(--muted)">📎 image (pre-capture)</div>`
+    }
+    if (block.type === 'file') {
+      const label = esc(block.attachmentName || (block.mediaType === 'application/pdf' ? 'attached pdf' : 'attached file'))
+      if (block.attachmentId) {
+        return `<div class="tool-block">
+          <div class="tool-meta">
+            <span class="tool-kind">attachment</span>
+            <span class="tool-name">${label}</span>
+          </div>
+          <a href="/api/attachment/${attachmentPath(block.attachmentId)}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;gap:8px;margin-top:8px;color:var(--accent);text-decoration:none;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#0f131a">
+            <span>Open ${block.mediaType === 'application/pdf' ? 'PDF' : 'file'}</span>
+          </a>
+        </div>`
+      }
+      return `<div class="tool-block" style="color:var(--muted)">📎 ${label} (pre-capture)</div>`
+    }
+    if (block.type === 'other') {
+      const rawOther = pretty(block.content ?? block.text ?? '')
+      return rawOther ? `<div class="other-block">${esc(rawOther)}</div>` : ''
+    }
+    return ''
+  }).join('')
+
+  const usageParts = []
+  if (msg.usage) {
+    if (msg.usage.inputTokens)  usageParts.push(`in <span>${msg.usage.inputTokens}</span>`)
+    if (msg.usage.outputTokens) usageParts.push(`out <span>${msg.usage.outputTokens}</span>`)
+    if (msg.usage.cacheReadTokens) usageParts.push(`cache_read <span>${msg.usage.cacheReadTokens}</span>`)
+  }
+
+  return `<div class="message ${msg.role}">
+    <div class="message-role ${msg.role}">
+      ${msg.role}
+      <span class="msg-time">${fmtTime(msg.timestamp)}</span>
+    </div>
+    ${blocks}
+    ${usageParts.length ? `<div class="usage-line">${usageParts.join(' · ')}</div>` : ''}
+  </div>`
+}
+
+function toggleThinking(id) {
+  const el = document.getElementById(id)
+  const arr = document.getElementById('arr_' + id)
+  el.classList.toggle('open')
+  arr.classList.toggle('open')
+}
+
+function formatDateTime(ts) {
+  if (!ts) return 'never'
+  return new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+}
+
+function humanUpdateState(result) {
+  switch (result) {
+    case 'available': return 'ready to update'
+    case 'downloading': return 'downloading update'
+    case 'downloaded': return 'ready to install'
+    case 'up-to-date': return 'up to date'
+    case 'checking': return 'checking for updates'
+    case 'updating': return 'updating'
+    case 'installing': return 'installing'
+    case 'updated': return 'updated'
+    case 'blocked': return 'paused'
+    case 'unsupported': return 'not set up on this install'
+    case 'error': return 'needs attention'
+    case 'idle':
+    default:
+      return 'not checked'
+  }
+}
+
+function humanInstallMode(mode) {
+  switch (mode) {
+    case 'source-dev': return 'live source folder'
+    case 'source-copy': return 'standard installed copy'
+    case 'packaged': return 'packaged app (recommended)'
+    case 'unknown': return 'unknown'
+    default: return 'detecting…'
+  }
+}
+
+function humanUpdateStrategy(strategy) {
+  switch (strategy) {
+    case 'source-git-pull': return 'automatic source updates'
+    case 'source-manual-reinstall': return 'manual source reinstall only'
+    case 'packaged-auto-update': return 'automatic packaged updates'
+    case 'packaged-auto-unavailable': return 'manual packaged upgrade only'
+    case 'unknown': return 'unknown'
+    default: return 'detecting…'
+  }
+}
+
+function hasDesktopPackagedUpdateBridge() {
+  return !!window.datamoatDesktop?.update?.getSettings
+}
+
+function normalizeUpdateStateForUi(state) {
+  if (!state || typeof state !== 'object') return state
+  if (
+    state.installMode === 'packaged'
+    && state.supported === true
+    && hasDesktopPackagedUpdateBridge()
+    && state.updateStrategy !== 'packaged-auto-update'
+  ) {
+    return {
+      ...state,
+      updateStrategy: 'packaged-auto-update',
+    }
+  }
+  return state
+}
+
+function installCanAutoUpdate(state) {
+  const normalized = normalizeUpdateStateForUi(state)
+  return normalized?.updateStrategy === 'source-git-pull' || normalized?.updateStrategy === 'packaged-auto-update'
+}
+
+function autoUpdateToggleSubtitle() {
+  if (!updateState) {
+    return 'Checking whether this install can use automatic updates…'
+  }
+  if (installCanAutoUpdate(updateState)) {
+    if (updateState?.installMode === 'packaged') {
+      return 'Available on this packaged install and enabled by default. DataMoat checks for signed release updates, downloads them in the background, and asks before restart.'
+    }
+    return 'Available on this install and enabled by default. This keeps fixes and improvements current automatically.'
+  }
+  if (updateState.installMode === 'packaged') {
+    return 'This packaged app uses the recommended release path. Automatic updates are only available after DataMoat is installed outside the mounted DMG.'
+  }
+  return 'Not active on this install. For safety for now, this copy will only open the latest download page. To enable in-place updates later, choose a live git source folder below and reinstall from it.'
+}
+
+function gitStatusSummary(state) {
+  if (!state || state.supported === null) return 'not checked'
+  if (state.supported === false) return 'not needed on this install'
+  const parts = []
+  if (state.clean === true) parts.push('clean')
+  if (state.clean === false) parts.push('local changes found')
+  if (typeof state.ahead === 'number') parts.push(`ahead ${state.ahead}`)
+  if (typeof state.behind === 'number') parts.push(`behind ${state.behind}`)
+  return parts.length ? parts.join(' / ') : 'unknown'
+}
+
+function defaultUpdateMessage() {
+  const normalized = normalizeUpdateStateForUi(updateState)
+  if (normalized?.updateStrategy === 'source-manual-reinstall') {
+    return 'This app is working normally. This install does not auto-update directly for now. Use Download Latest Version, or choose a live git source folder below and reinstall if you want git-based in-place updates later.'
+  }
+  if (normalized?.updateStrategy === 'packaged-auto-update') {
+    return 'This packaged app can check signed release updates automatically. DataMoat downloads the new version first and then waits for you to update the app when you are ready.'
+  }
+  if (normalized?.updateStrategy === 'packaged-auto-unavailable') {
+    return 'This app is working normally. This packaged app is the recommended install type. Use Download Latest Version to get the newest release manually.'
+  }
+  return 'Automatic updates help keep fixes and improvements current on supported installs.'
+}
+
+function friendlyStatusMessage(state) {
+  if (!state) return defaultUpdateMessage()
+  if (state.running) {
+    return state.lastResult === 'updating'
+      ? 'Applying the latest update…'
+      : 'Checking whether an update is available…'
+  }
+
+  switch (state.lastResult) {
+    case 'available':
+      return 'A newer version is available for this install. You can update when ready.'
+    case 'downloading':
+      return updateState?.message || 'Downloading the latest packaged update now…'
+    case 'downloaded':
+      return updateState?.installMode === 'packaged'
+        ? 'A newer packaged version has finished downloading. Click Update Now whenever you are ready to install it.'
+        : 'A newer version is available for this install. You can update when ready.'
+    case 'up-to-date':
+      return 'Everything is up to date.'
+    case 'installing':
+      return 'Closing and reopening DataMoat to apply the downloaded update…'
+    case 'updated':
+      return 'Update completed successfully.'
+    case 'blocked':
+      if (state.clean === false) {
+        return 'Automatic updating is paused because local changes were found in the source folder.'
+      }
+      if ((state.ahead || 0) > 0) {
+        return 'Automatic updating is paused because this source folder has local commits that should be reviewed first.'
+      }
+      return 'Automatic updating is paused until this install is ready for it. Other install types stay on manual download for now.'
+    case 'unsupported':
+      return defaultUpdateMessage()
+    case 'error':
+      if (state.installMode === 'packaged') {
+        return 'The last update step did not finish, but the app can still be used normally. Use Download Latest Version to install the newest packaged release manually.'
+      }
+      return 'The last update step did not finish, but the app can still be used normally. You can try again later or use the source reinstall option below.'
+    case 'checking':
+      return 'Checking whether an update is available…'
+    case 'updating':
+      return 'Applying the latest update…'
+    case 'idle':
+    default:
+      return defaultUpdateMessage()
+  }
+}
+
+function defaultReinstallHelp(info) {
+  if (!info || !info.root) {
+    return 'Paste a DataMoat source folder here. If it is a live git checkout, future automatic updates can be enabled.'
+  }
+  if (!info.available) {
+    if (info.reason) {
+      return `This source folder cannot be used for automatic source updates right now: ${info.reason}.`
+    }
+    return `The previously recorded source folder is not available right now. The app still works normally. If you have a live git checkout, paste it here and reinstall.`
+  }
+  if (info.liveCheckout) {
+    return `This source folder is a live git checkout. Reinstalling from it will also enable future source updates.`
+  }
+  return `This source folder can reinstall the app, but it will not turn on automatic updates until you point this to a live git checkout.`
+}
+
+function setSwitchState(enabled, disabled = false) {
+  const button = document.getElementById('update-toggle')
+  if (!button) return
+  button.classList.toggle('enabled', !!enabled)
+  button.classList.toggle('disabled', !!disabled)
+  button.disabled = !!disabled
+  button.setAttribute('aria-checked', enabled ? 'true' : 'false')
+  button.setAttribute('aria-disabled', disabled ? 'true' : 'false')
+}
+
+function setUpdatePanelMessage(message = '', isError = false) {
+  updatePanelMessage = message
+  updatePanelMessageIsError = isError
+  const el = document.getElementById('update-message')
+  if (!el) return
+  el.textContent = updatePanelMessage || friendlyStatusMessage(updateState)
+  el.classList.toggle('is-error', !!(updatePanelMessage && updatePanelMessageIsError))
+}
+
+function canApplyUpdate(state) {
+  if (!state || state.running || state.supported !== true) return false
+  if (state.updateStrategy === 'packaged-auto-update') {
+    return state.lastResult === 'downloaded'
+  }
+  if (state.clean === false) return false
+  if ((state.ahead || 0) > 0) return false
+  return typeof state.behind === 'number' && state.behind > 0
+}
+
+function renderReinstallHelp() {
+  const help = document.getElementById('reinstall-source-help')
+  const input = document.getElementById('reinstall-source-path')
+  if (!help || !input) return
+  const value = input.value.trim()
+  if (value && reinstallInfo?.root && value === reinstallInfo.root && !input.dataset.dirty) {
+    help.textContent = defaultReinstallHelp(reinstallInfo)
+    return
+  }
+  if (value) {
+    help.textContent = 'This folder will be checked before reinstall. If it is a live git checkout, future automatic updates can be enabled.'
+    return
+  }
+  help.textContent = defaultReinstallHelp(reinstallInfo)
+}
+
+function renderUpdatePanel() {
+  const sourceInput = document.getElementById('reinstall-source-path')
+  if (!sourceInput) return
+  const toggleButton = document.getElementById('update-toggle')
+  const toggleTitle = document.querySelector('#update-toggle .switch-title')
+  const toggleSubtitle = document.querySelector('#update-toggle .switch-subtitle')
+  const installLatestButton = document.getElementById('update-install-latest-btn')
+  const checkUpdateButton = document.getElementById('update-check-btn')
+  const applyUpdateButton = document.getElementById('update-apply-btn')
+  const reinstallButton = document.getElementById('update-reinstall-btn')
+  const sourceField = document.getElementById('reinstall-source-field')
+  const sourceCheckCard = document.getElementById('update-source-check-card')
+
+  if (reinstallInfo && (!sourceInput.dataset.dirty || !sourceInput.value.trim())) {
+    sourceInput.value = reinstallInfo.root || ''
+  }
+
+  updateState = normalizeUpdateStateForUi(updateState)
+  const canAutoUpdate = installCanAutoUpdate(updateState)
+  const isPackagedInstall = updateState?.installMode === 'packaged'
+  const showAutoUpdateToggle = !isPackagedInstall || canAutoUpdate
+  const showSourceControls = !isPackagedInstall
+  const wantsAutoUpdate = updateSettings?.autoUpdateEnabled !== false
+  setSwitchState(canAutoUpdate && wantsAutoUpdate, updatePanelBusy || !canAutoUpdate)
+  if (toggleTitle) toggleTitle.textContent = canAutoUpdate ? 'Auto-update' : 'Auto-update unavailable'
+  if (toggleSubtitle) toggleSubtitle.textContent = autoUpdateToggleSubtitle()
+  document.getElementById('update-install-type').textContent = humanInstallMode(updateState?.installMode)
+  document.getElementById('update-app-version').textContent = settingsAppVersion ? `v${settingsAppVersion}` : 'unknown'
+  document.getElementById('update-path').textContent = humanUpdateStrategy(updateState?.updateStrategy)
+  document.getElementById('update-state').textContent = updateState?.running
+    ? 'running'
+    : humanUpdateState(updateState?.lastResult)
+  document.getElementById('update-last-checked').textContent = formatDateTime(updateState?.lastCheckedAt)
+  document.getElementById('update-last-applied').textContent = formatDateTime(updateState?.lastAppliedAt)
+  document.getElementById('update-git-status').textContent = gitStatusSummary(updateState)
+
+  const running = !!updateState?.running
+  if (installLatestButton) {
+    installLatestButton.hidden = canAutoUpdate
+    installLatestButton.disabled = updatePanelBusy || running
+  }
+  if (toggleButton) toggleButton.hidden = !showAutoUpdateToggle
+  if (checkUpdateButton) {
+    checkUpdateButton.hidden = !canAutoUpdate
+    checkUpdateButton.disabled = updatePanelBusy || running
+  }
+  if (applyUpdateButton) {
+    applyUpdateButton.hidden = !canAutoUpdate
+    applyUpdateButton.textContent = updateState?.installMode === 'packaged' && updateState?.lastResult === 'downloaded'
+      ? 'Update Now'
+      : 'Update Now'
+  }
+  document.getElementById('update-apply-btn').disabled = updatePanelBusy || !canApplyUpdate(updateState)
+  if (reinstallButton) {
+    reinstallButton.hidden = !showSourceControls
+    reinstallButton.disabled = updatePanelBusy || running
+  }
+  if (sourceField) sourceField.hidden = !showSourceControls
+  if (sourceCheckCard) sourceCheckCard.hidden = !showSourceControls
+  sourceInput.disabled = updatePanelBusy || running
+
+  setUpdatePanelMessage(updatePanelMessage, updatePanelMessageIsError)
+  if (showSourceControls) renderReinstallHelp()
+  renderBackupPathsPanel()
+}
+
+function sourceRootFromOriginalPath(source, originalPath) {
+  if (!source || !originalPath) return null
+  const normalized = String(originalPath).replace(/\\/g, '/')
+  if (source === 'claude-cli') {
+    const marker = '/.claude/projects/'
+    const idx = normalized.indexOf(marker)
+    return idx === -1 ? null : normalized.slice(0, idx + marker.length - 1)
+  }
+  if (source === 'codex-cli') {
+    const marker = '/.codex/sessions/'
+    const idx = normalized.indexOf(marker)
+    return idx === -1 ? null : normalized.slice(0, idx + marker.length - 1)
+  }
+  if (source === 'claude-app') {
+    const marker = '/Library/Application Support/Claude/local-agent-mode-sessions/'
+    const idx = normalized.indexOf(marker)
+    return idx === -1 ? null : normalized.slice(0, idx + marker.length - 1)
+  }
+  if (source === 'openclaw') {
+    const marker = '/.openclaw/'
+    const idx = normalized.indexOf(marker)
+    if (idx === -1) return null
+    const after = normalized.slice(idx + marker.length).split('/').filter(Boolean)
+    if (after[0] === 'agents' && after[1]) return `${normalized.slice(0, idx + marker.length - 1)}/agents/${after[1]}`
+    if (after[0] === 'cron') return `${normalized.slice(0, idx + marker.length - 1)}/cron/runs`
+    return normalized.slice(0, idx + marker.length - 1)
+  }
+  return null
+}
+
+function renderBackupPathsPanel() {
+  const card = document.getElementById('backup-paths-card')
+  const list = document.getElementById('backup-paths-list')
+  if (!card || !list) return
+
+  const groups = new Map()
+  for (const session of sessions) {
+    if (!session || !session.originalPath) continue
+    if (!session.messageCount || session.messageCount < 1) continue
+    const source = session.source
+    const root = sourceRootFromOriginalPath(source, session.originalPath)
+    if (!root) continue
+    if (!groups.has(source)) groups.set(source, new Map())
+    const sourceMap = groups.get(source)
+    const key = `${session.sourceAccount || ''}\0${root}`
+    if (!sourceMap.has(key)) {
+      sourceMap.set(key, {
+        sourceAccount: session.sourceAccount || '',
+        root,
+      })
+    }
+  }
+
+  if (groups.size === 0) {
+    card.hidden = true
+    list.innerHTML = ''
+    return
+  }
+
+  const sourceOrder = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw']
+  const html = sourceOrder
+    .filter(source => groups.has(source))
+    .map(source => {
+      const items = Array.from(groups.get(source).values())
+        .sort((a, b) => (a.sourceAccount || a.root).localeCompare(b.sourceAccount || b.root))
+      return `
+        <div class="backup-path-group">
+          <div class="backup-path-head">
+            <span class="backup-path-dot ${source}"></span>
+            <span>${SOURCE_LABELS[source] || source}</span>
+          </div>
+          <div class="backup-path-items">
+            ${items.map(item => `
+              <div class="backup-path-item">
+                ${item.sourceAccount ? `<div class="backup-path-account">${esc(item.sourceAccount)}</div>` : ''}
+                <div class="backup-path-value">${esc(item.root)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `
+    }).join('')
+
+  list.innerHTML = html
+  card.hidden = false
+}
+
+async function loadUpdatePanel() {
+  updatePanelBusy = true
+  renderUpdatePanel()
+  try {
+    let data = await jsonOrThrow(await apiFetch('/api/update/settings'))
+    if (data.state?.updateStrategy === 'packaged-auto-update' && window.datamoatDesktop?.update?.getSettings) {
+      try {
+        data = await window.datamoatDesktop.update.getSettings()
+      } catch {
+        // Keep the daemon-sourced state if desktop packaged update bridge is unavailable.
+      }
+    }
+    updateSettings = {
+      autoUpdateEnabled: data.autoUpdateEnabled !== false,
+      autoUpdateIntervalHours: data.autoUpdateIntervalHours,
+    }
+    updateState = normalizeUpdateStateForUi(data.state || null)
+    reinstallInfo = data.reinstall || null
+    releasesUrl = data.releasesUrl || releasesUrl
+    settingsAppVersion = data.appVersion || settingsAppVersion
+    const sourceInput = document.getElementById('reinstall-source-path')
+    if (sourceInput && (!sourceInput.dataset.dirty || !sourceInput.value.trim())) {
+      sourceInput.value = reinstallInfo?.root || ''
+      delete sourceInput.dataset.dirty
+    }
+    setUpdatePanelMessage('', false)
+    syncPackagedUpdateNotice()
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    updatePanelBusy = false
+    renderUpdatePanel()
+  }
+}
+
+async function refreshUpdatePanel() {
+  try {
+    let latestState = await jsonOrThrow(await apiFetch('/api/update/status'))
+    if ((latestState?.updateStrategy === 'packaged-auto-update' || updateState?.updateStrategy === 'packaged-auto-update') && window.datamoatDesktop?.update?.getSettings) {
+      try {
+        const desktop = await window.datamoatDesktop.update.getSettings()
+        updateSettings = {
+          autoUpdateEnabled: desktop.autoUpdateEnabled !== false,
+          autoUpdateIntervalHours: desktop.autoUpdateIntervalHours,
+        }
+        releasesUrl = desktop.releasesUrl || releasesUrl
+        settingsAppVersion = desktop.appVersion || settingsAppVersion
+        latestState = desktop.state || latestState
+      } catch {
+        // Keep server state if the desktop bridge is not available.
+      }
+    }
+    updateState = normalizeUpdateStateForUi(latestState)
+    syncPackagedUpdateNotice()
+    if (settingsOpen) renderUpdatePanel()
+  } catch {
+    // Ignore background refresh errors; the next manual action will surface them.
+  }
+}
+
+function openSettings() {
+  settingsOpen = true
+  document.getElementById('settings-backdrop').hidden = false
+  void loadUpdatePanel()
+}
+
+function closeSettings() {
+  settingsOpen = false
+  document.getElementById('settings-backdrop').hidden = true
+}
+
+async function toggleAutoUpdate() {
+  if (!updateSettings) return
+  updatePanelBusy = true
+  renderUpdatePanel()
+  try {
+    const nextEnabled = !updateSettings.autoUpdateEnabled
+    const data = updateState?.updateStrategy === 'packaged-auto-update' && window.datamoatDesktop?.update?.saveSettings
+      ? await window.datamoatDesktop.update.saveSettings(nextEnabled)
+      : await jsonOrThrow(await apiFetch('/api/update/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ autoUpdateEnabled: nextEnabled }),
+        }))
+    updateSettings = {
+      autoUpdateEnabled: data.autoUpdateEnabled !== false,
+      autoUpdateIntervalHours: data.autoUpdateIntervalHours,
+    }
+    updateState = normalizeUpdateStateForUi(data.state || updateState)
+    reinstallInfo = data.reinstall || reinstallInfo
+    releasesUrl = data.releasesUrl || releasesUrl
+    setUpdatePanelMessage('', false)
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    updatePanelBusy = false
+    renderUpdatePanel()
+  }
+}
+
+async function checkUpdatesNow() {
+  updatePanelBusy = true
+  renderUpdatePanel()
+  try {
+    updateState = updateState?.updateStrategy === 'packaged-auto-update' && window.datamoatDesktop?.update?.check
+      ? await window.datamoatDesktop.update.check()
+      : await jsonOrThrow(await apiFetch('/api/update/check', { method: 'POST' }))
+    updateState = normalizeUpdateStateForUi(updateState)
+    setUpdatePanelMessage('', false)
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    updatePanelBusy = false
+    renderUpdatePanel()
+  }
+}
+
+async function applyUpdateNow() {
+  updatePanelBusy = true
+  renderUpdatePanel()
+  try {
+    const data = updateState?.updateStrategy === 'packaged-auto-update' && window.datamoatDesktop?.update?.apply
+      ? await window.datamoatDesktop.update.apply()
+      : await jsonOrThrow(await apiFetch('/api/update/apply', { method: 'POST' }))
+    updateState = normalizeUpdateStateForUi(data.state || data)
+    setUpdatePanelMessage('', false)
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    updatePanelBusy = false
+    renderUpdatePanel()
+  }
+}
+
+async function reinstallFromSource() {
+  const input = document.getElementById('reinstall-source-path')
+  if (!input) return
+  const sourcePath = input.value.trim()
+  if (!sourcePath) {
+    setUpdatePanelMessage('Choose a DataMoat source folder before starting a source reinstall.', true)
+    return
+  }
+  const proceed = window.confirm('Reinstall From Source will stop DataMoat immediately and replace the current app from the source folder you entered. Your encrypted DataMoat data should stay in place, but the app window will close now. Continue?')
+  if (!proceed) return
+  const confirmation = window.prompt('Type REINSTALL to confirm source reinstall now.')
+  if (confirmation !== 'REINSTALL') {
+    setUpdatePanelMessage('Source reinstall cancelled. Type REINSTALL exactly if you want to continue.', true)
+    return
+  }
+  updatePanelBusy = true
+  renderUpdatePanel()
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/update/reinstall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sourcePath,
+        confirmReinstall: true,
+        confirmText: confirmation,
+      }),
+    }))
+    reinstallInfo = data.source || reinstallInfo
+    updateState = normalizeUpdateStateForUi(data.state || updateState)
+    input.value = reinstallInfo?.root || sourcePath
+    delete input.dataset.dirty
+    setUpdatePanelMessage('Source reinstall started. DataMoat will close and relaunch after the reinstall flow finishes.', false)
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    updatePanelBusy = false
+    renderUpdatePanel()
+  }
+}
+
+async function installLatestVersion() {
+  updatePanelBusy = true
+  renderUpdatePanel()
+  try {
+    const data = updateState?.updateStrategy === 'packaged-auto-update' && window.datamoatDesktop?.update?.openLatest
+      ? await window.datamoatDesktop.update.openLatest()
+      : await jsonOrThrow(await apiFetch('/api/update/install-latest', { method: 'POST' }))
+    releasesUrl = data.url || releasesUrl
+    setUpdatePanelMessage('Opened the latest download page in your browser. Download the newest packaged release there and replace the current app when ready.', false)
+  } catch (error) {
+    const fallback = releasesUrl
+      ? `Could not open the latest download page automatically. You can open this link manually: ${releasesUrl}`
+      : (error instanceof Error ? error.message : String(error))
+    setUpdatePanelMessage(fallback, true)
+  } finally {
+    updatePanelBusy = false
+    renderUpdatePanel()
+  }
+}
+
+// ── Filters + search ──
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'))
+    btn.classList.add('active')
+    filterSrc = btn.dataset.src
+    renderList()
+  })
+})
+document.getElementById('search').addEventListener('input', e => {
+  const nextQ = e.target.value.trim()
+  if (nextQ !== searchQ) {
+    lastExecutedSearchQ = ''
+  }
+  searchQ = nextQ
+  contentMatches = {}
+  contentSearchPending = searchQ.length >= 2
+  renderList()
+  clearTimeout(searchTimer)
+  if (searchQ.length >= 2) {
+    searchTimer = setTimeout(() => doContentSearch(searchQ), 400)
+  } else {
+    contentSearchSeq += 1
+    contentSearchPending = false
+  }
+})
+
+// ── Helpers ──
+function esc(s) {
+  if (!s) return ''
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+}
+function escAttr(s) {
+  return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+function attachmentPath(id) {
+  return encodeURIComponent(String(id || ''))
+}
+function pretty(value) {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+function shortPath(p) {
+  const parts = p.split('/')
+  if (parts.length <= 3) return p
+  return '…/' + parts.slice(-2).join('/')
+}
+function reltime(ts) {
+  const diff = Date.now() - new Date(ts).getTime()
+  const h = Math.floor(diff / 3600000)
+  const d = Math.floor(h / 24)
+  if (d > 30) return new Date(ts).toLocaleDateString()
+  if (d > 0) return d + 'd ago'
+  if (h > 0) return h + 'h ago'
+  return 'recent'
+}
+function fmtDate(ts) { return new Date(ts).toLocaleDateString() }
+function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) }
+function wordCount(s) { return s ? s.trim().split(/\s+/).length : 0 }
+
+loadSessions()
+document.getElementById('open-settings-btn').addEventListener('click', () => openSettings())
+document.getElementById('close-settings-btn').addEventListener('click', () => closeSettings())
+document.getElementById('recovery-reset-later').addEventListener('click', () => closeRecoveryPasswordResetPrompt(true))
+document.getElementById('recovery-reset-save').addEventListener('click', () => { void submitRecoveryPasswordReset() })
+document.getElementById('recovery-reset-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('recovery-reset-confirm').focus()
+})
+document.getElementById('recovery-reset-confirm').addEventListener('keydown', e => {
+  if (e.key === 'Enter') void submitRecoveryPasswordReset()
+})
+document.getElementById('settings-backdrop').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeSettings()
+})
+document.getElementById('update-toggle').addEventListener('click', () => { void toggleAutoUpdate() })
+document.getElementById('update-check-btn').addEventListener('click', () => { void checkUpdatesNow() })
+document.getElementById('update-apply-btn').addEventListener('click', () => { void applyUpdateNow() })
+document.getElementById('update-install-latest-btn').addEventListener('click', () => { void installLatestVersion() })
+document.getElementById('update-reinstall-btn').addEventListener('click', () => { void reinstallFromSource() })
+document.getElementById('reinstall-source-path').addEventListener('input', e => {
+  const input = e.target
+  if (!(input instanceof HTMLInputElement)) return
+  if (input.value.trim() && input.value.trim() !== (reinstallInfo?.root || '')) {
+    input.dataset.dirty = 'true'
+  } else {
+    delete input.dataset.dirty
+  }
+  renderReinstallHelp()
+})
+document.getElementById('session-list').addEventListener('click', e => {
+  const target = e.target instanceof Element ? e.target : null
+  const item = target ? target.closest('.session-item[data-session-id]') : null
+  if (!item) return
+  const { sessionId } = item.dataset
+  if (sessionId) void selectSession(sessionId)
+})
+document.getElementById('session-list').addEventListener('keydown', e => {
+  if (e.key !== 'Enter' && e.key !== ' ') return
+  const target = e.target instanceof Element ? e.target : null
+  const item = target ? target.closest('.session-item[data-session-id]') : null
+  if (!item) return
+  e.preventDefault()
+  const { sessionId } = item.dataset
+  if (sessionId) void selectSession(sessionId)
+})
+document.getElementById('session-list').addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
+document.getElementById('conversation').addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
+window.addEventListener('pointerdown', () => { void sendActivityPing() })
+window.addEventListener('keydown', () => { void sendActivityPing() })
+window.addEventListener('mousemove', () => { void sendActivityPing() })
+window.addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
+window.addEventListener('touchstart', () => { void sendActivityPing() }, { passive: true })
+window.addEventListener('focus', () => { void sendActivityPing(true) })
+window.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && settingsOpen) closeSettings()
+})
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return
+  void sendActivityPing(true)
+  void loadSessions()
+  void refreshUpdatePanel()
+})
+setInterval(() => {
+  if (document.visibilityState === 'visible') {
+    void loadSessions()
+    void refreshUpdatePanel()
+  }
+}, 10000) // refresh every 10s without extending auth unless the user is active
+</script>
+</body>
+</html>
