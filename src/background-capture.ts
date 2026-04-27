@@ -208,6 +208,16 @@ export async function startBackgroundCapture(): Promise<boolean> {
   const sessionId = await ensureBackgroundCaptureSession()
   if (!sessionId) return false
 
+  updateHealth('capture', {
+    configured: true,
+    running: true,
+    startingAt: new Date().toISOString(),
+  })
+  updateHealth('daemon', {
+    captureRunning: true,
+    captureStartingAt: new Date().toISOString(),
+  })
+  writeAuditEvent('capture', 'background_capture_starting')
   await startWatchers('vault')
   updateHealth('capture', {
     configured: true,

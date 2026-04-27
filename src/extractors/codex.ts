@@ -286,13 +286,24 @@ const LOCAL_IMAGE_MEDIA: Record<string, string> = {
 }
 
 const MAX_LOCAL_IMAGE_BYTES = 50 * 1024 * 1024
+const MAX_LOCAL_IMAGE_SCAN_CHARS = 64 * 1024
+const MAX_LOCAL_IMAGE_CANDIDATE_CHARS = 4096
+const MAX_LOCAL_IMAGE_CANDIDATES = 10
+const CAPTURE_LOCAL_FILE_ATTACHMENTS = process.env.DATAMOAT_CAPTURE_LOCAL_FILE_ATTACHMENTS === '1'
 
 function localImagesFromText(text: string, blockIndex: number, innerIndex?: number): RawImageData[] {
+  // Do not read arbitrary local paths mentioned inside transcripts by default.
+  // On macOS, reading Downloads/Desktop/Documents can trigger privacy prompts
+  // that make a signed app look unsafe. The transcript text is still captured;
+  // inline/base64 images are still captured by parseInlineImageData().
+  if (!CAPTURE_LOCAL_FILE_ATTACHMENTS) return []
   if (!text) return []
+  if (text.length > MAX_LOCAL_IMAGE_SCAN_CHARS) return []
   const out: RawImageData[] = []
   const seen = new Set<string>()
 
-  for (const candidate of localImagePathCandidates(text)) {
+  for (const candidate of localImagePathCandidates(scanWindowForLocalImages(text))) {
+    if (seen.size >= MAX_LOCAL_IMAGE_CANDIDATES) break
     const filePath = normalizeLocalImagePath(candidate)
     if (!filePath || seen.has(filePath)) continue
     seen.add(filePath)
@@ -321,13 +332,18 @@ function localImagesFromText(text: string, blockIndex: number, innerIndex?: numb
   return out
 }
 
+function scanWindowForLocalImages(text: string): string {
+  if (text.length <= MAX_LOCAL_IMAGE_SCAN_CHARS * 2) return text
+  return `${text.slice(0, MAX_LOCAL_IMAGE_SCAN_CHARS)}\n${text.slice(-MAX_LOCAL_IMAGE_SCAN_CHARS)}`
+}
+
 function localImagePathCandidates(text: string): string[] {
   const candidates: string[] = []
   const ext = '(?:png|jpe?g|gif|webp)'
   const patterns = [
-    new RegExp(`\\[[^\\]]*]\\((file:\\/\\/\\/[^)\\n]+?\\.${ext}|\\/[^)\\n]+?\\.${ext})\\)`, 'gi'),
-    new RegExp(`[\\\`"'](file:\\/\\/\\/[^"'\\\`\\n]+?\\.${ext}|\\/[^"'\\\`\\n]+?\\.${ext})[\\\`"']`, 'gi'),
-    new RegExp(`(?:^|[\\s:])((?:\\/[^\\s"'\\\`<>)]+)+\\.${ext})(?=$|[\\s"'\\\`<>)])`, 'gi'),
+    new RegExp(`\\[[^\\]\\n]{0,200}]\\((file:\\/\\/\\/[^)\\n]{1,${MAX_LOCAL_IMAGE_CANDIDATE_CHARS}}\\.${ext}|\\/[^)\\n]{1,${MAX_LOCAL_IMAGE_CANDIDATE_CHARS}}\\.${ext})\\)`, 'gi'),
+    new RegExp(`[\\\`"'](file:\\/\\/\\/[^"'\\\`\\n]{1,${MAX_LOCAL_IMAGE_CANDIDATE_CHARS}}\\.${ext}|\\/[^"'\\\`\\n]{1,${MAX_LOCAL_IMAGE_CANDIDATE_CHARS}}\\.${ext})[\\\`"']`, 'gi'),
+    new RegExp(`(?:^|[\\s:])(\\/[^\\s"'\\\`<>)\\]]{1,${MAX_LOCAL_IMAGE_CANDIDATE_CHARS}}\\.${ext})(?=$|[\\s"'\\\`<>)\\]])`, 'gi'),
   ]
   for (const pattern of patterns) {
     let match: RegExpExecArray | null

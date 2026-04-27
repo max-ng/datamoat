@@ -8,6 +8,7 @@ import QRCode from 'qrcode'
 import {
   loadSessions,
   readSessionMessages,
+  readSessionMessagesPage,
   readRawRecords,
   readAttachment,
   setVaultSession,
@@ -105,12 +106,25 @@ const SESSION_IDLE_MS: Record<SessionFlow, number> = {
 const AUTH_BACKOFF_BASE_MS = 1000
 const AUTH_BACKOFF_MAX_MS = 5 * 60 * 1000
 const AUTH_RESET_AFTER_MS = 15 * 60 * 1000
+const SESSION_DETAIL_PAGE_LIMIT = 500
+const SEARCH_MESSAGE_PAGE_LIMIT = 250
 const CSRF_COOKIE = 'dm_csrf'
 const CSRF_HEADER = 'x-dm-csrf'
 const authAttempts = new Map<AuthMethod, AuthAttemptState>()
 let activeSession: { token: string; flow: SessionFlow; idleMs: number; expiresAt: number } | null = null
 let pendingAuth: { token: string; flow: SessionFlow; helperSessionId: string; expiresAt: number } | null = null
 let pendingSetup: PendingSetupState | null = null
+let pendingSetupInit: Promise<SetupInitPayload> | null = null
+
+type SetupInitPayload = {
+  setupNonce: string
+  secret: string
+  mnemonic: string
+  qrDataUrl: string
+  touchIdAvailable: boolean
+  touchIdReason?: string
+  bootstrapCapture: ReturnType<typeof bootstrapCaptureSummary>
+}
 
 function appVersion(): string {
   try {
@@ -149,6 +163,54 @@ function passwordRequirementError(password: string): string | null {
     return 'Password must contain uppercase, lowercase, and a number'
   }
   return null
+}
+
+async function setupInitPayload(): Promise<SetupInitPayload> {
+  if (pendingSetupInit) return pendingSetupInit
+
+  pendingSetupInit = (async () => {
+    let initialized = false
+    if (!pendingSetup) {
+      pendingSetup = {
+        nonce: crypto.randomBytes(24).toString('hex'),
+        secret: generateTOTPSecret(),
+        mnemonic: generateMnemonic(),
+        qrDataUrl: '',
+        createdAt: Date.now(),
+      }
+      initialized = true
+    }
+
+    const setup = pendingSetup
+    const [qrDataUrl, touchIdStatus] = await Promise.all([
+      setup.qrDataUrl ? Promise.resolve(setup.qrDataUrl) : QRCode.toDataURL(totpURL(setup.secret)),
+      secureEnclaveStatus(),
+    ])
+    if (pendingSetup?.nonce === setup.nonce && !pendingSetup.qrDataUrl) {
+      pendingSetup = { ...pendingSetup, qrDataUrl }
+    }
+    if (initialized) {
+      writeAuditEvent('setup', 'setup_initialized', {
+        touchIdAvailable: touchIdStatus.available,
+        totpProvisioned: true,
+      })
+    }
+    return {
+      setupNonce: setup.nonce,
+      secret: setup.secret,
+      mnemonic: setup.mnemonic,
+      qrDataUrl,
+      touchIdAvailable: touchIdStatus.available,
+      touchIdReason: touchIdStatus.reason,
+      bootstrapCapture: bootstrapCaptureSummary(),
+    }
+  })()
+
+  try {
+    return await pendingSetupInit
+  } finally {
+    pendingSetupInit = null
+  }
 }
 
 function recoveryUnlockFlow(flow: SessionFlow | null | undefined): flow is 'recovery_code' | 'mnemonic' {
@@ -405,12 +467,14 @@ async function activateVault(
   options: {
     skipBackgroundCaptureSetup?: boolean
     skipBackgroundCaptureStart?: boolean
+    skipWatcherStart?: boolean
     suppressCaptureWarning?: boolean
   } = {},
 ): Promise<{ backgroundConfigured: boolean; backgroundStarted: boolean; captureWarning: string | null }> {
   writeLog('info', 'auth', 'activate_vault_started', {
     skipBackgroundCaptureSetup: !!options.skipBackgroundCaptureSetup,
     skipBackgroundCaptureStart: !!options.skipBackgroundCaptureStart,
+    skipWatcherStart: !!options.skipWatcherStart,
     suppressCaptureWarning: !!options.suppressCaptureWarning,
   })
   setVaultSession(helperSessionId)
@@ -469,10 +533,12 @@ async function activateVault(
     backgroundStarted = await startBackgroundCapture()
     writeLog('info', 'auth', 'activate_vault_step', { step: 'background_start_done', backgroundStarted })
   }
-  if (!backgroundStarted) {
+  if (!backgroundStarted && !options.skipWatcherStart) {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_start' })
     await startWatchers('vault')
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_done' })
+  } else if (!backgroundStarted && options.skipWatcherStart) {
+    writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_deferred' })
   }
   updateHealth('daemon', {
     locked: false,
@@ -574,6 +640,12 @@ function activationResponse(
     ? { ok: true as const, captureWarning: result.captureWarning }
     : { ok: true as const }
   return { ...base, ...extras }
+}
+
+async function activateVaultForSetup(helperSessionId: string): Promise<Awaited<ReturnType<typeof activateVault>>> {
+  return activateVault(helperSessionId, {
+    suppressCaptureWarning: true,
+  })
 }
 
 async function sendJson(res: Response, status: number, payload: unknown): Promise<void> {
@@ -760,30 +832,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
   app.post('/api/setup/init', async (_req, res) => {
     if (isSetupDone()) return res.json({ error: 'already setup' })
-    const secret = generateTOTPSecret()
-    const mnemonic = generateMnemonic()
-    const qrDataUrl = await QRCode.toDataURL(totpURL(secret))
-    const touchIdStatus = await secureEnclaveStatus()
-    pendingSetup = {
-      nonce: crypto.randomBytes(24).toString('hex'),
-      secret,
-      mnemonic,
-      qrDataUrl,
-      createdAt: Date.now(),
-    }
-    writeAuditEvent('setup', 'setup_initialized', {
-      touchIdAvailable: touchIdStatus.available,
-      totpProvisioned: true,
-    })
-    res.json({
-      setupNonce: pendingSetup.nonce,
-      secret,
-      mnemonic,
-      qrDataUrl,
-      touchIdAvailable: touchIdStatus.available,
-      touchIdReason: touchIdStatus.reason,
-      bootstrapCapture: bootstrapCaptureSummary(),
-    })
+    res.json(await setupInitPayload())
   })
 
   app.post('/api/setup/reset', (_req, res) => {
@@ -897,7 +946,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       authRecord.recoveryWrapSalts = recoveryWrapped.map(item => item.salt)
 
       saveAuthConfig(authRecord)
-      const activation = await activateVault(helperSessionId)
+      const activation = await activateVaultForSetup(helperSessionId)
       saveAuthConfig({
         ...(loadAuthConfig() || {}),
         ...authRecord,
@@ -1271,8 +1320,20 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     const sessions = await loadSessions()
     const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
     if (!session) return res.status(404).json({ error: 'not found' })
-    const messages = await readMessagesForUI(session)
-    res.json({ session: normalizeSessionForUI(session, messages), messages })
+    const offset = positiveIntQuery(req.query.offset)
+    const requestedLimit = positiveIntQuery(req.query.limit)
+    const limit = requestedLimit > 0 ? Math.min(requestedLimit, SESSION_DETAIL_PAGE_LIMIT) : 0
+    const messages = await readMessagesForUI(session, { offset, limit })
+    const totalMessages = session.messageCount || messages.length
+    res.json({
+      session: normalizeSessionForUI(session, messages),
+      messages,
+      totalMessages,
+      offset,
+      limit,
+      nextOffset: limit > 0 ? offset + messages.length : messages.length,
+      hasMore: limit > 0 && offset + messages.length < totalMessages,
+    })
   })
 
   app.get('/api/search', requireAuth, async (req, res) => {
@@ -1282,21 +1343,8 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     const sessions = await loadSessions()
     const results: { id: string; excerpt: string }[] = []
     for (const session of sessions) {
-      const messages = await readMessagesForUI(session)
-      for (const msg of messages) {
-        for (const block of msg.content) {
-          const text = block.text || block.thinking || stringifySearchableBlock(block)
-          const idx = text.toLowerCase().indexOf(q)
-          if (idx !== -1) {
-            const start = Math.max(0, idx - 40)
-            const end = Math.min(text.length, idx + q.length + 80)
-            const excerpt = (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '')
-            results.push({ id: session.uid ?? session.id, excerpt })
-            break
-          }
-        }
-        if (results[results.length - 1]?.id === (session.uid ?? session.id)) break
-      }
+      const excerpt = await findSearchExcerptForUI(session, q)
+      if (excerpt) results.push({ id: session.uid ?? session.id, excerpt })
       if (results.length >= 50) break  // cap at 50 matches
     }
     updateHealth('search', {
@@ -1551,33 +1599,70 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 }
 
 async function normalizeSessionsForUI(sessions: Session[]): Promise<Session[]> {
-  const normalized: Session[] = []
-  for (const session of sessions) {
-    if (session.hasThinking) {
-      const messages = await readMessagesForUI(session)
-      normalized.push(normalizeSessionForUI(session, messages))
-    } else {
-      normalized.push(normalizeSessionForUI(session))
-    }
-  }
-  return normalized
+  return sessions.map(session => normalizeSessionForUI(session))
 }
 
 function normalizeSessionForUI(session: Session, messages?: Message[]): Session {
   return {
     ...session,
     cwd: normalizeClaudeAppCwdForUI(session),
-    hasThinking: messages ? messages.some(messageHasThinkingBlock) : session.hasThinking,
+    hasThinking: session.hasThinking || (messages ? messages.some(messageHasThinkingBlock) : false),
   }
 }
 
-async function readMessagesForUI(session: Session): Promise<Message[]> {
-  const messages = (await readSessionMessages(session)).map(message => ({
+type ReadMessagesForUIOptions = {
+  offset?: number
+  limit?: number
+}
+
+async function readMessagesForUI(session: Session, options: ReadMessagesForUIOptions = {}): Promise<Message[]> {
+  const limit = typeof options.limit === 'number' ? Math.max(0, Math.floor(options.limit)) : 0
+  const offset = typeof options.offset === 'number' ? Math.max(0, Math.floor(options.offset)) : 0
+  const pageMode = limit > 0
+  const rawMessages = pageMode
+    ? await readSessionMessagesPage(session, offset, limit)
+    : await readSessionMessages(session)
+  const messages = rawMessages.map(message => ({
     ...message,
     content: message.content,
     hasThinking: messageHasThinkingBlock(message),
   }))
+  if (pageMode) return messages
   return await backfillThinkingMessagesForUI(session, messages)
+}
+
+async function findSearchExcerptForUI(session: Session, q: string): Promise<string | null> {
+  const total = session.messageCount || 0
+  const searchLimit = total > 0 ? total : Number.MAX_SAFE_INTEGER
+  for (let offset = 0; offset < searchLimit; offset += SEARCH_MESSAGE_PAGE_LIMIT) {
+    const messages = await readMessagesForUI(session, { offset, limit: SEARCH_MESSAGE_PAGE_LIMIT })
+    if (messages.length === 0) break
+    const excerpt = findSearchExcerptInMessages(messages, q)
+    if (excerpt) return excerpt
+    if (messages.length < SEARCH_MESSAGE_PAGE_LIMIT) break
+  }
+  return null
+}
+
+function findSearchExcerptInMessages(messages: Message[], q: string): string | null {
+  for (const msg of messages) {
+    for (const block of msg.content) {
+      const text = block.text || block.thinking || stringifySearchableBlock(block)
+      const idx = text.toLowerCase().indexOf(q)
+      if (idx === -1) continue
+      const start = Math.max(0, idx - 40)
+      const end = Math.min(text.length, idx + q.length + 80)
+      return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '')
+    }
+  }
+  return null
+}
+
+function positiveIntQuery(value: unknown): number {
+  const raw = Array.isArray(value) ? value[0] : value
+  if (typeof raw !== 'string') return 0
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
 function messageHasThinkingBlock(message: Message): boolean {
@@ -2219,13 +2304,6 @@ document.addEventListener('visibilitychange', () => {
   if (!document.hidden) void syncSetupRoute(false);
 });
 
-window.addEventListener('pagehide', () => {
-  if (_setupCommitted) return;
-  try {
-    apiFetch('/api/setup/reset', { method: 'POST', keepalive: true, headers: { 'X-DM-CSRF': dmCookie('dm_csrf') || '' } })
-  } catch {}
-});
-
 function setOff(id, off) { document.getElementById(id).dataset.off = off ? '1' : '0'; }
 function isOff(id) { return document.getElementById(id).dataset.off === '1'; }
 function showMethodError(msg) {
@@ -2494,6 +2572,19 @@ async function activate() {
   fill.style.transitionDuration = '350ms';
   fill.style.width = '18%';
   label.textContent = 'Sealing vault…';
+  const progressSteps = [
+    { pct: 32, delay: 800, duration: 700, text: 'Preparing encrypted vault…' },
+    { pct: 48, delay: 1800, duration: 1200, text: 'Importing existing conversations…' },
+    { pct: 66, delay: 4200, duration: 2600, text: 'Scanning local history. This can take a few minutes on large vaults…' },
+    { pct: 84, delay: 9000, duration: 7000, text: 'Finishing initial session index…' },
+    { pct: 92, delay: 18000, duration: 15000, text: 'Still importing. DataMoat will open only after the scan is complete…' },
+  ];
+  const progressTimers = progressSteps.map(step => setTimeout(() => {
+    fill.style.transitionDuration = step.duration + 'ms';
+    fill.style.width = step.pct + '%';
+    label.textContent = step.text;
+  }, step.delay));
+  const clearProgressTimers = () => progressTimers.forEach(timer => clearTimeout(timer));
   const rememberCaptureWarning = (payload) => {
     if (payload && typeof payload.captureWarning === 'string' && payload.captureWarning.trim()) {
       try { sessionStorage.setItem('dm_notice', payload.captureWarning.trim()); } catch {}
@@ -2507,6 +2598,7 @@ async function activate() {
     });
     let d = null;
     try { d = await r.json(); } catch {}
+    clearProgressTimers();
     if (!r.ok || d?.error) {
       if (d?.error === 'already setup') {
         _setupCommitted = true;
@@ -2524,6 +2616,7 @@ async function activate() {
     _setupCommitted = true;
     rememberCaptureWarning(d);
   } catch {
+    clearProgressTimers();
     overlay.classList.remove('show');
     fill.style.width = '0%';
     err.textContent = 'Could not activate vault. Try again.';

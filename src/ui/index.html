@@ -458,10 +458,16 @@
     height: 100%;
     min-height: 0;
     overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-color: var(--border2) transparent;
   }
-  .conversation::-webkit-scrollbar { width: 4px; }
+  .conversation::-webkit-scrollbar { width: 10px; }
   .conversation::-webkit-scrollbar-track { background: transparent; }
-  .conversation::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .conversation::-webkit-scrollbar-thumb {
+    background: var(--border2);
+    border-radius: 999px;
+    border: 3px solid var(--bg);
+  }
 
   .conv-header {
     margin-bottom: 24px;
@@ -489,7 +495,6 @@
   .badge.codex-cli   { color: var(--codex); border-color: var(--codex); background: #08182820; }
   .badge.claude-app  { color: var(--app); border-color: var(--app); background: #08180820; }
   .badge.openclaw    { color: var(--openclaw); border-color: var(--openclaw); background: #18082820; }
-
   /* ── Messages ── */
   .message { margin-bottom: 20px; }
   .message.tool,
@@ -1277,6 +1282,12 @@ let touchIdUpgradeCheckStarted = false
 const TOUCH_ID_UPGRADE_DISMISSED_KEY = 'dm_touchid_upgrade_dismissed'
 const UPDATE_READY_DISMISSED_KEY = 'dm_update_ready_dismissed_version'
 const UPDATE_APPLIED_NOTICE_KEY = 'dm_update_applied_notice_version'
+const LARGE_SESSION_MESSAGE_THRESHOLD = 1000
+const SESSION_PAGE_SIZE = 500
+let activeSessionData = null
+let activeMessages = []
+let activePageInfo = null
+let loadingMoreMessages = false
 
 const SOURCE_LABELS = {
   'claude-cli': 'Claude CLI',
@@ -1767,12 +1778,32 @@ async function selectSession(id) {
   conv.innerHTML = '<div class="no-session"><div class="no-session-text">loading…</div></div>'
 
   const seq = ++activeLoadSeq
-  const res = await apiFetch(`/api/session/${id}`)
-  const { session, messages } = await res.json()
+  const summary = sessions.find(s => (s.uid || s.id) === id)
+  const shouldPage = (summary?.messageCount || 0) > LARGE_SESSION_MESSAGE_THRESHOLD
+  const url = shouldPage
+    ? `/api/session/${id}?offset=0&limit=${SESSION_PAGE_SIZE}`
+    : `/api/session/${id}`
+  const res = await apiFetch(url)
+  const { session, messages, hasMore, totalMessages, nextOffset, limit } = await res.json()
   if (seq !== activeLoadSeq || activeId !== id) return
-  activeMeta = { id: session.uid || session.id, lastTimestamp: session.lastTimestamp, messageCount: session.messageCount }
+  activeSessionData = session
+  activeMessages = messages
+  activePageInfo = {
+    paginated: shouldPage,
+    hasMore: !!hasMore,
+    totalMessages: totalMessages || session.messageCount || messages.length,
+    nextOffset: nextOffset || messages.length,
+    limit: limit || 0,
+  }
+  activeMeta = {
+    id: session.uid || session.id,
+    lastTimestamp: session.lastTimestamp,
+    messageCount: session.messageCount,
+    paginated: shouldPage,
+    loadedMessages: messages.length,
+  }
 
-  renderConversation(session, messages, { resetScroll: true })
+  renderConversation(session, messages, { resetScroll: true, pageInfo: activePageInfo })
 }
 
 function renderConversation(session, messages, opts = {}) {
@@ -1816,6 +1847,48 @@ function renderConversation(session, messages, opts = {}) {
   } else {
     conv.scrollTop = prevScrollTop
   }
+  requestAnimationFrame(() => maybeAutoLoadConversation(conv))
+}
+
+function maybeAutoLoadConversation(el = document.getElementById('conversation')) {
+  if (!el || !activePageInfo?.hasMore || loadingMoreMessages) return
+  if (el.scrollHeight - (el.scrollTop + el.clientHeight) < 600) {
+    void loadMoreConversation()
+  }
+}
+
+async function loadMoreConversation() {
+  if (!activeId || !activePageInfo?.hasMore || loadingMoreMessages) return
+  loadingMoreMessages = true
+  const seq = activeLoadSeq
+  const scrollHost = document.getElementById('conversation')
+  const prevScrollTop = scrollHost.scrollTop
+  try {
+    const res = await apiFetch(`/api/session/${activeId}?offset=${activePageInfo.nextOffset}&limit=${SESSION_PAGE_SIZE}`)
+    const { session, messages, hasMore, totalMessages, nextOffset, limit } = await res.json()
+    const sessionKey = session.uid || session.id
+    if (seq !== activeLoadSeq || activeId !== sessionKey) return
+    activeSessionData = session
+    activeMessages = activeMessages.concat(messages)
+    activePageInfo = {
+      paginated: true,
+      hasMore: !!hasMore,
+      totalMessages: totalMessages || session.messageCount || activeMessages.length,
+      nextOffset: nextOffset || activeMessages.length,
+      limit: limit || SESSION_PAGE_SIZE,
+    }
+    activeMeta = {
+      id: sessionKey,
+      lastTimestamp: session.lastTimestamp,
+      messageCount: session.messageCount,
+      paginated: true,
+      loadedMessages: activeMessages.length,
+    }
+    renderConversation(session, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+    requestAnimationFrame(() => { scrollHost.scrollTop = prevScrollTop })
+  } finally {
+    loadingMoreMessages = false
+  }
 }
 
 async function refreshActiveSessionIfChanged() {
@@ -1828,12 +1901,34 @@ async function refreshActiveSessionIfChanged() {
   if (!changed) return
 
   const seq = ++activeLoadSeq
-  const res = await apiFetch(`/api/session/${activeId}`)
-  const { session, messages } = await res.json()
+  const shouldPage = activeMeta?.paginated || (current.messageCount || 0) > LARGE_SESSION_MESSAGE_THRESHOLD
+  const limit = shouldPage ? Math.max(activeMessages.length || SESSION_PAGE_SIZE, SESSION_PAGE_SIZE) : 0
+  const url = shouldPage
+    ? `/api/session/${activeId}?offset=0&limit=${limit}`
+    : `/api/session/${activeId}`
+  const res = await apiFetch(url)
+  const { session, messages, hasMore, totalMessages, nextOffset, limit: responseLimit } = await res.json()
   const sessionKey = session.uid || session.id
   if (seq !== activeLoadSeq || activeId !== sessionKey) return
-  activeMeta = { id: sessionKey, lastTimestamp: session.lastTimestamp, messageCount: session.messageCount }
-  renderConversation(session, messages, { resetScroll: false })
+  activeSessionData = session
+  activeMessages = messages
+  activePageInfo = shouldPage
+    ? {
+        paginated: true,
+        hasMore: !!hasMore,
+        totalMessages: totalMessages || session.messageCount || messages.length,
+        nextOffset: nextOffset || messages.length,
+        limit: responseLimit || limit,
+      }
+    : null
+  activeMeta = {
+    id: sessionKey,
+    lastTimestamp: session.lastTimestamp,
+    messageCount: session.messageCount,
+    paginated: shouldPage,
+    loadedMessages: messages.length,
+  }
+  renderConversation(session, messages, { resetScroll: false, pageInfo: activePageInfo })
 }
 
 // --- Attribute-strip helpers (Phase 4) ---
@@ -1841,6 +1936,8 @@ async function refreshActiveSessionIfChanged() {
 // collapse, not familiarity. Unknown fields get the same treatment.
 const INLINE_STRING_MAX = 120
 const INLINE_ARRAY_MAX = 5
+const DISPLAY_TEXT_MAX = 50000
+const DISPLAY_SUMMARY_MAX = 800
 
 function scalarToString(v) {
   if (v === null) return 'null'
@@ -1857,6 +1954,31 @@ function isInlineArray(arr) {
   return Array.isArray(arr) && arr.length <= INLINE_ARRAY_MAX && arr.every(x => isScalar(x) && (typeof x !== 'string' || x.length < 40))
 }
 
+function displaySlice(text, max = DISPLAY_TEXT_MAX) {
+  const value = String(text ?? '')
+  if (value.length <= max) return { text: value, truncated: false, total: value.length }
+  return { text: value.slice(0, max), truncated: true, total: value.length }
+}
+
+function truncationNotice(total, shown = DISPLAY_TEXT_MAX) {
+  return `<div style="margin-top:8px;color:var(--muted);font-size:12px">Showing first ${esc(String(shown))} of ${esc(String(total))} characters. Full content is preserved in the encrypted vault/raw backup.</div>`
+}
+
+function renderInlineDisplay(text, max = DISPLAY_TEXT_MAX) {
+  const sliced = displaySlice(text, max)
+  return `${esc(sliced.text)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
+}
+
+function renderTextDisplay(text, className) {
+  return `<div class="${className}">${renderInlineDisplay(text)}</div>`
+}
+
+function renderPreDisplay(text, className = '') {
+  const sliced = displaySlice(text)
+  const cls = className ? ` class="${escAttr(className)}"` : ''
+  return `<pre${cls}>${esc(sliced.text)}</pre>${sliced.truncated ? truncationNotice(sliced.total) : ''}`
+}
+
 // Render an arbitrary value as HTML: scalars inline, lists/objects collapsed.
 function renderAttrValue(value) {
   if (value === undefined) return '<span style="opacity:0.5">undefined</span>'
@@ -1866,11 +1988,11 @@ function renderAttrValue(value) {
     if (isShortString(s) || typeof value !== 'string') return esc(s)
     // long single-line string → collapsed preview
     const preview = esc(s.slice(0, 80)) + '…'
-    return `<details><summary>${preview} <span style="opacity:0.5">(${s.length} chars)</span></summary><pre>${esc(s)}</pre></details>`
+    return `<details><summary>${preview} <span style="opacity:0.5">(${s.length} chars)</span></summary>${renderPreDisplay(s)}</details>`
   }
   if (Array.isArray(value)) {
     if (isInlineArray(value)) return esc(value.map(scalarToString).join(', '))
-    return `<details><summary>array (${value.length})</summary><pre>${esc(JSON.stringify(value, null, 2))}</pre></details>`
+    return `<details><summary>array (${value.length})</summary>${renderPreDisplay(JSON.stringify(value, null, 2))}</details>`
   }
   if (typeof value === 'object') {
     const keys = Object.keys(value)
@@ -1878,7 +2000,7 @@ function renderAttrValue(value) {
     if (keys.length <= 3 && allScalar) {
       return keys.map(k => `<span style="opacity:0.7">${esc(k)}:</span> ${esc(scalarToString(value[k]))}`).join(', ')
     }
-    return `<details><summary>object (${keys.length} fields)</summary><pre>${esc(JSON.stringify(value, null, 2))}</pre></details>`
+    return `<details><summary>object (${keys.length} fields)</summary>${renderPreDisplay(JSON.stringify(value, null, 2))}</details>`
   }
   return esc(String(value))
 }
@@ -1971,7 +2093,7 @@ function renderMessage(msg) {
       <div class="message-role system">turn summary <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
       ${renderAttrStrip(msg)}
       ${renderTurnSummary(msg)}
-      ${msg.content && msg.content[0]?.text ? `<div class="text-block">${esc(msg.content[0].text)}</div>` : ''}
+      ${msg.content && msg.content[0]?.text ? renderTextDisplay(msg.content[0].text, 'text-block') : ''}
     </div>`
   }
   if (msg.sourceEventType === 'rate_limit_event') {
@@ -1995,11 +2117,11 @@ function renderMessage(msg) {
           <span>thinking block</span>
           <span style="margin-left:auto;opacity:.5">${thinkingCountLabel}</span>
         </div>
-        <div class="thinking-content" id="${id}">${thinkingText ? esc(thinkingText) : ''}</div>
+        <div class="thinking-content" id="${id}">${thinkingText ? renderInlineDisplay(thinkingText) : ''}</div>
       </div>`
     }
     if (block.type === 'text' && block.text?.trim()) {
-      return `<div class="text-block">${esc(block.text)}</div>`
+      return renderTextDisplay(block.text, 'text-block')
     }
     if (block.type === 'tool_use') {
       const rawInput = pretty(block.input ?? block.text ?? '')
@@ -2010,7 +2132,7 @@ function renderMessage(msg) {
         </div>
         <details class="detail-block" open>
           <summary>arguments</summary>
-          <pre class="detail-pre">${esc(rawInput)}</pre>
+          ${renderPreDisplay(rawInput, 'detail-pre')}
         </details>
       </div>`
     }
@@ -2027,7 +2149,7 @@ function renderMessage(msg) {
         </div>
         ${rawOutput ? `<details class="detail-block" open>
           <summary>output</summary>
-          <pre class="detail-pre">${esc(rawOutput)}</pre>
+          ${renderPreDisplay(rawOutput, 'detail-pre')}
         </details>` : ''}
         ${imageHtml}
       </div>`
@@ -2055,7 +2177,7 @@ function renderMessage(msg) {
     }
     if (block.type === 'other') {
       const rawOther = pretty(block.content ?? block.text ?? '')
-      return rawOther ? `<div class="other-block">${esc(rawOther)}</div>` : ''
+      return rawOther ? renderTextDisplay(rawOther, 'other-block') : ''
     }
     return ''
   }).join('')
@@ -2677,6 +2799,9 @@ document.getElementById('search').addEventListener('input', e => {
     contentSearchSeq += 1
     contentSearchPending = false
   }
+})
+document.getElementById('conversation').addEventListener('scroll', e => {
+  maybeAutoLoadConversation(e.currentTarget)
 })
 
 // ── Helpers ──

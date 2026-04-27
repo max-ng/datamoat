@@ -16,6 +16,8 @@ let helperReady = false
 let nextRequestId = 1
 const pending = new Map<number, PendingRequest>()
 let stderrTail = ''
+const MAX_HELPER_LINE_PAYLOAD_BYTES = 128 * 1024
+const CHUNKED_LINE_PREFIX = 'dmchunk1:'
 
 function ensureHelper(): ChildProcessWithoutNullStreams {
   if (helper && !helper.killed && helper.exitCode === null) return helper
@@ -156,13 +158,95 @@ export async function lockVaultSession(sessionId: string): Promise<void> {
 }
 
 export async function encryptLinesForSession(sessionId: string, lines: string[]): Promise<string[]> {
-  const res = await request<{ lines: string[] }>('encrypt_lines', { sessionId, lines })
-  return res.lines
+  const out = new Array<string>(lines.length)
+  await processNormalLineChunks(lines, line => Buffer.byteLength(line, 'utf8') > MAX_HELPER_LINE_PAYLOAD_BYTES, async (chunk, indexes) => {
+    const res = await request<{ lines: string[] }>('encrypt_lines', { sessionId, lines: chunk })
+    res.lines.forEach((line, index) => {
+      out[indexes[index]] = line
+    })
+  }, async (line, index) => {
+    out[index] = await encryptChunkedLine(sessionId, line)
+  })
+  return out
 }
 
 export async function decryptLinesForSession(sessionId: string, lines: string[]): Promise<string[]> {
-  const res = await request<{ lines: string[] }>('decrypt_lines', { sessionId, lines })
-  return res.lines
+  const out = new Array<string>(lines.length)
+  await processNormalLineChunks(lines, isChunkedEncryptedLine, async (chunk, indexes) => {
+    const res = await request<{ lines: string[] }>('decrypt_lines', { sessionId, lines: chunk })
+    res.lines.forEach((line, index) => {
+      out[indexes[index]] = line
+    })
+  }, async (line, index) => {
+    out[index] = await decryptChunkedLine(sessionId, line)
+  })
+  return out
+}
+
+async function processNormalLineChunks(
+  lines: string[],
+  shouldProcessLargeLine: (line: string) => boolean,
+  processChunk: (chunk: string[], indexes: number[]) => Promise<void>,
+  processLargeLine: (line: string, index: number) => Promise<void>,
+): Promise<void> {
+  let current: string[] = []
+  let currentIndexes: number[] = []
+  let currentBytes = 0
+
+  const flush = async (): Promise<void> => {
+    if (current.length === 0) return
+    const chunk = current
+    const indexes = currentIndexes
+    current = []
+    currentIndexes = []
+    currentBytes = 0
+    await processChunk(chunk, indexes)
+  }
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+    const lineBytes = Buffer.byteLength(line, 'utf8')
+    if (shouldProcessLargeLine(line)) {
+      await flush()
+      await processLargeLine(line, index)
+      continue
+    }
+    if (current.length > 0 && currentBytes + lineBytes > MAX_HELPER_LINE_PAYLOAD_BYTES) {
+      await flush()
+    }
+    current.push(line)
+    currentIndexes.push(index)
+    currentBytes += lineBytes
+  }
+  await flush()
+}
+
+function isChunkedEncryptedLine(line: string): boolean {
+  return line.startsWith(CHUNKED_LINE_PREFIX)
+}
+
+async function encryptChunkedLine(sessionId: string, line: string): Promise<string> {
+  const data = Buffer.from(line, 'utf8')
+  const chunks: string[] = []
+  for (let offset = 0; offset < data.length; offset += MAX_HELPER_LINE_PAYLOAD_BYTES) {
+    chunks.push(await encryptBytesForSession(sessionId, data.subarray(offset, offset + MAX_HELPER_LINE_PAYLOAD_BYTES)).then(buffer => buffer.toString('base64')))
+  }
+  const payload = Buffer.from(JSON.stringify({ v: 1, chunks }), 'utf8').toString('base64')
+  return `${CHUNKED_LINE_PREFIX}${payload}`
+}
+
+async function decryptChunkedLine(sessionId: string, line: string): Promise<string> {
+  const encoded = line.slice(CHUNKED_LINE_PREFIX.length)
+  const envelope = JSON.parse(Buffer.from(encoded, 'base64').toString('utf8')) as { v?: number; chunks?: unknown }
+  if (envelope.v !== 1 || !Array.isArray(envelope.chunks)) {
+    throw new Error('invalid chunked encrypted line')
+  }
+  const chunks: Buffer[] = []
+  for (const chunk of envelope.chunks) {
+    if (typeof chunk !== 'string') throw new Error('invalid chunked encrypted line chunk')
+    chunks.push(await decryptBytesForSession(sessionId, Buffer.from(chunk, 'base64')))
+  }
+  return Buffer.concat(chunks).toString('utf8')
 }
 
 export async function encryptBytesForSession(sessionId: string, data: Buffer): Promise<Buffer> {

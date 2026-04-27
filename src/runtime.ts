@@ -102,6 +102,20 @@ function dataRootCommandMarker(): string | null {
   return dataRoot ? path.resolve(dataRoot) : null
 }
 
+function positiveIntegerFromEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim()
+  if (!raw) return fallback
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+const DAEMON_START_TIMEOUT_MS = positiveIntegerFromEnv('DATAMOAT_DAEMON_START_TIMEOUT_MS', 20000)
+const DAEMON_START_POLL_MS = positiveIntegerFromEnv('DATAMOAT_DAEMON_START_POLL_MS', 250)
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 function commandForPid(pid: number): string | null {
   try {
     return child_process.execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).trim() || null
@@ -253,6 +267,28 @@ export async function resolveActivePort(expectedPid?: number | null): Promise<nu
   return fallbackPort
 }
 
+async function waitForActivePort(expectedPid?: number | null, timeoutMs = DAEMON_START_TIMEOUT_MS): Promise<number | null> {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt <= timeoutMs) {
+    const activePid = expectedPid ?? isDaemonRunning()
+    const port = await resolveActivePort(activePid)
+    if (port) return port
+
+    if (expectedPid) {
+      const recoveredPid = isDaemonRunning()
+      if (recoveredPid && recoveredPid !== expectedPid) {
+        const recoveredPort = await resolveActivePort(recoveredPid)
+        if (recoveredPort) return recoveredPort
+      }
+    }
+
+    await sleep(DAEMON_START_POLL_MS)
+  }
+
+  return null
+}
+
 export async function ensureDaemonRunning(): Promise<{ pid: number | null; port: number; url: string }> {
   ensureDirs()
   let pid = isDaemonRunning()
@@ -264,7 +300,7 @@ export async function ensureDaemonRunning(): Promise<{ pid: number | null; port:
     try { fs.unlinkSync(path.join(STATE_DIR, 'port')) } catch { /* ignore */ }
     let waited = 0
     while (findDaemonPids().length > 0 && waited < 3000) {
-      await new Promise(resolve => setTimeout(resolve, 150))
+      await sleep(150)
       waited += 150
     }
     pid = null
@@ -298,15 +334,9 @@ export async function ensureDaemonRunning(): Promise<{ pid: number | null; port:
       daemon.unref()
       pid = daemon.pid ?? null
     }
-
-    let waited = 0
-    while (!(await resolveActivePort(pid)) && waited < 5000) {
-      await new Promise(resolve => setTimeout(resolve, 200))
-      waited += 200
-    }
   }
 
-  const port = await resolveActivePort(pid)
+  const port = await waitForActivePort(pid)
   if (!port) throw new Error('daemon did not start in time')
-  return { pid, port, url: buildUiUrl(port) }
+  return { pid: isDaemonRunning() ?? pid, port, url: buildUiUrl(port) }
 }

@@ -71,6 +71,10 @@ function sha256Hex(data: string): string {
   return crypto.createHash('sha256').update(data).digest('hex')
 }
 
+function fallbackRawSessionId(source: Source, filePath: string): string {
+  return `raw-${crypto.createHash('sha256').update(`${source}:${path.resolve(filePath)}`).digest('hex').slice(0, 16)}`
+}
+
 // Known event types per source — anything outside this set is counted as an
 // "unknown event type" for drift observability. Keep in sync with extractors.
 const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
@@ -166,10 +170,153 @@ let processQueue = Promise.resolve()
 type WatcherMode = 'vault' | 'bootstrap'
 let watcherMode: WatcherMode = 'vault'
 
+const WATCHER_READY_TIMEOUT_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_READY_TIMEOUT_MS, 10_000)
+const WATCHER_INITIAL_QUEUE_TIMEOUT_MS = nonNegativeTimeoutMs(process.env.DATAMOAT_WATCHER_INITIAL_QUEUE_TIMEOUT_MS, 0)
+const WATCHER_YIELD_EVERY_LINES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_YIELD_EVERY_LINES, 100)
+const WATCHER_MAX_BATCH_BYTES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_MAX_BATCH_BYTES, 512 * 1024)
+const WATCHER_MAX_RECORD_BYTES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_MAX_RECORD_BYTES, 32 * 1024 * 1024)
+
+type StartupPhaseStatus = 'completed' | 'timed_out'
+
+function positiveTimeoutMs(value: string | undefined, fallback: number): number {
+  const parsed = value ? Number(value) : fallback
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function nonNegativeTimeoutMs(value: string | undefined, fallback: number): number {
+  const parsed = value ? Number(value) : fallback
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+}
+
+async function yieldToEventLoop(): Promise<void> {
+  await new Promise<void>(resolve => setImmediate(resolve))
+}
+
+async function waitForStartupPhase(
+  phase: 'ready' | 'initial_queue',
+  promise: Promise<void>,
+  timeoutMs: number,
+  fields: Record<string, unknown>,
+): Promise<StartupPhaseStatus> {
+  const startedAt = Date.now()
+  let timedOut = false
+
+  if (timeoutMs <= 0) {
+    await promise
+    writeLog('info', 'watcher', 'startup_phase_completed', {
+      ...fields,
+      phase,
+      elapsedMs: Date.now() - startedAt,
+    })
+    return 'completed'
+  }
+
+  return new Promise<StartupPhaseStatus>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      timedOut = true
+      const elapsedMs = Date.now() - startedAt
+      writeLog('warn', 'watcher', 'startup_phase_timeout', {
+        ...fields,
+        phase,
+        timeoutMs,
+        elapsedMs,
+      })
+      updateHealth('watcher', {
+        lastStartupTimeoutAt: new Date().toISOString(),
+        lastStartupTimeoutPhase: phase,
+        lastStartupTimeoutMs: timeoutMs,
+      })
+      writeAuditEvent('watcher', 'startup_phase_timeout', {
+        phase,
+        timeoutMs,
+      })
+      resolve('timed_out')
+    }, timeoutMs)
+
+    promise.then(() => {
+      clearTimeout(timer)
+      if (timedOut) {
+        writeLog('info', 'watcher', 'startup_phase_completed_after_timeout', {
+          ...fields,
+          phase,
+          elapsedMs: Date.now() - startedAt,
+        })
+        return
+      }
+      resolve('completed')
+    }, error => {
+      clearTimeout(timer)
+      if (timedOut) {
+        writeLog('error', 'watcher', 'startup_phase_failed_after_timeout', {
+          ...fields,
+          phase,
+          error: safeError(error),
+        })
+        return
+      }
+      reject(error)
+    })
+  })
+}
+
 function isTransientFileError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false
   const code = (err as { code?: string }).code
   return code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' || code === 'EBUSY'
+}
+
+function readFileBatch(filePath: string, startOffset: number, fileSize: number): {
+  buffer: Buffer
+  endOffset: number
+  skippedOversizedRecord: boolean
+} {
+  const remaining = fileSize - startOffset
+  if (remaining <= 0) return { buffer: Buffer.alloc(0), endOffset: startOffset, skippedOversizedRecord: false }
+
+  const fd = fs.openSync(filePath, 'r')
+  try {
+    const initialBytes = Math.min(remaining, WATCHER_MAX_BATCH_BYTES)
+    const initial = Buffer.alloc(initialBytes)
+    fs.readSync(fd, initial, 0, initialBytes, startOffset)
+
+    if (startOffset + initialBytes >= fileSize) {
+      return { buffer: initial, endOffset: fileSize, skippedOversizedRecord: false }
+    }
+
+    const lastNewline = initial.lastIndexOf(10)
+    if (lastNewline >= 0) {
+      const endOffset = startOffset + lastNewline + 1
+      return { buffer: initial.subarray(0, lastNewline + 1), endOffset, skippedOversizedRecord: false }
+    }
+
+    const recordLimit = Math.min(remaining, WATCHER_MAX_RECORD_BYTES)
+    const extended = Buffer.alloc(recordLimit)
+    initial.copy(extended, 0, 0, initialBytes)
+    if (recordLimit > initialBytes) {
+      fs.readSync(fd, extended, initialBytes, recordLimit - initialBytes, startOffset + initialBytes)
+    }
+    const newline = extended.indexOf(10)
+    if (newline >= 0) {
+      const endOffset = startOffset + newline + 1
+      return { buffer: extended.subarray(0, newline + 1), endOffset, skippedOversizedRecord: false }
+    }
+
+    throw new Error(`oversized_jsonl_record_exceeds_limit:${recordLimit}`)
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
+async function continueFileIfPending(
+  filePath: string,
+  source: Source,
+  offsets: OffsetState,
+  processedOffset: number,
+  fileSize: number,
+): Promise<void> {
+  if (processedOffset >= fileSize) return
+  await yieldToEventLoop()
+  await processFile(filePath, source, offsets)
 }
 
 function defaultState(source: Source): FileState {
@@ -324,9 +471,19 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
     }
   }
 
-  await Promise.all(readyPromises)
-  await processQueue
-  log('initial_scan_complete', { mode, watcherCount: activeWatchers.length })
+  const readyStatus = await waitForStartupPhase(
+    'ready',
+    Promise.all(readyPromises).then(() => undefined),
+    WATCHER_READY_TIMEOUT_MS,
+    { mode, watcherCount: activeWatchers.length },
+  )
+  const queueStatus = await waitForStartupPhase(
+    'initial_queue',
+    processQueue,
+    WATCHER_INITIAL_QUEUE_TIMEOUT_MS,
+    { mode, watcherCount: activeWatchers.length },
+  )
+  log('initial_scan_complete', { mode, watcherCount: activeWatchers.length, readyStatus, queueStatus })
 }
 
 export async function stopWatchers(): Promise<void> {
@@ -346,8 +503,10 @@ export async function stopWatchers(): Promise<void> {
 function queueProcessFile(filePath: string, source: Source): void {
   processQueue = processQueue
     .then(async () => {
+      await yieldToEventLoop()
       const offsets = offsetsPromise ? await offsetsPromise : await loadOffsets()
       await processFile(filePath, source, offsets)
+      await yieldToEventLoop()
     })
     .catch(err => {
       writeLog('error', 'watcher', 'process_file_failed', {
@@ -367,11 +526,31 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
 
     if (fileSize <= savedOffset) return  // nothing new
 
-    // Read only new bytes since last position
-    const fd = fs.openSync(filePath, 'r')
-    const buffer = Buffer.alloc(fileSize - savedOffset)
-    fs.readSync(fd, buffer, 0, buffer.length, savedOffset)
-    fs.closeSync(fd)
+    const batch = readFileBatch(filePath, savedOffset, fileSize)
+    if (batch.skippedOversizedRecord) {
+      offsets[offsetKey] = {
+        offset: batch.endOffset,
+        sessionId: offsets[offsetKey]?.sessionId ?? '',
+        source,
+        lastMod: stat.mtimeMs,
+      }
+      await saveOffsets(offsets)
+      updateHealth(`watcher:${source}`, {
+        lastSkippedAt: new Date().toISOString(),
+        lastSkippedFile: path.basename(filePath),
+        lastSkippedReason: 'oversized_jsonl_record',
+        lastSkippedBytes: batch.endOffset - savedOffset,
+      })
+      writeAuditEvent('watcher', 'oversized_jsonl_record_skipped', {
+        source,
+        file: path.basename(filePath),
+        bytes: batch.endOffset - savedOffset,
+      })
+      await continueFileIfPending(filePath, source, offsets, batch.endOffset, fileSize)
+      return
+    }
+
+    const buffer = batch.buffer
 
     const newContent = buffer.toString('utf8')
     // Keep byte offsets per line so raw records can point back into the source file.
@@ -386,7 +565,10 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
     }
     const lines = lineMetas.map(m => m.line)
 
-    if (lines.length === 0) return
+    if (lines.length === 0) {
+      await continueFileIfPending(filePath, source, offsets, batch.endOffset, fileSize)
+      return
+    }
 
     const state = fileStates.get(filePath) ?? await hydrateState(filePath, source, offsets)
     const newMessages: Message[] = []
@@ -436,6 +618,7 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
           error: safeError(err),
         })
       }
+      if ((index + 1) % WATCHER_YIELD_EVERY_LINES === 0) await yieldToEventLoop()
     }
 
     if (watcherMode === 'bootstrap') {
@@ -443,12 +626,12 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
         source,
         originalPath: filePath,
         lines,
-        offset: fileSize,
+        offset: batch.endOffset,
         lastMod: stat.mtimeMs,
         sessionId: state.sessionId || undefined,
       })
       offsets[offsetKey] = {
-        offset: fileSize,
+        offset: batch.endOffset,
         sessionId: state.sessionId,
         source,
         lastMod: stat.mtimeMs,
@@ -479,15 +662,18 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
           lastSkippedLines: skippedLines,
         })
       }
+      await continueFileIfPending(filePath, source, offsets, batch.endOffset, fileSize)
       return
     }
 
     // Raw-first invariant: write raw records to vault/raw/<source>/<uid>.jsonl
     // BEFORE attempting parsed-message persistence or advancing the offset.
-    // If the session is still unknown, we cannot key the raw file — bail out
-    // and let the next tick retry (offset stays where it was).
-    if (!state.sessionId) {
-      writeLog('warn', 'watcher', 'raw_not_saved_missing_session', {
+    // If typed session metadata is missing, raw still gets a deterministic
+    // source-path fallback id so the original line is not lost.
+    const rawSessionId = state.sessionId || fallbackRawSessionId(source, filePath)
+    const usedFallbackRawSession = !state.sessionId
+    if (usedFallbackRawSession) {
+      writeLog('warn', 'watcher', 'raw_saved_with_fallback_session', {
         source,
         file: path.basename(filePath),
         lines: lines.length,
@@ -495,15 +681,14 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
       updateHealth(`watcher:${source}`, {
         lastSkippedAt: new Date().toISOString(),
         lastSkippedFile: path.basename(filePath),
-        lastSkippedReason: 'missing_session_metadata',
+        lastSkippedReason: 'missing_session_metadata_raw_fallback',
       })
-      return
     }
 
     const rawSessionUid = buildSessionUid({
       source,
       sourceAccount: sourceAccountFromPath(source, filePath),
-      sessionId: state.sessionId,
+      sessionId: rawSessionId,
       originalPath: filePath,
     })
     try {
@@ -553,17 +738,19 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
     updateHealth(`watcher:${source}`, {
       lastRawWriteAt: new Date().toISOString(),
       lastRawWriteCount: rawRecords.length,
+      lastRawWriteUsedFallbackSession: usedFallbackRawSession,
     })
 
     // Advance offsets only after a successful raw + vault write.
     offsets[offsetKey] = {
-      offset: fileSize,
-      sessionId: state.sessionId,
+      offset: batch.endOffset,
+      sessionId: state.sessionId || '',
       source,
       lastMod: stat.mtimeMs,
     }
     await saveOffsets(offsets)
     fileStates.set(filePath, state)
+    await continueFileIfPending(filePath, source, offsets, batch.endOffset, fileSize)
   } catch (err) {
     if (isTransientFileError(err)) {
       writeLog('warn', 'watcher', 'process_file_skipped', {
@@ -871,26 +1058,31 @@ export async function importBootstrapCaptureIntoVault(): Promise<{ importedFiles
         }
       }
 
-      if (state.sessionId) {
-        const rawSessionUid = buildSessionUid({
-          source: entry.source,
-          sourceAccount: sourceAccountFromPath(entry.source, entry.originalPath),
-          sessionId: state.sessionId,
-          originalPath: entry.originalPath,
+      const rawSessionId = state.sessionId || entry.sessionId || fallbackRawSessionId(entry.source, entry.originalPath)
+      const usedFallbackRawSession = !state.sessionId && !entry.sessionId
+      const rawSessionUid = buildSessionUid({
+        source: entry.source,
+        sourceAccount: sourceAccountFromPath(entry.source, entry.originalPath),
+        sessionId: rawSessionId,
+        originalPath: entry.originalPath,
+      })
+      try {
+        await appendRawRecords(entry.source, rawSessionUid, rawRecords)
+        updateHealth(`watcher:${entry.source}`, {
+          lastRawWriteAt: new Date().toISOString(),
+          lastRawWriteCount: rawRecords.length,
+          lastRawWriteUsedFallbackSession: usedFallbackRawSession,
         })
-        try {
-          await appendRawRecords(entry.source, rawSessionUid, rawRecords)
-        } catch (err) {
-          writeLog('error', 'watcher', 'bootstrap_raw_append_failed', {
-            source: entry.source,
-            file: path.basename(entry.originalPath),
-            error: safeError(err),
-          })
-        }
-        const hasDrift = Object.keys(drift.unknownEventTypes).length > 0
-                      || Object.keys(drift.unknownTopLevelKeys).length > 0
-        if (hasDrift) updateHealthDrift(entry.source, drift)
+      } catch (err) {
+        writeLog('error', 'watcher', 'bootstrap_raw_append_failed', {
+          source: entry.source,
+          file: path.basename(entry.originalPath),
+          error: safeError(err),
+        })
       }
+      const hasDrift = Object.keys(drift.unknownEventTypes).length > 0
+                    || Object.keys(drift.unknownTopLevelKeys).length > 0
+      if (hasDrift) updateHealthDrift(entry.source, drift)
 
       const wroteToVault = await persistMessages(entry.originalPath, entry.source, state, newMessages, skippedLines)
       if (newMessages.length > 0 && !wroteToVault) {

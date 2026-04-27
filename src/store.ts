@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as crypto from 'crypto'
 import * as path from 'path'
+import * as readline from 'readline'
 import { Session, SessionsIndex, OffsetState, OffsetsIndex, Source, Message, RawRecord } from './types'
 import { normalizeSessionIdentity } from './session-identity'
 import {
@@ -439,12 +440,22 @@ export async function readSessionMessages(session: Session): Promise<Message[]> 
   const filePath = path.join(VAULT_DIR, session.vaultPath)
   if (!fs.existsSync(filePath)) return []
   const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean)
-  if (lines.length === 0) return []
+  return await parseSessionMessageLines(lines)
+}
 
+export async function readSessionMessagesPage(session: Session, offset: number, limit: number): Promise<Message[]> {
+  if (!Number.isFinite(limit) || limit <= 0) return []
+  const filePath = path.join(VAULT_DIR, session.vaultPath)
+  if (!fs.existsSync(filePath)) return []
+  const lines = await readNonEmptyLinePage(filePath, Math.max(0, Math.floor(offset)), Math.floor(limit))
+  return await parseSessionMessageLines(lines)
+}
+
+async function parseSessionMessageLines(lines: string[]): Promise<Message[]> {
+  if (lines.length === 0) return []
   const decrypted = hasVaultSession() && !lines[0].startsWith('{')
     ? await decryptLinesForSession(requireReadSession(), lines)
     : lines
-
   return decrypted.map(line => {
     try {
       return JSON.parse(line) as Message
@@ -452,6 +463,25 @@ export async function readSessionMessages(session: Session): Promise<Message[]> 
       return null
     }
   }).filter((message): message is Message => message !== null)
+}
+
+async function readNonEmptyLinePage(filePath: string, offset: number, limit: number): Promise<string[]> {
+  const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
+  const reader = readline.createInterface({ input: stream, crlfDelay: Infinity })
+  const selected: string[] = []
+  let index = 0
+  try {
+    for await (const line of reader) {
+      if (!line) continue
+      if (index >= offset) selected.push(line)
+      index += 1
+      if (selected.length >= limit) break
+    }
+  } finally {
+    reader.close()
+    stream.destroy()
+  }
+  return selected
 }
 
 export async function encryptVaultFiles(): Promise<void> {

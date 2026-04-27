@@ -537,13 +537,15 @@ func handleRequest(_ request: [String: Any]) -> [String: Any] {
 func serve() {
     respond(["ready": true])
     while let line = readLine(), !shouldExit {
-        guard let data = line.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data, options: []),
-              let request = jsonDict(json) else {
-            respond(["id": 0, "ok": false, "error": "invalid json request"])
-            continue
+        autoreleasepool {
+            guard let data = line.data(using: .utf8),
+                  let json = try? JSONSerialization.jsonObject(with: data, options: []),
+                  let request = jsonDict(json) else {
+                respond(["id": 0, "ok": false, "error": "invalid json request"])
+                return
+            }
+            respond(handleRequest(request))
         }
-        respond(handleRequest(request))
     }
 }
 
