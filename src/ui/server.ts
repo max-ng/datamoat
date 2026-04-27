@@ -2725,8 +2725,10 @@ function apiFetch(url, options) {
   return fetch(url, opts)
 }
 let unlockOptions = { passwordEnabled: true, touchIdEnabled: false, totpEnrolled: false };
-const TOUCHID_HINT_DEFAULT = 'Click the Touch ID button when you want to unlock with Touch ID. If authenticator login is enabled, you will enter the 6-digit code after Touch ID.';
+const TOUCHID_HINT_DEFAULT = 'Touch ID opens automatically when this screen appears. You can also click the Touch ID button again or use your password.';
 let touchIdUnlockInFlight = false;
+let touchIdAutoPrompted = false;
+let touchIdAutoPromptTimer = null;
 
 function setTouchIdHint(message) {
   const hint = document.getElementById('touchid-hint');
@@ -2735,6 +2737,25 @@ function setTouchIdHint(message) {
 
 function restoreTouchIdHint() {
   setTouchIdHint(TOUCHID_HINT_DEFAULT);
+}
+
+function maybeAutoTouchIdUnlock() {
+  if (touchIdAutoPrompted || touchIdUnlockInFlight || !unlockOptions.touchIdEnabled) return;
+  const section = document.getElementById('touchid-section');
+  if (!section || section.style.display === 'none') return;
+  touchIdAutoPrompted = true;
+  if (touchIdAutoPromptTimer) window.clearTimeout(touchIdAutoPromptTimer);
+  const start = Date.now();
+  const attempt = () => {
+    if (!touchIdUnlockInFlight) {
+      void touchIDUnlock('auto');
+      return;
+    }
+    if (Date.now() - start < 2500) {
+      touchIdAutoPromptTimer = window.setTimeout(attempt, 250);
+    }
+  };
+  touchIdAutoPromptTimer = window.setTimeout(attempt, 900);
 }
 
 async function loadUnlockOptions() {
@@ -2752,9 +2773,16 @@ async function loadUnlockOptions() {
         : 'Use Touch ID to unlock';
     }
     restoreTouchIdHint();
+    maybeAutoTouchIdUnlock();
   } catch {}
 }
 loadUnlockOptions();
+
+document.addEventListener('visibilitychange', () => {
+  maybeAutoTouchIdUnlock();
+});
+window.addEventListener('focus', () => maybeAutoTouchIdUnlock());
+window.addEventListener('pageshow', () => maybeAutoTouchIdUnlock());
 
 function rememberPostUnlockState(payload) {
   if (payload && typeof payload.captureWarning === 'string' && payload.captureWarning.trim()) {
@@ -2769,7 +2797,7 @@ function rememberPostUnlockState(payload) {
   }
 }
 
-async function touchIDUnlock() {
+async function touchIDUnlock(_source = 'manual') {
   if (touchIdUnlockInFlight) return;
   const btn = document.getElementById('btn-touchid');
   const err = document.getElementById('touchid-error');

@@ -1,6 +1,6 @@
 # DataMoat
 
-[![Version](https://img.shields.io/badge/version-0.1.6-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-0.1.7-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -50,7 +50,7 @@ DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work record
 |---|---|---|
 | **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | Supported today | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs and GitHub Releases auto-update |
+| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.7-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs, login auto-start, and GitHub Releases auto-update |
 | **Windows** | In preparation | Public Windows release path is being prepared; follow repository updates for availability |
 
 ### Sources
@@ -58,8 +58,8 @@ DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work record
 | Source | Status | What DataMoat preserves |
 |---|---|---|
 | **Claude CLI** | Supported | Full local transcript, including locally written thinking blocks when present |
-| **Codex CLI** | Partially supported | Captures supported local Codex CLI session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
-| **Codex Mac app** | Partially supported | Captures supported local Codex Mac app session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
+| **Codex CLI** | Supported | Captures supported local Codex CLI session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
+| **Codex Mac app** | Supported | Captures supported local Codex Mac app session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
 | **Claude Desktop local-agent sessions (macOS)** | Supported | Supported local Claude Desktop agent session records when present |
 | **OpenClaw** | Supported | Supported local OpenClaw session transcripts and metadata |
 | **Claude attachments** | Supported | Encrypted image and supported file/PDF blocks |
@@ -109,9 +109,11 @@ flowchart TD
 
 ## Install
 
-Source install on macOS and Linux is available now. A signed / notarized Apple Silicon macOS DMG is available from [GitHub Releases](https://github.com/max-ng/datamoat/releases) and includes Secure Enclave + Touch ID unlock on supported Macs plus packaged auto-update through GitHub Releases. A Windows release is in preparation.
+Source install on macOS and Linux is available now. A signed / notarized Apple Silicon macOS DMG is available from [GitHub Releases](https://github.com/max-ng/datamoat/releases) and includes Secure Enclave + Touch ID unlock on supported Macs, menu-bar auto-start at login, and packaged auto-update through GitHub Releases. A Windows release is in preparation.
 
 ### AI-Assisted Install
+
+For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.7-macos-arm64.dmg).
 
 You can ask Claude or Codex to install DataMoat from this repository for you when you are looking at the target desktop.
 

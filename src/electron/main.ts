@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { ensureDaemonRunning } from '../runtime'
 import { HEALTH_FILE, PUBLIC_STATUS_FILE } from '../config'
+import { detectInstallContext } from '../install-context'
 import { installCrashHandlers, updateHealth, writeLog } from '../logging'
 import { applyInstallPreference, clearInstallChoice, detectDualInstallState, saveInstallChoice, type DualInstallState, type InstallPreference } from '../packaged-handoff'
 import { ensureDirs } from '../store'
@@ -15,13 +16,14 @@ import {
   openPackagedReleasePage,
   savePackagedUpdateSettings,
 } from './packaged-updater'
+import { ensurePackagedTrayLaunchAgent } from './launch-agent'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let allowedOrigin: string | null = null
 let quitRequested = false
 let trayRefreshTimer: NodeJS.Timeout | null = null
-let trayOnlyLaunch = process.env.DATAMOAT_TRAY_ONLY === '1'
+let trayOnlyLaunch = process.env.DATAMOAT_TRAY_ONLY === '1' || process.argv.includes('--datamoat-tray-only')
 const runtimeIcon = professionalFortressAppIcon()
 const trayTemplateAsset = process.platform === 'darwin' ? resolveTrayTemplateAsset() : null
 
@@ -904,6 +906,11 @@ if (!app.requestSingleInstanceLock()) {
       await initializePackagedUpdater()
     } catch (error) {
       writeLog('warn', 'electron', 'packaged_update_init_failed', { error })
+    }
+    try {
+      if (detectInstallContext().mode === 'packaged') ensurePackagedTrayLaunchAgent()
+    } catch (error) {
+      writeLog('warn', 'electron', 'packaged_launch_agent_init_failed', { error })
     }
     try {
       if (resolveInstallChoiceOnStartup() === 'quit') {

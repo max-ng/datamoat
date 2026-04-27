@@ -5,6 +5,7 @@ import * as path from 'path'
 import { INSTALL_CHOICE_FILE, INSTALL_INFO_FILE } from './config'
 import type { InstallInfo, InstallMode } from './install-context'
 import { loadInstallInfo } from './install-context'
+import { PACKAGED_TRAY_LAUNCH_AGENT_LABEL, removePackagedTrayLaunchAgent } from './electron/launch-agent'
 
 const HOME = os.homedir()
 const MAC_LAUNCH_AGENTS_DIR = path.join(HOME, 'Library', 'LaunchAgents')
@@ -305,6 +306,7 @@ export function applyInstallPreference(preference: InstallPreference, options: H
     restoreLaunchAgent(daemonPlist),
     restoreLaunchAgent(trayPlist),
   ].filter((value): value is string => !!value)
+  const removedPackagedTrayAgent = removePackagedTrayLaunchAgent()
   const stoppedPids = stopPids(matchingPackagedPids(currentExecutable, info))
 
   const nextMode: InstallMode = info?.sourceRoot ? 'source-copy' : 'unknown'
@@ -314,10 +316,12 @@ export function applyInstallPreference(preference: InstallPreference, options: H
   })
 
   return {
-    applied: restoredLaunchAgents.length > 0 || stoppedPids.length > 0 || updatedInstallInfo,
+    applied: restoredLaunchAgents.length > 0 || removedPackagedTrayAgent || stoppedPids.length > 0 || updatedInstallInfo,
     preference,
     disabledLaunchAgents: [],
-    restoredLaunchAgents,
+    restoredLaunchAgents: removedPackagedTrayAgent
+      ? [...restoredLaunchAgents, PACKAGED_TRAY_LAUNCH_AGENT_LABEL]
+      : restoredLaunchAgents,
     stoppedPids,
     updatedInstallInfo,
     targetAppPath: state.sourceAppPath,

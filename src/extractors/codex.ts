@@ -1,3 +1,4 @@
+import * as fs from 'fs'
 import * as path from 'path'
 import { Message, ContentBlock, TokenUsage } from '../types'
 import type { RawImageData } from './claude'
@@ -144,8 +145,9 @@ export function extractCodexLine(raw: string): {
 
     if (ptype === 'function_call_output') {
       const output = payload.output
+      const text = stringifyUnknown(output)
       return {
-        rawImages: [],
+        rawImages: localImagesFromText(text, 0, 0),
         message: decorate({
           id: crypto.randomUUID(),
           role: 'tool',
@@ -154,7 +156,7 @@ export function extractCodexLine(raw: string): {
             type: 'tool_result',
             name: (payload.call_id as string) || 'tool-output',
             content: output,
-            text: stringifyUnknown(output),
+            text,
           }],
           hasThinking: false,
         }),
@@ -163,8 +165,9 @@ export function extractCodexLine(raw: string): {
 
     if (ptype === 'custom_tool_call_output') {
       const output = payload.output
+      const text = stringifyUnknown(output)
       return {
-        rawImages: [],
+        rawImages: localImagesFromText(text, 0, 0),
         message: decorate({
           id: crypto.randomUUID(),
           role: 'tool',
@@ -173,7 +176,7 @@ export function extractCodexLine(raw: string): {
             type: 'tool_result',
             name: (payload.call_id as string) || 'custom-tool-output',
             content: output,
-            text: stringifyUnknown(output),
+            text,
           }],
           hasThinking: false,
         }),
@@ -229,30 +232,127 @@ function codexSourceClient(payload: Record<string, unknown>): string | undefined
 function parseCodexContent(rawContent: unknown[]): { blocks: ContentBlock[]; images: RawImageData[] } {
   if (!Array.isArray(rawContent)) return { blocks: [], images: [] }
   const images: RawImageData[] = []
-  const blocks = rawContent.flatMap<ContentBlock>((block, index) => {
-    if (typeof block !== 'object' || !block) return []
+  const blocks: ContentBlock[] = []
+
+  for (const block of rawContent) {
+    if (typeof block !== 'object' || !block) continue
     const b = block as Record<string, unknown>
     if (b.type === 'input_text' || b.type === 'output_text') {
-      return [{ type: 'text' as const, text: b.text as string || '' }]
+      const text = b.text as string || ''
+      blocks.push({ type: 'text' as const, text })
+      const linkedImages = localImagesFromText(text, 0)
+      for (const img of linkedImages) {
+        const blockIndex = blocks.length
+        blocks.push({
+          type: 'image',
+          mediaType: img.mediaType,
+          attachmentName: img.attachmentName,
+        })
+        images.push({ ...img, blockIndex })
+      }
+      continue
     }
     if (b.type === 'input_image') {
       const data = parseInlineImageData(b.image_url)
-      if (!data) return [{ type: 'image' as const, mediaType: 'image/png' }]
+      const blockIndex = blocks.length
+      if (!data) {
+        blocks.push({ type: 'image' as const, mediaType: 'image/png' })
+        continue
+      }
       images.push({
-        blockIndex: index,
+        blockIndex,
         base64Data: data.base64Data,
         mediaType: data.mediaType,
         blockType: 'image',
       })
-      return [{ type: 'image' as const, mediaType: data.mediaType }]
+      blocks.push({ type: 'image' as const, mediaType: data.mediaType })
+      continue
     }
     if (b.type === 'reasoning') {
       const thinking = parseReasoningSummary(b.summary)
-      return [{ type: 'thinking' as const, thinking }]
+      blocks.push({ type: 'thinking' as const, thinking })
+      continue
     }
-    return []
-  })
+  }
   return { blocks, images }
+}
+
+const LOCAL_IMAGE_MEDIA: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+}
+
+const MAX_LOCAL_IMAGE_BYTES = 50 * 1024 * 1024
+
+function localImagesFromText(text: string, blockIndex: number, innerIndex?: number): RawImageData[] {
+  if (!text) return []
+  const out: RawImageData[] = []
+  const seen = new Set<string>()
+
+  for (const candidate of localImagePathCandidates(text)) {
+    const filePath = normalizeLocalImagePath(candidate)
+    if (!filePath || seen.has(filePath)) continue
+    seen.add(filePath)
+
+    const ext = path.extname(filePath).toLowerCase()
+    const mediaType = LOCAL_IMAGE_MEDIA[ext]
+    if (!mediaType) continue
+
+    try {
+      const stat = fs.statSync(filePath)
+      if (!stat.isFile() || stat.size <= 0 || stat.size > MAX_LOCAL_IMAGE_BYTES) continue
+      const base64Data = fs.readFileSync(filePath).toString('base64')
+      out.push({
+        blockIndex,
+        innerIndex,
+        base64Data,
+        mediaType,
+        blockType: 'image',
+        attachmentName: path.basename(filePath),
+      })
+    } catch {
+      // Local file links are best-effort. The transcript is still captured.
+    }
+  }
+
+  return out
+}
+
+function localImagePathCandidates(text: string): string[] {
+  const candidates: string[] = []
+  const ext = '(?:png|jpe?g|gif|webp)'
+  const patterns = [
+    new RegExp(`\\[[^\\]]*]\\((file:\\/\\/\\/[^)\\n]+?\\.${ext}|\\/[^)\\n]+?\\.${ext})\\)`, 'gi'),
+    new RegExp(`[\\\`"'](file:\\/\\/\\/[^"'\\\`\\n]+?\\.${ext}|\\/[^"'\\\`\\n]+?\\.${ext})[\\\`"']`, 'gi'),
+    new RegExp(`(?:^|[\\s:])((?:\\/[^\\s"'\\\`<>)]+)+\\.${ext})(?=$|[\\s"'\\\`<>)])`, 'gi'),
+  ]
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null
+    while ((match = pattern.exec(text))) {
+      candidates.push(match[1])
+    }
+  }
+  return candidates
+}
+
+function normalizeLocalImagePath(candidate: string): string | null {
+  let value = candidate.trim()
+  if (value.startsWith('file://')) {
+    try {
+      value = decodeURI(new URL(value).pathname)
+    } catch {
+      value = value.slice('file://'.length)
+    }
+  } else {
+    try { value = decodeURI(value) } catch {}
+  }
+  value = value.replace(/\\ /g, ' ')
+  value = value.replace(/[.,;:!?]+$/g, '')
+  if (!path.isAbsolute(value)) return null
+  return path.normalize(value)
 }
 
 function parseInlineImageData(value: unknown): { mediaType: string; base64Data: string } | null {
