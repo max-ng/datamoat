@@ -1,7 +1,7 @@
 import { platform } from 'os'
 import * as fs from 'fs'
 import * as path from 'path'
-import { execFile } from 'child_process'
+import { execFile, execFileSync } from 'child_process'
 import { detectInstallContext } from './install-context'
 
 const SERVICE = process.env.DATAMOAT_KEYCHAIN_SERVICE?.trim() || 'DataMoat'
@@ -12,6 +12,7 @@ const BOOTSTRAP_CAPTURE_SECRET_ACCOUNT = 'bootstrapCaptureSecret'
 export const IS_MAC = platform() === 'darwin'
 const TOUCHID_HELPER_BUNDLE_EXECUTABLE = path.join('DataMoatTouchID.app', 'Contents', 'MacOS', 'DataMoatTouchID')
 const TOUCHID_DMG_ONLY_REASON = 'Touch ID + Secure Enclave is only available in the packaged DMG app.'
+const KEYCHAIN_UNAVAILABLE_REASON = 'macOS login keychain is unavailable'
 
 export type SecureEnclaveStatus = {
   available: boolean
@@ -19,12 +20,14 @@ export type SecureEnclaveStatus = {
 }
 
 async function secretStore(account: string, value: string): Promise<void> {
+  assertDefaultKeychainAvailable()
   const keytar = await import('keytar')
   await keytar.setPassword(SERVICE, account, value)
 }
 
 async function secretLoad(account: string): Promise<string | null> {
   try {
+    assertDefaultKeychainAvailable()
     const keytar = await import('keytar')
     return await keytar.getPassword(SERVICE, account)
   } catch {
@@ -34,9 +37,30 @@ async function secretLoad(account: string): Promise<string | null> {
 
 async function secretDelete(account: string): Promise<void> {
   try {
+    assertDefaultKeychainAvailable()
     const keytar = await import('keytar')
     await keytar.deletePassword(SERVICE, account)
   } catch { /* ignore */ }
+}
+
+function assertDefaultKeychainAvailable(): void {
+  if (!IS_MAC) return
+
+  let keychainPath = ''
+  try {
+    keychainPath = execFileSync('/usr/bin/security', ['default-keychain'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 2000,
+    }).trim()
+  } catch {
+    throw new Error(KEYCHAIN_UNAVAILABLE_REASON)
+  }
+
+  const normalized = keychainPath.replace(/^"|"$/g, '')
+  if (!normalized || !fs.existsSync(normalized)) {
+    throw new Error(KEYCHAIN_UNAVAILABLE_REASON)
+  }
 }
 
 export async function keychainStore(key: string): Promise<void> {
