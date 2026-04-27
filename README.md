@@ -1,11 +1,11 @@
 # DataMoat
 
-[![Version](https://img.shields.io/badge/version-0.1.5-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-0.1.6-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
 [![Linux](https://img.shields.io/badge/Linux-supported-F59E0B?style=flat-square&logo=linux&logoColor=white)](#supported-today)
-[![Packaged macOS App](https://img.shields.io/badge/packaged%20macOS%20app-in%20preparation-6B7280?style=flat-square)](#install)
+[![Packaged macOS App](https://img.shields.io/badge/packaged%20macOS%20app-available-0F766E?style=flat-square)](#install)
 [![Windows](https://img.shields.io/badge/Windows-in%20preparation-6B7280?style=flat-square&logo=windows&logoColor=white)](#install)
 [![Claude CLI](https://img.shields.io/badge/Claude%20CLI-supported-16A34A?style=flat-square)](#supported-today)
 [![Claude Desktop Agent](https://img.shields.io/badge/Claude%20Desktop%20agent-supported-0F766E?style=flat-square)](#supported-today)
@@ -20,7 +20,7 @@ DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work record
 ![DataMoat conversation search and session detail UI](.github/assets/screenshot.png)
 
 **Supported sources today:** Claude CLI, Codex CLI, Codex Mac app local sessions, Claude Desktop local-agent sessions on macOS, and supported local OpenClaw session records.  
-**More data sources and packaged releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
+**More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
 
 ## Why Install DataMoat
 
@@ -48,9 +48,9 @@ DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work record
 
 | Platform | Status | Notes |
 |---|---|---|
-| **macOS** | Supported today | Source install available now |
+| **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | In preparation | Signed / notarized distribution path with Secure Enclave + Touch ID unlock on supported Macs |
+| **Packaged macOS DMG** | Supported today | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs and GitHub Releases auto-update |
 | **Windows** | In preparation | Public Windows release path is being prepared; follow repository updates for availability |
 
 ### Sources
@@ -109,7 +109,7 @@ flowchart TD
 
 ## Install
 
-Source install on macOS and Linux is available now. A signed / notarized packaged macOS DMG with Secure Enclave + Touch ID unlock on supported Macs is being prepared separately, and a Windows release is also in preparation. Follow repository updates for release timing.
+Source install on macOS and Linux is available now. A signed / notarized Apple Silicon macOS DMG is available from [GitHub Releases](https://github.com/max-ng/datamoat/releases) and includes Secure Enclave + Touch ID unlock on supported Macs plus packaged auto-update through GitHub Releases. A Windows release is in preparation.
 
 ### AI-Assisted Install
 
@@ -179,11 +179,7 @@ datamoat audit verify
 datamoat update check
 ```
 
-Only live git source installs support in-place updates. Other installs stay on manual download for safety for now and can open the latest release page instead of auto-updating directly.
-
-Planned packaged macOS releases use the DMG for first install only. Later packaged app updates are intended to use a dedicated signed updater path instead of asking users to mount a new DMG for every release.
-
-That packaged path is only considered ready after first install, update, and local data preservation have been tested end-to-end on a clean Mac.
+Live git source installs support in-place source updates. Packaged macOS installs use GitHub Releases as the packaged update source: the DMG is for first install, and later packaged updates download a signed ZIP payload and apply it through the macOS app updater instead of asking users to mount a new DMG for every release.
 
 ## Source Service Boundaries
 
