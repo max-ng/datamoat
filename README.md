@@ -50,7 +50,7 @@ DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work record
 |---|---|---|
 | **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.7-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs, login auto-start, and GitHub Releases auto-update |
+| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.7-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
 | **Windows** | In preparation | Public Windows release path is being prepared; follow repository updates for availability |
 
 ### Sources
