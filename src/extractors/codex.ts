@@ -2,8 +2,28 @@ import * as path from 'path'
 import { Message, ContentBlock, TokenUsage } from '../types'
 import type { RawImageData } from './claude'
 
+// Codex top-level keys the extractor binds to typed columns. Anything else
+// is preserved as unknownAttrs so the UI can still render it.
+const CODEX_KNOWN_FIELDS = new Set(['type', 'timestamp', 'payload'])
+
+function codexUnknownAttrs(obj: Record<string, unknown>): Record<string, unknown> | undefined {
+  const extras: Record<string, unknown> = {}
+  let any = false
+  for (const [key, value] of Object.entries(obj)) {
+    if (CODEX_KNOWN_FIELDS.has(key)) continue
+    extras[key] = value
+    any = true
+  }
+  return any ? extras : undefined
+}
+
+function codexEventName(topType: string, payload: Record<string, unknown> | undefined): string {
+  const sub = typeof payload?.type === 'string' ? (payload!.type as string) : ''
+  return sub ? `${topType}.${sub}` : topType
+}
+
 // Parses one line from ~/.codex/sessions/YYYY/MM/DD/*.jsonl
-// Event types: session_meta, turn_context, response_item, event_msg
+// Event types: session_meta, turn_context, response_item, event_msg, compacted
 export function extractCodexLine(raw: string): {
   sessionId?: string
   appVersion?: string
@@ -19,6 +39,14 @@ export function extractCodexLine(raw: string): {
   const type = obj.type as string
   const timestamp = (obj.timestamp as string) || new Date().toISOString()
   const payload = obj.payload as Record<string, unknown> | undefined
+  const eventName = codexEventName(type, payload)
+  const unknownAttrs = codexUnknownAttrs(obj)
+
+  function decorate(msg: Message): Message {
+    msg.sourceEventType = eventName
+    if (unknownAttrs) msg.unknownAttrs = unknownAttrs
+    return msg
+  }
 
   // Session metadata — gives us version and session ID
   if (type === 'session_meta' && payload) {
@@ -51,28 +79,27 @@ export function extractCodexLine(raw: string): {
 
       return {
         rawImages,
-        message: {
+        message: decorate({
           id: crypto.randomUUID(),
           role: normalizeRole(role),
           timestamp,
           content,
           hasThinking: content.some(block => block.type === 'thinking'),
-        },
+        }),
       }
     }
 
     if (ptype === 'reasoning') {
       const thinking = parseReasoningSummary(payload.summary)
-      if (!thinking) return null
       return {
         rawImages: [],
-        message: {
+        message: decorate({
           id: crypto.randomUUID(),
           role: 'assistant',
           timestamp,
           content: [{ type: 'thinking', thinking }],
           hasThinking: true,
-        },
+        }),
       }
     }
 
@@ -81,7 +108,7 @@ export function extractCodexLine(raw: string): {
       const parsedArgs = parseMaybeJson(rawArgs)
       return {
         rawImages: [],
-        message: {
+        message: decorate({
           id: crypto.randomUUID(),
           role: 'assistant',
           timestamp,
@@ -92,7 +119,7 @@ export function extractCodexLine(raw: string): {
             text: rawArgs,
           }],
           hasThinking: false,
-        },
+        }),
       }
     }
 
@@ -100,7 +127,7 @@ export function extractCodexLine(raw: string): {
       const rawInput = (payload.input as string) || ''
       return {
         rawImages: [],
-        message: {
+        message: decorate({
           id: crypto.randomUUID(),
           role: 'assistant',
           timestamp,
@@ -111,7 +138,7 @@ export function extractCodexLine(raw: string): {
             text: rawInput,
           }],
           hasThinking: false,
-        },
+        }),
       }
     }
 
@@ -119,7 +146,7 @@ export function extractCodexLine(raw: string): {
       const output = payload.output
       return {
         rawImages: [],
-        message: {
+        message: decorate({
           id: crypto.randomUUID(),
           role: 'tool',
           timestamp,
@@ -130,7 +157,7 @@ export function extractCodexLine(raw: string): {
             text: stringifyUnknown(output),
           }],
           hasThinking: false,
-        },
+        }),
       }
     }
 
@@ -138,7 +165,7 @@ export function extractCodexLine(raw: string): {
       const output = payload.output
       return {
         rawImages: [],
-        message: {
+        message: decorate({
           id: crypto.randomUUID(),
           role: 'tool',
           timestamp,
@@ -149,7 +176,7 @@ export function extractCodexLine(raw: string): {
             text: stringifyUnknown(output),
           }],
           hasThinking: false,
-        },
+        }),
       }
     }
 
@@ -164,7 +191,7 @@ export function extractCodexLine(raw: string): {
         : stringifyUnknown(input)
       return {
         rawImages: [],
-        message: {
+        message: decorate({
           id: crypto.randomUUID(),
           role: 'assistant',
           timestamp,
@@ -175,7 +202,7 @@ export function extractCodexLine(raw: string): {
             text,
           }],
           hasThinking: false,
-        },
+        }),
       }
     }
   }
@@ -221,7 +248,7 @@ function parseCodexContent(rawContent: unknown[]): { blocks: ContentBlock[]; ima
     }
     if (b.type === 'reasoning') {
       const thinking = parseReasoningSummary(b.summary)
-      return thinking ? [{ type: 'thinking' as const, thinking }] : []
+      return [{ type: 'thinking' as const, thinking }]
     }
     return []
   })

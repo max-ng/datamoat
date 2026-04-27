@@ -197,7 +197,7 @@ Enterprise deployment and management features are on the roadmap. More enterpris
 
 ## Consultation and Support
 
-Questions or deployment help: [maxnghello@gmail.com](mailto:maxnghello@gmail.com).
+Questions or deployment help: `maxnghello at gmail.com`.
 
 ## License
 

@@ -20,6 +20,7 @@ function envRoots(name: string, fallback: string[]): string[] {
 
 export const VAULT_DIR        = path.join(DATAMOAT_ROOT, 'vault')
 export const ATTACHMENTS_DIR  = path.join(DATAMOAT_ROOT, 'vault', 'attachments')
+export const RAW_DIR          = path.join(DATAMOAT_ROOT, 'vault', 'raw')
 export const STATE_DIR   = path.join(DATAMOAT_ROOT, 'state')
 export const LOG_FILE    = path.join(DATAMOAT_ROOT, 'daemon.log')
 export const PID_FILE    = path.join(DATAMOAT_ROOT, 'daemon.pid')

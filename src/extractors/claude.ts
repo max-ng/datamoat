@@ -10,6 +10,50 @@ export interface RawImageData {
   attachmentName?: string
 }
 
+// Top-level fields the extractor binds explicitly to typed Message columns.
+// Everything else captured on the line ends up in `unknownAttrs` so nothing
+// is dropped silently.
+const CLAUDE_KNOWN_FIELDS = new Set([
+  'type', 'uuid', 'sessionId', 'session_id', 'version', 'claude_code_version',
+  'timestamp', '_audit_timestamp', '_audit_hmac', 'message', 'model', 'cwd',
+  'parent_tool_use_id', 'client_platform',
+  // result-event fields we map to typed columns
+  'subtype', 'duration_ms', 'duration_api_ms', 'num_turns', 'result',
+  'stop_reason', 'total_cost_usd', 'usage', 'is_error', 'api_error_status',
+  'error', 'error_status', 'attempt', 'max_retries', 'retry_delay_ms',
+  'terminal_reason',
+  // rate-limit-event field
+  'rate_limit_info',
+  // state-of-the-world fields we map to typed columns
+  'fast_mode_state', 'skills', 'plugins', 'agents', 'tools', 'mcp_servers',
+  'permissionMode', 'permission_denials', 'output_style', 'slash_commands',
+  'apiKeySource', 'modelUsage', 'isReplay', 'status',
+])
+
+function collectUnknownAttrs(obj: Record<string, unknown>): Record<string, unknown> | undefined {
+  const extras: Record<string, unknown> = {}
+  let any = false
+  for (const [key, value] of Object.entries(obj)) {
+    if (CLAUDE_KNOWN_FIELDS.has(key)) continue
+    extras[key] = value
+    any = true
+  }
+  return any ? extras : undefined
+}
+
+function readClaudeStateOfWorld(obj: Record<string, unknown>, msg: Message): void {
+  if (obj.fast_mode_state !== undefined) msg.fastModeState = obj.fast_mode_state as string
+  if (obj.skills !== undefined) msg.activeSkills = obj.skills
+  if (obj.plugins !== undefined) msg.activePlugins = obj.plugins
+  if (obj.agents !== undefined) msg.activeAgents = obj.agents
+  if (obj.tools !== undefined) msg.toolsAvailable = obj.tools
+  if (obj.mcp_servers !== undefined) msg.mcpServers = obj.mcp_servers
+  if (obj.permissionMode !== undefined) msg.permissionMode = obj.permissionMode as string
+  if (obj.permission_denials !== undefined) msg.permissionDenials = obj.permission_denials
+  if (obj.output_style !== undefined) msg.outputStyle = obj.output_style
+  if (obj.slash_commands !== undefined) msg.slashCommands = obj.slash_commands
+}
+
 // Parses one line from ~/.claude/projects/**/*.jsonl  (CLI format)
 // OR ~/Library/.../local-agent-mode-sessions/**/audit.jsonl (Desktop App format)
 // The two formats differ: audit.jsonl uses `session_id`, `_audit_timestamp`, `claude_code_version`
@@ -33,19 +77,22 @@ export function extractClaudeLine(raw: string): { sessionId: string; appVersion:
     const { blocks: content, images: rawImages } = parseClaudeContent(rawContent)
     const usage = parseClaudeUsage(msg.usage as Record<string, number> | undefined)
 
-    return {
-      sessionId,
-      appVersion,
-      rawImages,
-      message: {
-        id: (obj.uuid as string) || crypto.randomUUID(),
-        role: 'assistant',
-        timestamp,
-        content,
-        usage,
-        hasThinking: content.some(b => b.type === 'thinking'),
-      },
+    const message: Message = {
+      id: (obj.uuid as string) || crypto.randomUUID(),
+      role: 'assistant',
+      timestamp,
+      content,
+      usage,
+      hasThinking: content.some(b => b.type === 'thinking'),
+      appVersion: appVersion || undefined,
+      sourceEventType: type,
+      model: (msg.model as string) || undefined,
     }
+    readClaudeStateOfWorld(obj, message)
+    const extras = collectUnknownAttrs(obj)
+    if (extras) message.unknownAttrs = extras
+
+    return { sessionId, appVersion, rawImages, message }
   }
 
   if (type === 'user') {
@@ -63,18 +110,63 @@ export function extractClaudeLine(raw: string): { sessionId: string; appVersion:
       rawImages = parsed.images
     }
 
-    return {
-      sessionId,
-      appVersion,
-      rawImages,
-      message: {
-        id: (obj.uuid as string) || crypto.randomUUID(),
-        role: 'user',
-        timestamp,
-        content,
-        hasThinking: false,
-      },
+    const message: Message = {
+      id: (obj.uuid as string) || crypto.randomUUID(),
+      role: 'user',
+      timestamp,
+      content,
+      hasThinking: false,
+      appVersion: appVersion || undefined,
+      sourceEventType: type,
     }
+    readClaudeStateOfWorld(obj, message)
+    const extras = collectUnknownAttrs(obj)
+    if (extras) message.unknownAttrs = extras
+
+    return { sessionId, appVersion, rawImages, message }
+  }
+
+  // `result` events — previously dropped. Carry per-turn cost, duration, stop
+  // reason, full usage breakdown. Surfaced as a synthetic system message so
+  // the UI can render them alongside user/assistant turns.
+  if (type === 'result') {
+    const usage = parseClaudeUsage(obj.usage as Record<string, number> | undefined)
+    const resultText = typeof obj.result === 'string' ? (obj.result as string) : ''
+    const content: ContentBlock[] = resultText ? [{ type: 'text', text: resultText }] : []
+    const message: Message = {
+      id: crypto.randomUUID(),
+      role: 'system',
+      timestamp,
+      content,
+      usage,
+      hasThinking: false,
+      appVersion: appVersion || undefined,
+      sourceEventType: type,
+      cost: typeof obj.total_cost_usd === 'number' ? (obj.total_cost_usd as number) : undefined,
+      durationMs: typeof obj.duration_ms === 'number' ? (obj.duration_ms as number) : undefined,
+      numTurns: typeof obj.num_turns === 'number' ? (obj.num_turns as number) : undefined,
+      stopReason: typeof obj.stop_reason === 'string' ? (obj.stop_reason as string) : undefined,
+    }
+    const extras = collectUnknownAttrs(obj)
+    if (extras) message.unknownAttrs = extras
+    return { sessionId, appVersion, rawImages: [], message }
+  }
+
+  // `rate_limit_event` — previously dropped. Carries rate-limit state and reset time.
+  if (type === 'rate_limit_event') {
+    const message: Message = {
+      id: (obj.uuid as string) || crypto.randomUUID(),
+      role: 'system',
+      timestamp,
+      content: [],
+      hasThinking: false,
+      appVersion: appVersion || undefined,
+      sourceEventType: type,
+      rateLimitInfo: obj.rate_limit_info,
+    }
+    const extras = collectUnknownAttrs(obj)
+    if (extras) message.unknownAttrs = extras
+    return { sessionId, appVersion, rawImages: [], message }
   }
 
   return null
@@ -107,7 +199,10 @@ function parseClaudeContent(rawContent: unknown[]): { blocks: ContentBlock[]; im
   const blocks: ContentBlock[] = rawContent.map((block, idx) => {
     if (typeof block !== 'object' || !block) return { type: 'other' as const }
     const b = block as Record<string, unknown>
-    if (b.type === 'thinking') return { type: 'thinking' as const, thinking: b.thinking as string || '' }
+    if (b.type === 'thinking') {
+      const thinking = typeof b.thinking === 'string' ? b.thinking.trim() : ''
+      return { type: 'thinking' as const, thinking }
+    }
     if (b.type === 'text') return { type: 'text' as const, text: b.text as string || '' }
     if (b.type === 'tool_use') return { type: 'tool_use' as const, name: b.name as string, input: b.input }
     if (b.type === 'tool_result') {

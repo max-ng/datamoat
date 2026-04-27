@@ -8,6 +8,7 @@ import QRCode from 'qrcode'
 import {
   loadSessions,
   readSessionMessages,
+  readRawRecords,
   readAttachment,
   setVaultSession,
   encryptVaultFiles,
@@ -19,7 +20,7 @@ import {
   hasVaultSession,
   migrateStateStorage,
 } from '../store'
-import { Message, Session } from '../types'
+import { Message, Session, Source } from '../types'
 import { UI_PORT_RANGE } from '../config'
 import {
   isSetupDone, loadAuthConfig, saveAuthConfig,
@@ -54,6 +55,9 @@ import {
   isUpdateRunning,
 } from '../update-config'
 import { bootstrapCaptureSummary, loadBootstrapCaptureState, preflightBootstrapCapture } from '../bootstrap-capture'
+import { extractClaudeLine } from '../extractors/claude'
+import { extractCodexLine } from '../extractors/codex'
+import { extractOpenclawLine } from '../extractors/openclaw'
 import { detectInstallContext } from '../install-context'
 import { updateReleasesUrl } from '../update-channel'
 
@@ -1259,14 +1263,16 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   // ── Protected API ──────────────────────────────────────────────────────────
 
   app.get('/api/sessions', requireAuth, async (_req, res) => {
-    res.json(await loadSessions())
+    const sessions = await loadSessions()
+    res.json(await normalizeSessionsForUI(sessions))
   })
 
   app.get('/api/session/:id', requireAuth, async (req, res) => {
     const sessions = await loadSessions()
     const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
     if (!session) return res.status(404).json({ error: 'not found' })
-    res.json({ session, messages: await readMessagesForUI(session) })
+    const messages = await readMessagesForUI(session)
+    res.json({ session: normalizeSessionForUI(session, messages), messages })
   })
 
   app.get('/api/search', requireAuth, async (req, res) => {
@@ -1544,8 +1550,127 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   return { port, url: `http://localhost:${port}` }
 }
 
+async function normalizeSessionsForUI(sessions: Session[]): Promise<Session[]> {
+  const normalized: Session[] = []
+  for (const session of sessions) {
+    if (session.hasThinking) {
+      const messages = await readMessagesForUI(session)
+      normalized.push(normalizeSessionForUI(session, messages))
+    } else {
+      normalized.push(normalizeSessionForUI(session))
+    }
+  }
+  return normalized
+}
+
+function normalizeSessionForUI(session: Session, messages?: Message[]): Session {
+  return {
+    ...session,
+    cwd: normalizeClaudeAppCwdForUI(session),
+    hasThinking: messages ? messages.some(messageHasThinkingBlock) : session.hasThinking,
+  }
+}
+
 async function readMessagesForUI(session: Session): Promise<Message[]> {
-  return await readSessionMessages(session)
+  const messages = (await readSessionMessages(session)).map(message => ({
+    ...message,
+    content: message.content,
+    hasThinking: messageHasThinkingBlock(message),
+  }))
+  return await backfillThinkingMessagesForUI(session, messages)
+}
+
+function messageHasThinkingBlock(message: Message): boolean {
+  return message.content.some(block => block.type === 'thinking')
+}
+
+async function backfillThinkingMessagesForUI(session: Session, messages: Message[]): Promise<Message[]> {
+  if (!session.hasThinking || messages.some(messageHasThinkingBlock)) return messages
+
+  const rawRecords = await readRawRecords(session.source, session.uid)
+  if (rawRecords.length === 0) return messages
+
+  const existingThinkingSignatures = new Set(
+    messages
+      .filter(messageHasThinkingBlock)
+      .map(thinkingMessageSignature),
+  )
+
+  const augmented = [...messages]
+  let backfillCount = 0
+
+  for (const rawRecord of rawRecords) {
+    const message = extractThinkingMessageFromRawRecord(session.source, rawRecord.raw)
+    if (!message) continue
+    const signature = thinkingMessageSignature(message)
+    if (existingThinkingSignatures.has(signature)) continue
+    existingThinkingSignatures.add(signature)
+    augmented.push(message)
+    backfillCount += 1
+  }
+
+  if (backfillCount === 0) return messages
+
+  writeLog('info', 'ui', 'thinking_backfilled_from_raw', {
+    session: session.uid,
+    source: session.source,
+    backfillCount,
+  })
+
+  return augmented.sort((a, b) => {
+    const aTime = Date.parse(a.timestamp) || 0
+    const bTime = Date.parse(b.timestamp) || 0
+    return aTime - bTime
+  })
+}
+
+function extractThinkingMessageFromRawRecord(source: Source, raw: unknown): Message | null {
+  const rawLine = typeof raw === 'string' ? raw : safeJson(raw)
+  if (!rawLine) return null
+
+  const extracted = source === 'codex-cli'
+    ? extractCodexLine(rawLine)
+    : source === 'openclaw'
+      ? extractOpenclawLine(rawLine)
+      : extractClaudeLine(rawLine)
+
+  if (!extracted?.message) return null
+  return messageHasThinkingBlock(extracted.message) ? extracted.message : null
+}
+
+function thinkingMessageSignature(message: Message): string {
+  const thinking = message.content
+    .filter(block => block.type === 'thinking')
+    .map(block => block.thinking || '')
+  return JSON.stringify({
+    timestamp: message.timestamp,
+    role: message.role,
+    sourceEventType: message.sourceEventType || '',
+    thinking,
+  })
+}
+
+function normalizeClaudeAppCwdForUI(session: Session): string {
+  if (session.source !== 'claude-app') return session.cwd
+
+  const cwd = session.cwd || ''
+  const normalized = cwd.replace(/\\/g, '/')
+  if (!normalized.includes('/local-agent-mode-sessions/') || !normalized.endsWith('/outputs')) return cwd
+
+  const originalPath = session.originalPath || ''
+  if (!originalPath) return cwd
+  const sessionDir = path.dirname(originalPath)
+  const sessionName = path.basename(sessionDir)
+  if (!sessionName.startsWith('local_')) return cwd
+
+  try {
+    const metadataPath = path.join(path.dirname(sessionDir), `${sessionName}.json`)
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8')) as Record<string, unknown>
+    const processName = typeof metadata.processName === 'string' ? metadata.processName.trim() : ''
+    return processName ? `/sessions/${processName}` : cwd
+  } catch {
+    return cwd
+  }
 }
 
 function stringifySearchableBlock(block: Message['content'][number]): string {
@@ -2533,7 +2658,7 @@ function unlockPageHTML(): string {
       </button>
       <div class="error-msg" id="touchid-error"></div>
       <div class="method-note" id="touchid-hint">
-        This screen opens the Touch ID prompt automatically. If you do not see it, click the button and place your finger on Touch ID. If authenticator login is enabled, you will enter the 6-digit code after Touch ID.
+        Click the Touch ID button when you want to unlock with Touch ID. If authenticator login is enabled, you will enter the 6-digit code after Touch ID.
       </div>
       <div class="divider">or use password</div>
     </div>
@@ -2600,10 +2725,8 @@ function apiFetch(url, options) {
   return fetch(url, opts)
 }
 let unlockOptions = { passwordEnabled: true, touchIdEnabled: false, totpEnrolled: false };
-const TOUCHID_HINT_DEFAULT = 'This screen opens the Touch ID prompt automatically. If you do not see it, click the button and place your finger on Touch ID. If authenticator login is enabled, you will enter the 6-digit code after Touch ID.';
-let touchIdAutoPromptAttempted = false;
+const TOUCHID_HINT_DEFAULT = 'Click the Touch ID button when you want to unlock with Touch ID. If authenticator login is enabled, you will enter the 6-digit code after Touch ID.';
 let touchIdUnlockInFlight = false;
-let touchIdAutoPromptTimer = null;
 
 function setTouchIdHint(message) {
   const hint = document.getElementById('touchid-hint');
@@ -2612,19 +2735,6 @@ function setTouchIdHint(message) {
 
 function restoreTouchIdHint() {
   setTouchIdHint(TOUCHID_HINT_DEFAULT);
-}
-
-function scheduleTouchIdAutoPrompt() {
-  if (!unlockOptions.touchIdEnabled || touchIdAutoPromptAttempted || touchIdUnlockInFlight) return;
-  touchIdAutoPromptAttempted = true;
-  if (touchIdAutoPromptTimer) clearTimeout(touchIdAutoPromptTimer);
-  touchIdAutoPromptTimer = setTimeout(() => {
-    if (document.hidden) {
-      touchIdAutoPromptAttempted = false;
-      return;
-    }
-    void touchIDUnlock({ auto: true });
-  }, 320);
 }
 
 async function loadUnlockOptions() {
@@ -2642,14 +2752,9 @@ async function loadUnlockOptions() {
         : 'Use Touch ID to unlock';
     }
     restoreTouchIdHint();
-    scheduleTouchIdAutoPrompt();
   } catch {}
 }
 loadUnlockOptions();
-
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) scheduleTouchIdAutoPrompt();
-});
 
 function rememberPostUnlockState(payload) {
   if (payload && typeof payload.captureWarning === 'string' && payload.captureWarning.trim()) {
@@ -2664,17 +2769,14 @@ function rememberPostUnlockState(payload) {
   }
 }
 
-async function touchIDUnlock(options = {}) {
+async function touchIDUnlock() {
   if (touchIdUnlockInFlight) return;
-  const autoAttempt = !!options.auto;
   const btn = document.getElementById('btn-touchid');
   const err = document.getElementById('touchid-error');
   touchIdUnlockInFlight = true;
   btn.classList.add('waiting');
   btn.innerHTML = '<span class="spinner"></span>Waiting for Touch ID…';
-  setTouchIdHint(autoAttempt
-    ? 'Touch ID prompt is open. Place your finger on Touch ID now.'
-    : 'Touch ID prompt opened. Place your finger on Touch ID now.');
+  setTouchIdHint('Touch ID prompt opened. Place your finger on Touch ID now.');
   err.textContent = '';
   try {
     const r = await apiFetch('/api/auth/touchid', { method: 'POST' });
@@ -2691,19 +2793,11 @@ async function touchIDUnlock(options = {}) {
       touchIdUnlockInFlight = false;
       return;
     }
-    if (autoAttempt && typeof d.error === 'string' && /cancel/i.test(d.error)) {
-      setTouchIdHint('Touch ID prompt was closed. Click the button to try again.');
-    } else {
-      err.textContent = d.error || 'Touch ID failed';
-      restoreTouchIdHint();
-    }
+    err.textContent = d.error || 'Touch ID failed';
+    restoreTouchIdHint();
   } catch {
-    if (autoAttempt) {
-      setTouchIdHint('Touch ID prompt did not appear. Click the button to try again.');
-    } else {
-      err.textContent = 'Touch ID not available';
-      restoreTouchIdHint();
-    }
+    err.textContent = 'Touch ID not available';
+    restoreTouchIdHint();
   }
   btn.classList.remove('waiting');
   btn.innerHTML = TOUCHID_SVG;

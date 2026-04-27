@@ -1,11 +1,12 @@
 import * as fs from 'fs'
 import * as crypto from 'crypto'
 import * as path from 'path'
-import { Session, SessionsIndex, OffsetState, OffsetsIndex, Source, Message } from './types'
+import { Session, SessionsIndex, OffsetState, OffsetsIndex, Source, Message, RawRecord } from './types'
 import { normalizeSessionIdentity } from './session-identity'
 import {
   VAULT_DIR,
   ATTACHMENTS_DIR,
+  RAW_DIR,
   STATE_DIR,
   OFFSETS_FILE,
   SESSIONS_FILE,
@@ -139,10 +140,15 @@ export function ensureDirs(): void {
     STATE_DIR,
     VAULT_DIR,
     ATTACHMENTS_DIR,
+    RAW_DIR,
     path.join(VAULT_DIR, 'claude-cli'),
     path.join(VAULT_DIR, 'codex-cli'),
     path.join(VAULT_DIR, 'claude-app'),
     path.join(VAULT_DIR, 'openclaw'),
+    path.join(RAW_DIR, 'claude-cli'),
+    path.join(RAW_DIR, 'codex-cli'),
+    path.join(RAW_DIR, 'claude-app'),
+    path.join(RAW_DIR, 'openclaw'),
   ]
   let firstError: Error | null = null
   for (const dir of dirs) {
@@ -388,6 +394,45 @@ export async function appendMessages(session: Session, messages: Message[]): Pro
   } catch {
     /* non-fatal */
   }
+}
+
+export function makeRawPath(source: Source, sessionUid: string): string {
+  return path.join(source, `${sessionUid}.jsonl`)
+}
+
+export async function appendRawRecords(source: Source, sessionUid: string, records: RawRecord[]): Promise<void> {
+  if (records.length === 0) return
+  const filePath = path.join(RAW_DIR, makeRawPath(source, sessionUid))
+  const dir = path.dirname(filePath)
+  ensurePrivateDir(dir)
+
+  const serialized = records.map(record => JSON.stringify(record))
+  const encrypted = await encryptLinesForSession(requireWriteSession(), serialized)
+  fs.appendFileSync(filePath, `${encrypted.join('\n')}\n`, { encoding: 'utf8', mode: 0o600 })
+  try {
+    fs.chmodSync(filePath, 0o600)
+  } catch {
+    /* non-fatal */
+  }
+}
+
+export async function readRawRecords(source: Source, sessionUid: string): Promise<RawRecord[]> {
+  const filePath = path.join(RAW_DIR, makeRawPath(source, sessionUid))
+  if (!fs.existsSync(filePath)) return []
+  const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean)
+  if (lines.length === 0) return []
+
+  const decrypted = hasVaultSession() && !lines[0].startsWith('{')
+    ? await decryptLinesForSession(requireReadSession(), lines)
+    : lines
+
+  return decrypted.map(line => {
+    try {
+      return JSON.parse(line) as RawRecord
+    } catch {
+      return null
+    }
+  }).filter((r): r is RawRecord => r !== null)
 }
 
 export async function readSessionMessages(session: Session): Promise<Message[]> {

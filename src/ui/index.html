@@ -558,6 +558,140 @@
   }
   .thinking-content.open { display: block; }
 
+  /* Per-message attribute strip — renders appVersion / model / event type /
+     fast-mode inline, plus a details panel that exposes every other field the
+     source emitted (known + unknown). Mirrors the thinking-block pattern. */
+  .attr-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-bottom: 6px;
+    line-height: 1.6;
+  }
+  .attr-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .attr-chip .k { color: var(--muted); opacity: 0.65; }
+  .attr-chip .v { color: var(--text); }
+  .attr-details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    margin: 6px 0 8px;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .attr-details summary {
+    padding: 5px 10px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--muted);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .attr-details summary::-webkit-details-marker { display: none; }
+  .attr-details summary::before {
+    content: '▶';
+    font-size: 8px;
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  .attr-details[open] summary::before { transform: rotate(90deg); }
+  .attr-details summary:hover { background: #11161f; }
+  .attr-details > .attr-body {
+    border-top: 1px solid var(--border);
+    padding: 8px 12px;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 12px;
+    max-height: 420px;
+    overflow-y: auto;
+  }
+  .attr-body > .k {
+    color: var(--muted);
+    opacity: 0.7;
+    white-space: nowrap;
+  }
+  .attr-body > .v {
+    color: var(--text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .attr-body > .v pre {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .attr-body details {
+    margin: 0;
+  }
+  .attr-body details summary {
+    cursor: pointer;
+    color: var(--muted);
+    padding: 0;
+    list-style: none;
+  }
+  .attr-body details summary::-webkit-details-marker { display: none; }
+  .attr-body details summary::before {
+    content: '▶';
+    font-size: 8px;
+    margin-right: 5px;
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  .attr-body details[open] summary::before { transform: rotate(90deg); }
+  .attr-body details[open] summary { margin-bottom: 4px; }
+
+  /* Turn-summary block for Claude `result` events. Renders cost / duration /
+     stop reason / full usage breakdown that the extractor used to drop. */
+  .turn-summary {
+    background: #0d1623;
+    border: 1px solid #1d3456;
+    border-radius: 5px;
+    padding: 8px 12px;
+    margin: 6px 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #a8c0e0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    align-items: center;
+  }
+  .turn-summary .ts-label { opacity: 0.65; }
+  .turn-summary .ts-value { color: #dbe5f5; }
+
+  /* Rate-limit strip for `rate_limit_event`. */
+  .rate-limit-strip {
+    background: #1a1408;
+    border: 1px solid #4a380c;
+    border-radius: 5px;
+    padding: 8px 12px;
+    margin: 6px 0;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: #e0b870;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
   .text-block {
     font-size: 14px;
     color: var(--text);
@@ -1702,17 +1836,166 @@ async function refreshActiveSessionIfChanged() {
   renderConversation(session, messages, { resetScroll: false })
 }
 
+// --- Attribute-strip helpers (Phase 4) ---
+// Size thresholds for inline-vs-collapsed rendering. Rule: size decides
+// collapse, not familiarity. Unknown fields get the same treatment.
+const INLINE_STRING_MAX = 120
+const INLINE_ARRAY_MAX = 5
+
+function scalarToString(v) {
+  if (v === null) return 'null'
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v)
+  return String(v)
+}
+function isScalar(v) {
+  return v === null || typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+}
+function isShortString(s) {
+  return typeof s === 'string' && s.length <= INLINE_STRING_MAX && !s.includes('\n')
+}
+function isInlineArray(arr) {
+  return Array.isArray(arr) && arr.length <= INLINE_ARRAY_MAX && arr.every(x => isScalar(x) && (typeof x !== 'string' || x.length < 40))
+}
+
+// Render an arbitrary value as HTML: scalars inline, lists/objects collapsed.
+function renderAttrValue(value) {
+  if (value === undefined) return '<span style="opacity:0.5">undefined</span>'
+  if (value === null) return '<span style="opacity:0.5">null</span>'
+  if (isScalar(value)) {
+    const s = scalarToString(value)
+    if (isShortString(s) || typeof value !== 'string') return esc(s)
+    // long single-line string → collapsed preview
+    const preview = esc(s.slice(0, 80)) + '…'
+    return `<details><summary>${preview} <span style="opacity:0.5">(${s.length} chars)</span></summary><pre>${esc(s)}</pre></details>`
+  }
+  if (Array.isArray(value)) {
+    if (isInlineArray(value)) return esc(value.map(scalarToString).join(', '))
+    return `<details><summary>array (${value.length})</summary><pre>${esc(JSON.stringify(value, null, 2))}</pre></details>`
+  }
+  if (typeof value === 'object') {
+    const keys = Object.keys(value)
+    const allScalar = keys.every(k => isScalar(value[k]))
+    if (keys.length <= 3 && allScalar) {
+      return keys.map(k => `<span style="opacity:0.7">${esc(k)}:</span> ${esc(scalarToString(value[k]))}`).join(', ')
+    }
+    return `<details><summary>object (${keys.length} fields)</summary><pre>${esc(JSON.stringify(value, null, 2))}</pre></details>`
+  }
+  return esc(String(value))
+}
+
+function attrChip(key, value) {
+  return `<span class="attr-chip"><span class="k">${esc(key)}:</span> <span class="v">${esc(scalarToString(value))}</span></span>`
+}
+
+function renderAttrStrip(msg) {
+  // Top chips — always-visible scalar provenance.
+  const chips = []
+  if (msg.appVersion) chips.push(attrChip('v', msg.appVersion))
+  if (msg.model) chips.push(attrChip('model', msg.model))
+  if (msg.sourceEventType) chips.push(attrChip('event', msg.sourceEventType))
+  if (msg.fastModeState) chips.push(attrChip('fast-mode', msg.fastModeState))
+  if (msg.permissionMode) chips.push(attrChip('perm', msg.permissionMode))
+
+  // Details body — every other bound field + unknown catch-all.
+  const rows = []
+  const addRow = (k, v) => {
+    if (v === undefined || v === null) return
+    if (Array.isArray(v) && v.length === 0) return
+    rows.push(`<span class="k">${esc(k)}</span><span class="v">${renderAttrValue(v)}</span>`)
+  }
+  addRow('stop_reason', msg.stopReason)
+  addRow('cost_usd', msg.cost)
+  addRow('duration_ms', msg.durationMs)
+  addRow('num_turns', msg.numTurns)
+  addRow('tools', msg.toolsAvailable)
+  addRow('skills', msg.activeSkills)
+  addRow('plugins', msg.activePlugins)
+  addRow('agents', msg.activeAgents)
+  addRow('mcp_servers', msg.mcpServers)
+  addRow('permission_denials', msg.permissionDenials)
+  addRow('rate_limit_info', msg.rateLimitInfo)
+  addRow('output_style', msg.outputStyle)
+  addRow('slash_commands', msg.slashCommands)
+  if (msg.unknownAttrs && typeof msg.unknownAttrs === 'object') {
+    for (const [k, v] of Object.entries(msg.unknownAttrs)) addRow(k, v)
+  }
+
+  const stripHtml = chips.length ? `<div class="attr-strip">${chips.join('')}</div>` : ''
+  const detailsHtml = rows.length
+    ? `<details class="attr-details"><summary>attributes (${rows.length})</summary><div class="attr-body">${rows.join('')}</div></details>`
+    : ''
+  return stripHtml + detailsHtml
+}
+
+function renderTurnSummary(msg) {
+  const parts = []
+  if (msg.numTurns !== undefined) parts.push(`<span><span class="ts-label">turns</span> <span class="ts-value">${esc(String(msg.numTurns))}</span></span>`)
+  if (msg.durationMs !== undefined) {
+    const s = msg.durationMs / 1000
+    const label = s >= 60 ? `${Math.floor(s/60)}m ${Math.round(s%60)}s` : `${s.toFixed(1)}s`
+    parts.push(`<span><span class="ts-label">duration</span> <span class="ts-value">${esc(label)}</span></span>`)
+  }
+  if (typeof msg.cost === 'number') parts.push(`<span><span class="ts-label">cost</span> <span class="ts-value">$${msg.cost.toFixed(4)}</span></span>`)
+  if (msg.stopReason) parts.push(`<span><span class="ts-label">stop</span> <span class="ts-value">${esc(msg.stopReason)}</span></span>`)
+  if (msg.usage) {
+    const u = msg.usage
+    const bits = []
+    if (u.inputTokens) bits.push(`in ${u.inputTokens}`)
+    if (u.outputTokens) bits.push(`out ${u.outputTokens}`)
+    if (u.cacheReadTokens) bits.push(`cache-read ${u.cacheReadTokens}`)
+    if (u.cacheWriteTokens) bits.push(`cache-write ${u.cacheWriteTokens}`)
+    if (bits.length) parts.push(`<span><span class="ts-label">usage</span> <span class="ts-value">${esc(bits.join(' · '))}</span></span>`)
+  }
+  return `<div class="turn-summary"><span class="ts-label">turn summary</span>${parts.join('')}</div>`
+}
+
+function renderRateLimitStrip(msg) {
+  const info = msg.rateLimitInfo
+  if (!info || typeof info !== 'object') return `<div class="rate-limit-strip">rate limit event</div>`
+  const parts = []
+  if (info.rateLimitType) parts.push(`<span>${esc(String(info.rateLimitType))}</span>`)
+  if (info.status) parts.push(`<span>status: ${esc(String(info.status))}</span>`)
+  if (info.resetsAt) {
+    const d = new Date((typeof info.resetsAt === 'number' ? info.resetsAt : parseInt(info.resetsAt, 10)) * 1000)
+    if (!isNaN(d.getTime())) parts.push(`<span>resets: ${esc(d.toLocaleString())}</span>`)
+  }
+  if (info.overageStatus) parts.push(`<span>overage: ${esc(String(info.overageStatus))}</span>`)
+  return `<div class="rate-limit-strip"><span style="opacity:0.7">rate limit</span>${parts.join('')}</div>`
+}
+
 function renderMessage(msg) {
+  // Synthetic messages surfaced from Claude `result` / `rate_limit_event`
+  // events — render as specialized strips rather than normal chat bubbles.
+  if (msg.sourceEventType === 'result') {
+    return `<div class="message system">
+      <div class="message-role system">turn summary <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
+      ${renderAttrStrip(msg)}
+      ${renderTurnSummary(msg)}
+      ${msg.content && msg.content[0]?.text ? `<div class="text-block">${esc(msg.content[0].text)}</div>` : ''}
+    </div>`
+  }
+  if (msg.sourceEventType === 'rate_limit_event') {
+    return `<div class="message system">
+      <div class="message-role system">rate limit <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
+      ${renderAttrStrip(msg)}
+      ${renderRateLimitStrip(msg)}
+    </div>`
+  }
+
   const blocks = msg.content.map(block => {
     if (block.type === 'thinking') {
       const id = 'th_' + Math.random().toString(36).slice(2)
+      const thinkingText = typeof block.thinking === 'string' ? block.thinking : ''
+      const thinkingCountLabel = thinkingText.trim()
+        ? `${wordCount(thinkingText)} words`
+        : '0 token'
       return `<div class="thinking-block">
         <div class="thinking-toggle" onclick="toggleThinking('${id}')">
           <span class="thinking-arrow" id="arr_${id}">▶</span>
           <span>thinking block</span>
-          <span style="margin-left:auto;opacity:.5">${wordCount(block.thinking)} words</span>
+          <span style="margin-left:auto;opacity:.5">${thinkingCountLabel}</span>
         </div>
-        <div class="thinking-content" id="${id}">${esc(block.thinking)}</div>
+        <div class="thinking-content" id="${id}">${thinkingText ? esc(thinkingText) : ''}</div>
       </div>`
     }
     if (block.type === 'text' && block.text?.trim()) {
@@ -1789,6 +2072,7 @@ function renderMessage(msg) {
       ${msg.role}
       <span class="msg-time">${fmtTime(msg.timestamp)}</span>
     </div>
+    ${renderAttrStrip(msg)}
     ${blocks}
     ${usageParts.length ? `<div class="usage-line">${usageParts.join(' · ')}</div>` : ''}
   </div>`

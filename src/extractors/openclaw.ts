@@ -72,7 +72,10 @@ function parseOpenclawContent(rawContent: unknown[]): ContentBlock[] {
   return rawContent.map(block => {
     if (typeof block !== 'object' || !block) return { type: 'other' as const }
     const b = block as Record<string, unknown>
-    if (b.type === 'thinking') return { type: 'thinking' as const, thinking: b.thinking as string || '' }
+    if (b.type === 'thinking') {
+      const thinking = typeof b.thinking === 'string' ? b.thinking.trim() : ''
+      return { type: 'thinking' as const, thinking }
+    }
     if (b.type === 'text') return { type: 'text' as const, text: b.text as string || '' }
     if (b.type === 'tool_use') return { type: 'tool_use' as const, name: b.name as string, input: b.input }
     if (b.type === 'toolCall') {

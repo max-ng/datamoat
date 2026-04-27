@@ -1,9 +1,10 @@
 import * as fs from 'fs'
 import * as path from 'path'
+import * as crypto from 'crypto'
 import chokidar from 'chokidar'
-import { Source, Session, Message, OffsetState } from './types'
-import { ALL_SOURCES, GLOB_PATTERNS, resolveWatchPaths } from './config'
-import { loadOffsets, saveOffsets, upsertSession, appendMessages, makeVaultPath, saveAttachment, loadSessions } from './store'
+import { Source, Session, Message, OffsetState, RawRecord } from './types'
+import { ALL_SOURCES, GLOB_PATTERNS, HEALTH_FILE, resolveWatchPaths } from './config'
+import { loadOffsets, saveOffsets, upsertSession, appendMessages, appendRawRecords, makeVaultPath, saveAttachment, loadSessions } from './store'
 import {
   appendBootstrapCapture,
   clearBootstrapCaptureData,
@@ -21,6 +22,125 @@ import { buildSessionUid, sourceAccountFromPath } from './session-identity'
 
 function log(event: string, fields: Record<string, unknown> = {}): void {
   writeLog('info', 'watcher', event, fields)
+}
+
+// Peek a session id out of a parsed raw object without full extraction.
+// Each source stores the identifier in a well-known location.
+function peekSessionId(source: Source, obj: unknown): string {
+  if (!obj || typeof obj !== 'object') return ''
+  const o = obj as Record<string, unknown>
+  if (source === 'claude-cli' || source === 'claude-app') {
+    return (o.sessionId as string) || (o.session_id as string) || ''
+  }
+  if (source === 'codex-cli') {
+    const payload = o.payload as Record<string, unknown> | undefined
+    return (payload?.id as string) || ''
+  }
+  if (source === 'openclaw') {
+    if (o.type === 'session') return (o.id as string) || ''
+    return ''
+  }
+  return ''
+}
+
+// Replace base64 payloads (image/document/file blocks) with attachment-refs in
+// a deep-cloned raw object. Prevents the raw store from duplicating multi-MB
+// blobs that already live in attachments/.
+function stripBase64Payloads(node: unknown): unknown {
+  if (Array.isArray(node)) return node.map(stripBase64Payloads)
+  if (!node || typeof node !== 'object') return node
+  const obj = node as Record<string, unknown>
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(obj)) {
+    if (key === 'source' && value && typeof value === 'object') {
+      const src = value as Record<string, unknown>
+      if (src.type === 'base64' && typeof src.data === 'string') {
+        out[key] = {
+          ...src,
+          data: `<stripped base64 ${src.data.length} chars>`,
+        }
+        continue
+      }
+    }
+    out[key] = stripBase64Payloads(value)
+  }
+  return out
+}
+
+function sha256Hex(data: string): string {
+  return crypto.createHash('sha256').update(data).digest('hex')
+}
+
+// Known event types per source — anything outside this set is counted as an
+// "unknown event type" for drift observability. Keep in sync with extractors.
+const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
+  'claude-cli': new Set(['user', 'assistant', 'system', 'summary']),
+  'claude-app': new Set(['user', 'assistant', 'system', 'summary']),
+  'codex-cli': new Set(['session_meta', 'turn_context', 'response_item']),
+  'openclaw': new Set(['session', 'message', 'custom', 'thinking_level_change']),
+}
+
+// Known top-level keys per source — same as above but for attribute drift.
+// Kept intentionally narrow: only the keys the current extractor actually
+// reads. Everything else bumps unknownTopLevelKeys counters.
+const KNOWN_TOPLEVEL_KEYS: Record<Source, Set<string>> = {
+  'claude-cli': new Set(['type', 'uuid', 'sessionId', 'session_id', 'version', 'claude_code_version', 'timestamp', '_audit_timestamp', 'message', 'cwd', 'parent_tool_use_id', 'model']),
+  'claude-app': new Set(['type', 'uuid', 'sessionId', 'session_id', 'version', 'claude_code_version', 'timestamp', '_audit_timestamp', '_audit_hmac', 'message', 'cwd', 'parent_tool_use_id', 'model', 'client_platform']),
+  'codex-cli': new Set(['type', 'timestamp', 'payload']),
+  'openclaw': new Set(['type', 'id', 'timestamp', 'cwd', 'message', 'customType', 'data']),
+}
+
+type DriftBuckets = {
+  unknownEventTypes: Record<string, number>
+  unknownTopLevelKeys: Record<string, number>
+}
+
+function observeDrift(source: Source, obj: unknown, buckets: DriftBuckets): void {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return
+  const o = obj as Record<string, unknown>
+
+  const type = typeof o.type === 'string' ? o.type : null
+  if (type && !KNOWN_EVENT_TYPES[source].has(type)) {
+    buckets.unknownEventTypes[type] = (buckets.unknownEventTypes[type] || 0) + 1
+  }
+
+  for (const key of Object.keys(o)) {
+    if (!KNOWN_TOPLEVEL_KEYS[source].has(key)) {
+      buckets.unknownTopLevelKeys[key] = (buckets.unknownTopLevelKeys[key] || 0) + 1
+    }
+  }
+}
+
+function mergeDriftInto(existing: Record<string, number> | undefined, patch: Record<string, number>): Record<string, number> {
+  const merged: Record<string, number> = { ...(existing || {}) }
+  for (const [key, count] of Object.entries(patch)) {
+    merged[key] = (merged[key] || 0) + count
+  }
+  return merged
+}
+
+// Read current drift counters for the source, merge in the new observations,
+// and write back. Silent: no user-visible alert, no audit event. This exists
+// so the team can inspect health.json after upstream updates and see which
+// fields or event types are new.
+function updateHealthDrift(source: Source, drift: DriftBuckets): void {
+  let existingEventTypes: Record<string, number> | undefined
+  let existingKeys: Record<string, number> | undefined
+  try {
+    const raw = fs.readFileSync(HEALTH_FILE, 'utf8')
+    const parsed = JSON.parse(raw) as { components?: Record<string, Record<string, unknown>> }
+    const comp = parsed.components?.[`watcher:${source}`] as Record<string, unknown> | undefined
+    if (comp) {
+      existingEventTypes = comp.unknownEventTypes as Record<string, number> | undefined
+      existingKeys = comp.unknownTopLevelKeys as Record<string, number> | undefined
+    }
+  } catch {
+    /* non-fatal — first write */
+  }
+  updateHealth(`watcher:${source}`, {
+    unknownEventTypes: mergeDriftInto(existingEventTypes, drift.unknownEventTypes),
+    unknownTopLevelKeys: mergeDriftInto(existingKeys, drift.unknownTopLevelKeys),
+  })
 }
 
 // Per-file in-memory session state (accumulates metadata as we read lines)
@@ -89,7 +209,7 @@ async function hydrateState(filePath: string, source: Source, offsets: OffsetSta
       state.appVersion = existing.appVersion
       state.model = existing.model
       state.modelProvider = existing.modelProvider
-      state.cwd = existing.cwd
+      state.cwd = source === 'claude-app' ? normalizeClaudeAppCwd(filePath, existing.cwd) : existing.cwd
       state.firstTimestamp = existing.firstTimestamp
       state.lastTimestamp = existing.lastTimestamp
       state.messageCount = existing.messageCount
@@ -128,6 +248,30 @@ function hydrateCodexStateFromHeader(filePath: string, state: FileState): void {
   } catch {
     /* non-fatal */
   }
+}
+
+function readClaudeAppSessionMetadata(filePath: string): Record<string, unknown> | null {
+  const sessionDir = path.dirname(filePath)
+  const sessionName = path.basename(sessionDir)
+  if (!sessionName.startsWith('local_')) return null
+
+  const metadataPath = path.join(path.dirname(sessionDir), `${sessionName}.json`)
+  try {
+    return JSON.parse(fs.readFileSync(metadataPath, 'utf8')) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+function normalizeClaudeAppCwd(filePath: string, cwd: string): string {
+  if (!cwd) return cwd
+
+  const normalized = cwd.replace(/\\/g, '/')
+  if (!normalized.includes('/local-agent-mode-sessions/') || !normalized.endsWith('/outputs')) return cwd
+
+  const metadata = readClaudeAppSessionMetadata(filePath)
+  const processName = typeof metadata?.processName === 'string' ? metadata.processName.trim() : ''
+  return processName ? `/sessions/${processName}` : cwd
 }
 
 async function loadWatcherOffsets(mode: WatcherMode): Promise<OffsetState> {
@@ -230,18 +374,59 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
     fs.closeSync(fd)
 
     const newContent = buffer.toString('utf8')
-    const lines = newContent.split('\n').filter(l => l.trim())
+    // Keep byte offsets per line so raw records can point back into the source file.
+    const splitLines = newContent.split('\n')
+    const lineMetas: Array<{ line: string; byteOffset: number }> = []
+    {
+      let cursor = savedOffset
+      for (const raw of splitLines) {
+        if (raw.trim()) lineMetas.push({ line: raw, byteOffset: cursor })
+        cursor += Buffer.byteLength(raw, 'utf8') + 1  // +1 for the '\n'
+      }
+    }
+    const lines = lineMetas.map(m => m.line)
 
     if (lines.length === 0) return
 
     const state = fileStates.get(filePath) ?? await hydrateState(filePath, source, offsets)
     const newMessages: Message[] = []
+    const rawRecords: RawRecord[] = []
+    const drift: DriftBuckets = { unknownEventTypes: {}, unknownTopLevelKeys: {} }
     let skippedLines = 0
     let wroteToVault = false
+    const capturedAt = new Date().toISOString()
 
     for (let index = 0; index < lines.length; index += 1) {
+      // Build the raw record first — it is never allowed to fail, even if the
+      // extractor later errors. If JSON.parse fails we still capture the line.
+      const lineText = lineMetas[index].line
+      let parsed: unknown = null
+      let parseError: string | undefined
       try {
-        await processLine(lines[index], filePath, source, state, newMessages, watcherMode !== 'bootstrap')
+        parsed = JSON.parse(lineText)
+      } catch (err) {
+        parseError = err instanceof Error ? err.message : String(err)
+      }
+      if (parseError === undefined) observeDrift(source, parsed, drift)
+      rawRecords.push({
+        v: 1,
+        source,
+        sourcePath: filePath,
+        sourceByteOffset: lineMetas[index].byteOffset,
+        capturedAt,
+        rawHash: sha256Hex(lineText),
+        raw: parseError === undefined ? stripBase64Payloads(parsed) : lineText,
+        ...(parseError !== undefined ? { parseError } : {}),
+      })
+      // Let the extractor peek sessionId early so even lines that fail parsing
+      // upstream still land in the right raw file once we know the session.
+      if (!state.sessionId && parseError === undefined) {
+        const peek = peekSessionId(source, parsed)
+        if (peek) state.sessionId = peek
+      }
+
+      try {
+        await processLine(lineMetas[index].line, filePath, source, state, newMessages, watcherMode !== 'bootstrap')
       } catch (err) {
         skippedLines += 1
         writeLog('warn', 'watcher', 'line_skipped', {
@@ -297,6 +482,45 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
       return
     }
 
+    // Raw-first invariant: write raw records to vault/raw/<source>/<uid>.jsonl
+    // BEFORE attempting parsed-message persistence or advancing the offset.
+    // If the session is still unknown, we cannot key the raw file — bail out
+    // and let the next tick retry (offset stays where it was).
+    if (!state.sessionId) {
+      writeLog('warn', 'watcher', 'raw_not_saved_missing_session', {
+        source,
+        file: path.basename(filePath),
+        lines: lines.length,
+      })
+      updateHealth(`watcher:${source}`, {
+        lastSkippedAt: new Date().toISOString(),
+        lastSkippedFile: path.basename(filePath),
+        lastSkippedReason: 'missing_session_metadata',
+      })
+      return
+    }
+
+    const rawSessionUid = buildSessionUid({
+      source,
+      sourceAccount: sourceAccountFromPath(source, filePath),
+      sessionId: state.sessionId,
+      originalPath: filePath,
+    })
+    try {
+      await appendRawRecords(source, rawSessionUid, rawRecords)
+    } catch (err) {
+      writeLog('error', 'watcher', 'raw_append_failed', {
+        source,
+        file: path.basename(filePath),
+        error: safeError(err),
+      })
+      updateHealth(`watcher:${source}`, {
+        lastErrorAt: new Date().toISOString(),
+        lastError: safeError(err),
+      })
+      return  // leave offset unchanged so we retry
+    }
+
     wroteToVault = await persistMessages(filePath, source, state, newMessages, skippedLines)
 
     if (newMessages.length > 0 && !wroteToVault) {
@@ -320,7 +544,18 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
       })
     }
 
-    // Advance offsets only after a successful vault write.
+    // Merge drift counters into health.json. Silent — no user-visible alert.
+    const hasDrift = Object.keys(drift.unknownEventTypes).length > 0
+                  || Object.keys(drift.unknownTopLevelKeys).length > 0
+    if (hasDrift) {
+      updateHealthDrift(source, drift)
+    }
+    updateHealth(`watcher:${source}`, {
+      lastRawWriteAt: new Date().toISOString(),
+      lastRawWriteCount: rawRecords.length,
+    })
+
+    // Advance offsets only after a successful raw + vault write.
     offsets[offsetKey] = {
       offset: fileSize,
       sessionId: state.sessionId,
@@ -409,6 +644,14 @@ async function persistMessages(
   return true
 }
 
+function decorateWithSessionState(message: Message, state: FileState): void {
+  // Fall back to session-level state whenever the extractor did not provide
+  // per-line values. Keeps messages self-describing even when upstream only
+  // emits version/model on session_meta or system events.
+  if (!message.appVersion && state.appVersion) message.appVersion = state.appVersion
+  if (!message.model && state.model && state.model !== 'unknown') message.model = state.model
+}
+
 async function processLine(
   line: string,
   filePath: string,
@@ -420,7 +663,9 @@ async function processLine(
   if (source === 'claude-cli' || source === 'claude-app') {
     const modelInfo = extractClaudeModel(line)
     if (modelInfo?.model) { state.model = modelInfo.model }
-    if (modelInfo?.cwd && !state.cwd) { state.cwd = modelInfo.cwd }
+    if (modelInfo?.cwd && !state.cwd) {
+      state.cwd = source === 'claude-app' ? normalizeClaudeAppCwd(filePath, modelInfo.cwd) : modelInfo.cwd
+    }
     if (modelInfo?.appVersion && !state.appVersion) { state.appVersion = modelInfo.appVersion }
 
     const result = extractClaudeLine(line)
@@ -430,6 +675,7 @@ async function processLine(
       if (captureAttachments) {
         await attachRawImages(source, filePath, state, result.message, result.rawImages)
       }
+      decorateWithSessionState(result.message, state)
       updateStateFromMessage(state, result.message)
       out.push(result.message)
     }
@@ -448,6 +694,7 @@ async function processLine(
       if (captureAttachments) {
         await attachRawImages(source, filePath, state, result.message, result.rawImages)
       }
+      decorateWithSessionState(result.message, state)
       updateStateFromMessage(state, result.message)
       out.push(result.message)
     }
@@ -462,6 +709,7 @@ async function processLine(
     if (result.modelProvider) state.modelProvider = result.modelProvider
     if (result.cwd && !state.cwd) state.cwd = result.cwd
     if (result.message) {
+      decorateWithSessionState(result.message, state)
       updateStateFromMessage(state, result.message)
       out.push(result.message)
     }
@@ -576,11 +824,42 @@ export async function importBootstrapCaptureIntoVault(): Promise<{ importedFiles
       const lines = await readBootstrapCaptureLines(entry.spoolFile)
       const state = fileStates.get(entry.originalPath) ?? await hydrateState(entry.originalPath, entry.source, offsets)
       const newMessages: Message[] = []
+      const rawRecords: RawRecord[] = []
+      const drift: DriftBuckets = { unknownEventTypes: {}, unknownTopLevelKeys: {} }
       let skippedLines = 0
+      const capturedAt = new Date().toISOString()
+      // Bootstrap spool does not preserve per-line byte offsets; use a running
+      // counter inside the spool so raw records still carry a stable ordering.
+      let spoolCursor = 0
 
       for (let index = 0; index < lines.length; index += 1) {
+        const lineText = lines[index]
+        let parsed: unknown = null
+        let parseError: string | undefined
         try {
-          await processLine(lines[index], entry.originalPath, entry.source, state, newMessages, true)
+          parsed = JSON.parse(lineText)
+        } catch (err) {
+          parseError = err instanceof Error ? err.message : String(err)
+        }
+        if (parseError === undefined) observeDrift(entry.source, parsed, drift)
+        rawRecords.push({
+          v: 1,
+          source: entry.source,
+          sourcePath: entry.originalPath,
+          sourceByteOffset: spoolCursor,
+          capturedAt,
+          rawHash: sha256Hex(lineText),
+          raw: parseError === undefined ? stripBase64Payloads(parsed) : lineText,
+          ...(parseError !== undefined ? { parseError } : {}),
+        })
+        spoolCursor += Buffer.byteLength(lineText, 'utf8') + 1
+        if (!state.sessionId && parseError === undefined) {
+          const peek = peekSessionId(entry.source, parsed)
+          if (peek) state.sessionId = peek
+        }
+
+        try {
+          await processLine(lineText, entry.originalPath, entry.source, state, newMessages, true)
         } catch (err) {
           skippedLines += 1
           writeLog('warn', 'watcher', 'bootstrap_line_skipped', {
@@ -590,6 +869,27 @@ export async function importBootstrapCaptureIntoVault(): Promise<{ importedFiles
             error: safeError(err),
           })
         }
+      }
+
+      if (state.sessionId) {
+        const rawSessionUid = buildSessionUid({
+          source: entry.source,
+          sourceAccount: sourceAccountFromPath(entry.source, entry.originalPath),
+          sessionId: state.sessionId,
+          originalPath: entry.originalPath,
+        })
+        try {
+          await appendRawRecords(entry.source, rawSessionUid, rawRecords)
+        } catch (err) {
+          writeLog('error', 'watcher', 'bootstrap_raw_append_failed', {
+            source: entry.source,
+            file: path.basename(entry.originalPath),
+            error: safeError(err),
+          })
+        }
+        const hasDrift = Object.keys(drift.unknownEventTypes).length > 0
+                      || Object.keys(drift.unknownTopLevelKeys).length > 0
+        if (hasDrift) updateHealthDrift(entry.source, drift)
       }
 
       const wroteToVault = await persistMessages(entry.originalPath, entry.source, state, newMessages, skippedLines)
