@@ -10,8 +10,13 @@ Licensor:             DataMoat contributors
 Licensed Work:        DataMoat
                       The Licensed Work is copyright (c) 2026 DataMoat contributors.
 
-Additional Use Grant: You may make production use of the Licensed Work, and derivative works of it,
-                      solely for your own personal use or your organization's internal business operations.
+Additional Use Grant: You may make production use of unmodified official builds of the Licensed Work
+                      solely for your own personal use or your organization's internal company use.
+
+                      Production use of modified versions or derivative works, resale, sublicensing,
+                      hosted or managed services, embedding in a commercial product, external
+                      distribution, or use to build or operate a competing product or service requires
+                      a separate commercial license from Licensor.
 
 Change Date:          2030-04-27
 

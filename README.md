@@ -205,7 +205,6 @@ This means:
 
 - personal use is allowed
 - internal company use is allowed
-- private modification is allowed
 - uses outside that grant require a separate commercial license from the licensor
 
 This is **source-available**, not OSI-approved open source.
