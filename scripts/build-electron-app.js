@@ -507,9 +507,17 @@ async function main() {
       /^\/artifacts($|\/)/,
       /^\/release($|\/)/,
       /^\/\.git($|\/)/,
+      /^\/\.github($|\/)/,
+      /^\/\.gitignore$/,
       /^\/src($|\/)/,
       /^\/scripts($|\/)/,
+      /^\/verification($|\/)/,
       /^\/\.DS_Store$/,
+      /^\/[^/]+\.md$/,
+      /^\/[^/]+\.backup-[0-9-]+\.md$/,
+      /^\/package-lock\.json$/,
+      /^\/tsconfig\.json$/,
+      /^\/install\.sh$/,
     ],
   })
 
