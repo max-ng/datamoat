@@ -2218,6 +2218,10 @@ let _setupNonce = '', _secret = '', _mnemonic = '', _password = '', _enrollTotp 
 let _touchIdAvailable = false, _passwordEnabled = true, _touchIdEnabled = false;
 let _setupCommitted = false;
 let _passwordRequired = true;
+let _touchIdReason = '';
+let _touchIdUserTouched = false;
+let _touchIdRefreshAttempts = 0;
+let _touchIdRefreshTimer = 0;
 function esc(s) {
   return String(s || '').replace(/[&<>\"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;', \"'\":'&#39;' }[ch]));
 }
@@ -2268,9 +2272,6 @@ async function init() {
   _setupNonce = d.setupNonce;
   _secret = d.secret;
   _mnemonic = d.mnemonic;
-  _touchIdAvailable = !!d.touchIdAvailable;
-  _touchIdEnabled = _touchIdAvailable;
-  const touchIdReason = typeof d.touchIdReason === 'string' ? d.touchIdReason : '';
   const words = d.mnemonic.split(' ');
   document.getElementById('mnemonic-grid').innerHTML = words.map((w, i) =>
     '<div class="word-cell"><span class="word-num">' + (i+1) + '</span><span class="word-text">' + w + '</span></div>'
@@ -2286,23 +2287,68 @@ async function init() {
       ? '<strong>Remote no-screen capture already started.</strong> DataMoat is already collecting supported local records on this machine. Passwords, the 24-word recovery phrase, and recovery codes will only be shown on this desktop during final setup and should never be relayed through Telegram, WhatsApp, OpenClaw, screenshots, or any remote chat channel.'
       : '<strong>Background capture already started.</strong> DataMoat is already collecting supported local records on this machine. Passwords, the 24-word recovery phrase, and recovery codes will only be shown on this desktop during final setup and should never be relayed through Telegram, WhatsApp, OpenClaw, screenshots, or any remote chat channel.';
   }
-  if (!_touchIdAvailable) {
-    _passwordRequired = true;
-    _passwordEnabled = true;
-    _touchIdEnabled = false;
-    document.getElementById('touchid-copy').innerHTML = touchIdReason
-      ? 'Touch ID with <strong>Apple Secure Enclave</strong> is unavailable right now. <span style=\"opacity:.82\">' + esc(touchIdReason) + '</span>'
-      : 'Touch ID with <strong>Apple Secure Enclave</strong> is not available on this Mac, so this option is disabled.';
-  }
+  setTouchIdAvailability(!!d.touchIdAvailable, typeof d.touchIdReason === 'string' ? d.touchIdReason : '', true);
   renderMethodCards();
   updatePwUI();
+  scheduleTouchIdRefresh();
 }
 init();
 
-window.addEventListener('focus', () => { void syncSetupRoute(false); });
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden) void syncSetupRoute(false);
+window.addEventListener('focus', () => {
+  void syncSetupRoute(false);
+  void refreshTouchIdAvailability(true);
 });
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) {
+    void syncSetupRoute(false);
+    void refreshTouchIdAvailability(true);
+  }
+});
+
+function setTouchIdAvailability(available, reason, enableIfAvailable) {
+  _touchIdAvailable = !!available;
+  _touchIdReason = reason || '';
+  const copy = document.getElementById('touchid-copy');
+  if (_touchIdAvailable) {
+    if (enableIfAvailable && !_touchIdUserTouched) {
+      _touchIdEnabled = true;
+    }
+    copy.innerHTML = 'Daily unlock on this Mac using <strong>Apple Secure Enclave</strong>. The Touch ID private key stays inside Apple hardware and is used to release vault access on this Mac only.';
+  } else {
+    _passwordRequired = true;
+    _passwordEnabled = true;
+    _touchIdEnabled = false;
+    copy.innerHTML = _touchIdReason
+      ? 'Touch ID with <strong>Apple Secure Enclave</strong> is unavailable right now. <span style=\"opacity:.82\">' + esc(_touchIdReason) + '</span>'
+      : 'Touch ID with <strong>Apple Secure Enclave</strong> is not available on this Mac, so this option is disabled.';
+  }
+}
+
+async function refreshTouchIdAvailability(enableIfAvailable = false) {
+  try {
+    const r = await apiFetch('/api/auth/touchid-available');
+    const d = await r.json();
+    setTouchIdAvailability(!!d.available, typeof d.reason === 'string' ? d.reason : '', enableIfAvailable);
+    renderMethodCards();
+    updatePwUI();
+    if (_touchIdAvailable && _touchIdRefreshTimer) {
+      clearTimeout(_touchIdRefreshTimer);
+      _touchIdRefreshTimer = 0;
+    }
+  } catch {}
+}
+
+function scheduleTouchIdRefresh() {
+  if (_touchIdAvailable || _touchIdRefreshAttempts >= 8) return;
+  if (_touchIdRefreshTimer) clearTimeout(_touchIdRefreshTimer);
+  const delay = _touchIdRefreshAttempts === 0 ? 750 : 2000;
+  _touchIdRefreshTimer = window.setTimeout(async () => {
+    _touchIdRefreshTimer = 0;
+    _touchIdRefreshAttempts += 1;
+    await refreshTouchIdAvailability(true);
+    scheduleTouchIdRefresh();
+  }, delay);
+}
 
 function setOff(id, off) { document.getElementById(id).dataset.off = off ? '1' : '0'; }
 function isOff(id) { return document.getElementById(id).dataset.off === '1'; }
@@ -2331,9 +2377,9 @@ function renderMethodCards() {
   tiState.className = 'method-switch touchid ' + (_touchIdAvailable ? (_touchIdEnabled ? 'enabled' : 'disabled') : 'unavailable');
   if (pwStateLabel) pwStateLabel.textContent = _passwordRequired ? 'Required' : (_passwordEnabled ? 'On' : 'Off');
   if (tiStateLabel) tiStateLabel.textContent = _touchIdAvailable ? (_touchIdEnabled ? 'On' : 'Off') : 'N/A';
-  tiCard.style.display = _touchIdAvailable ? '' : 'none';
+  tiCard.style.display = '';
   touchInfo.style.display = _touchIdAvailable ? '' : 'none';
-  pwState.style.display = _touchIdAvailable ? '' : 'none';
+  pwState.style.display = '';
   methodsLabel.textContent = _touchIdAvailable
     ? 'Choose at least one local unlock method to enable'
     : 'Set a local password to unlock this vault';
@@ -2348,6 +2394,7 @@ function renderMethodCards() {
 function toggleMethod(kind) {
   if (kind === 'password' && _passwordRequired) return;
   if (kind === 'touchid' && !_touchIdAvailable) return;
+  if (kind === 'touchid') _touchIdUserTouched = true;
   const current = kind === 'password' ? _passwordEnabled : _touchIdEnabled;
   const other = kind === 'password' ? _touchIdEnabled : _passwordEnabled;
   if (current && !other) {
@@ -2465,7 +2512,8 @@ function validateStep1(showErrors) {
   return true;
 }
 
-function goToStep2() {
+async function goToStep2() {
+  await refreshTouchIdAvailability(true);
   if (!validateStep1(true)) return;
   _password = document.getElementById('pw-input').value;
   setStep(2);

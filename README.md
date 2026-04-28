@@ -1,6 +1,6 @@
 # DataMoat
 
-[![Version](https://img.shields.io/badge/version-0.1.8-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-0.1.10-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -50,7 +50,7 @@ DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work record
 |---|---|---|
 | **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.8-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
+| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.10-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
 | **Windows** | In preparation | Public Windows release path is being prepared; follow repository updates for availability |
 
 ### Sources
@@ -113,7 +113,7 @@ Source install on macOS and Linux is available now. A signed / notarized Apple S
 
 ### AI-Assisted Install
 
-For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.8-macos-arm64.dmg).
+For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.10-macos-arm64.dmg).
 
 You can ask Claude or Codex to install DataMoat from this repository for you when you are looking at the target desktop.
 

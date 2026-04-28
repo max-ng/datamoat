@@ -17,6 +17,7 @@ import {
 import { extractClaudeLine, extractClaudeModel } from './extractors/claude'
 import { extractCodexLine, sessionIdFromPath as codexSessionIdFromPath } from './extractors/codex'
 import { extractOpenclawLine } from './extractors/openclaw'
+import { detectInstallContext } from './install-context'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from './logging'
 import { buildSessionUid, sourceAccountFromPath } from './session-identity'
 
@@ -175,6 +176,9 @@ const WATCHER_INITIAL_QUEUE_TIMEOUT_MS = nonNegativeTimeoutMs(process.env.DATAMO
 const WATCHER_YIELD_EVERY_LINES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_YIELD_EVERY_LINES, 100)
 const WATCHER_MAX_BATCH_BYTES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_MAX_BATCH_BYTES, 512 * 1024)
 const WATCHER_MAX_RECORD_BYTES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_MAX_RECORD_BYTES, 32 * 1024 * 1024)
+const WATCHER_POLL_INTERVAL_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_POLL_INTERVAL_MS, 2_000)
+const WATCHER_BINARY_POLL_INTERVAL_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_BINARY_POLL_INTERVAL_MS, 5_000)
+const WATCHER_USE_POLLING = watcherUsePollingDefault()
 
 type StartupPhaseStatus = 'completed' | 'timed_out'
 
@@ -186,6 +190,28 @@ function positiveTimeoutMs(value: string | undefined, fallback: number): number 
 function nonNegativeTimeoutMs(value: string | undefined, fallback: number): number {
   const parsed = value ? Number(value) : fallback
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
+}
+
+function booleanEnv(value: string | undefined): boolean | null {
+  if (value === undefined) return null
+  const normalized = value.trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false
+  return null
+}
+
+function watcherUsePollingDefault(): boolean {
+  const override = booleanEnv(process.env.DATAMOAT_WATCHER_USE_POLLING)
+  if (override !== null) return override
+
+  try {
+    // macOS FSEvents can miss append notifications for packaged LaunchAgent
+    // processes after login/restart. Polling still uses the same capture path;
+    // it only changes how file changes are detected.
+    return process.platform === 'darwin' && detectInstallContext().mode === 'packaged'
+  } catch {
+    return false
+  }
 }
 
 async function yieldToEventLoop(): Promise<void> {
@@ -446,13 +472,29 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
       }
 
       const watchPath = path.join(basePath, pattern)
-      log('watching', { source: src })
-      updateHealth(`watcher:${src}`, { watching: true, lastStartedAt: new Date().toISOString() })
+      const watcherBackend = WATCHER_USE_POLLING ? 'polling' : 'native'
+      log('watching', { source: src, backend: watcherBackend })
+      updateHealth(`watcher:${src}`, {
+        watching: true,
+        lastStartedAt: new Date().toISOString(),
+        watchBackend: watcherBackend,
+        watchRoot: basePath,
+        watchPattern: pattern,
+        ...(WATCHER_USE_POLLING
+          ? {
+              pollIntervalMs: WATCHER_POLL_INTERVAL_MS,
+              binaryPollIntervalMs: WATCHER_BINARY_POLL_INTERVAL_MS,
+            }
+          : {}),
+      })
 
       const watcher = chokidar.watch(watchPath, {
         persistent: true,
         ignoreInitial: false,   // process existing files on startup
-        usePolling: false,
+        usePolling: WATCHER_USE_POLLING,
+        interval: WATCHER_POLL_INTERVAL_MS,
+        binaryInterval: WATCHER_BINARY_POLL_INTERVAL_MS,
+        alwaysStat: true,
         awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
       })
       activeWatchers.push(watcher)
@@ -462,8 +504,8 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
       }))
 
       watcher
-        .on('add', filePath => queueProcessFile(filePath, src))
-        .on('change', filePath => queueProcessFile(filePath, src))
+        .on('add', filePath => queueProcessFile(filePath, src, 'add'))
+        .on('change', filePath => queueProcessFile(filePath, src, 'change'))
         .on('error', err => {
           writeLog('error', 'watcher', 'watcher_error', { source: src, error: safeError(err) })
           updateHealth(`watcher:${src}`, { lastErrorAt: new Date().toISOString(), lastError: safeError(err) })
@@ -500,7 +542,13 @@ export async function stopWatchers(): Promise<void> {
   }
 }
 
-function queueProcessFile(filePath: string, source: Source): void {
+function queueProcessFile(filePath: string, source: Source, event: 'add' | 'change'): void {
+  updateHealth(`watcher:${source}`, {
+    lastEventAt: new Date().toISOString(),
+    lastEvent: event,
+    lastEventFile: path.basename(filePath),
+  })
+
   processQueue = processQueue
     .then(async () => {
       await yieldToEventLoop()
@@ -524,7 +572,23 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
     const savedOffset = offsets[offsetKey]?.offset ?? 0
     const fileSize = stat.size
 
-    if (fileSize <= savedOffset) return  // nothing new
+    updateHealth(`watcher:${source}`, {
+      lastProcessAttemptAt: new Date().toISOString(),
+      lastProcessAttemptFile: path.basename(filePath),
+      lastProcessAttemptFileSize: fileSize,
+      lastProcessAttemptOffset: savedOffset,
+    })
+
+    if (fileSize <= savedOffset) {
+      updateHealth(`watcher:${source}`, {
+        lastNoopAt: new Date().toISOString(),
+        lastNoopFile: path.basename(filePath),
+        lastNoopReason: 'file_size_at_or_below_offset',
+        lastNoopFileSize: fileSize,
+        lastNoopOffset: savedOffset,
+      })
+      return  // nothing new
+    }
 
     const batch = readFileBatch(filePath, savedOffset, fileSize)
     if (batch.skippedOversizedRecord) {

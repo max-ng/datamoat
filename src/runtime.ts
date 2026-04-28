@@ -57,6 +57,18 @@ export function launcherEnvForScripts(): NodeJS.ProcessEnv {
   return env
 }
 
+function launcherEnvForDaemon(): NodeJS.ProcessEnv {
+  const env = launcherEnvForScripts()
+  // LaunchAgent-only state must not leak into the detached daemon child. The
+  // daemon is a Node-mode process, not another tray-only Electron instance.
+  delete env.DATAMOAT_TRAY_ONLY
+  delete env.XPC_SERVICE_NAME
+  return {
+    ...env,
+    DATAMOAT_DAEMON: '1',
+  }
+}
+
 function launcherNeedsElectronNodeMode(launcher: string): boolean {
   const resolvedLauncher = path.resolve(launcher)
   if (process.versions.electron && resolvedLauncher === path.resolve(process.execPath)) {
@@ -328,7 +340,7 @@ export async function ensureDaemonRunning(): Promise<{ pid: number | null; port:
         {
           detached: true,
           stdio: 'ignore',
-          env: { ...launcherEnvForScripts(), DATAMOAT_DAEMON: '1' },
+          env: launcherEnvForDaemon(),
         },
       )
       daemon.unref()

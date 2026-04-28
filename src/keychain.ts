@@ -104,13 +104,22 @@ function execTouchId(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(helperPath, args, { timeout: 30000 }, (err, stdout, stderr) => {
       if (err) {
-        const wrapped = Object.assign(new Error(stderr?.trim() || 'touchid helper failed'), { cause: err })
+        const detail = stderr?.trim()
+          || [err.message, (err as NodeJS.ErrnoException & { signal?: string }).signal ? `signal ${(err as NodeJS.ErrnoException & { signal?: string }).signal}` : '']
+            .filter(Boolean)
+            .join(' · ')
+          || 'touchid helper failed'
+        const wrapped = Object.assign(new Error(detail), { cause: err })
         reject(wrapped)
         return
       }
       resolve(String(stdout || '').trim())
     })
   })
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 function resolveTouchIdHelperPath(): string {
@@ -136,9 +145,18 @@ export async function secureEnclaveStatus(): Promise<SecureEnclaveStatus> {
   if (detectInstallContext().mode !== 'packaged') {
     return { available: false, reason: TOUCHID_DMG_ONLY_REASON }
   }
+  let lastError: unknown = null
   try {
-    await execTouchId(['--check'])
-    return { available: true }
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await execTouchId(['--check'])
+        return { available: true }
+      } catch (error) {
+        lastError = error
+        if (attempt < 2) await delay(250 * (attempt + 1))
+      }
+    }
+    throw lastError
   } catch (error) {
     return {
       available: false,

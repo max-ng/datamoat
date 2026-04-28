@@ -1,6 +1,6 @@
 {
   "name": "datamoat",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "description": "Automatically backs up Claude, Codex, and OpenClaw conversations",
   "license": "BUSL-1.1",
   "bin": {

@@ -19,6 +19,8 @@ import {
 import { ensurePackagedTrayLaunchAgent } from './launch-agent'
 
 let mainWindow: BrowserWindow | null = null
+let mainWindowCreation: Promise<void> | null = null
+let revealAfterWindowCreation = false
 let tray: Tray | null = null
 let allowedOrigin: string | null = null
 let quitRequested = false
@@ -610,6 +612,31 @@ function installWindowPolicy(win: BrowserWindow): void {
 }
 
 async function createMainWindow(showOnReady = true): Promise<void> {
+  if (showOnReady) revealAfterWindowCreation = true
+
+  const existing = usableWindow()
+  if (existing) {
+    if (showOnReady) {
+      setMacActivation('regular')
+      setDockVisibility(true)
+      ensureWindowUsable(existing)
+      if (existing.isMinimized()) existing.restore()
+      if (!existing.isVisible()) existing.show()
+      existing.focus()
+    }
+    return
+  }
+
+  if (mainWindowCreation) return mainWindowCreation
+
+  mainWindowCreation = createMainWindowInner(showOnReady).finally(() => {
+    mainWindowCreation = null
+    revealAfterWindowCreation = false
+  })
+  return mainWindowCreation
+}
+
+async function createMainWindowInner(showOnReady = true): Promise<void> {
   const runtime = await ensureDaemonRunning()
   allowedOrigin = `http://localhost:${runtime.port}`
   updateHealth('electron', { running: true, port: runtime.port, startedAt: new Date().toISOString() })
@@ -648,7 +675,7 @@ async function createMainWindow(showOnReady = true): Promise<void> {
   })
 
   win.once('ready-to-show', () => {
-    if (showOnReady) {
+    if (showOnReady || revealAfterWindowCreation) {
       setDockVisibility(true)
       win.show()
       if (process.platform === 'linux') {
