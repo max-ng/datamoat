@@ -1,6 +1,6 @@
 # DataMoat
 
-[![Version](https://img.shields.io/badge/version-0.1.10-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-0.1.11-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -11,15 +11,16 @@
 [![Claude Desktop Agent](https://img.shields.io/badge/Claude%20Desktop%20agent-supported-0F766E?style=flat-square)](#supported-today)
 [![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
+[![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
 
-> **Automatically captures Claude, Codex, and OpenClaw work records into an encrypted local vault.**
+> **Automatically captures Claude, Codex, OpenClaw, and Cursor work records into an encrypted local vault.**
 > Search past prompts, tool output, and locally available reasoning content while keeping your full record protected on your own machine.
 
-DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work records. It preserves searchable transcripts, prompts, tool output, locally available reasoning content, metadata, and attachments on the same machine, so your full AI work history stays reviewable, protected, and easier to hand off later.
+DataMoat is an encrypted local vault for Claude, Codex, OpenClaw, and Cursor work records. It preserves searchable transcripts, prompts, tool output, locally available reasoning content, metadata, and attachments on the same machine, so your full AI work history stays reviewable, protected, and easier to hand off later.
 
 ![DataMoat conversation search and session detail UI](.github/assets/screenshot.png)
 
-**Supported sources today:** Claude CLI, Codex CLI, Codex Mac app local sessions, Claude Desktop local-agent sessions on macOS, and supported local OpenClaw session records.  
+**Supported sources today:** Claude CLI, Codex CLI, Codex Mac app local sessions, Claude Desktop local-agent sessions on macOS, supported local OpenClaw session records, and supported local Cursor agent transcripts.
 **More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
 
 ## Why Install DataMoat
@@ -50,7 +51,7 @@ DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work record
 |---|---|---|
 | **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.10-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
+| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.11-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
 | **Windows** | In preparation | Public Windows release path is being prepared; follow repository updates for availability |
 
 ### Sources
@@ -62,6 +63,7 @@ DataMoat is an encrypted local vault for Claude, Codex, and OpenClaw work record
 | **Codex Mac app** | Supported | Captures supported local Codex Mac app session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
 | **Claude Desktop local-agent sessions (macOS)** | Supported | Supported local Claude Desktop agent session records when present |
 | **OpenClaw** | Supported | Supported local OpenClaw session transcripts and metadata |
+| **Cursor** | Supported | Captures readable local Cursor `agent-transcripts` JSONL records, including text and tool blocks when present |
 | **Claude attachments** | Supported | Encrypted image and supported file/PDF blocks |
 
 ## Security At A Glance
@@ -113,7 +115,7 @@ Source install on macOS and Linux is available now. A signed / notarized Apple S
 
 ### AI-Assisted Install
 
-For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.10-macos-arm64.dmg).
+For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.11-macos-arm64.dmg).
 
 You can ask Claude or Codex to install DataMoat from this repository for you when you are looking at the target desktop.
 
@@ -187,7 +189,7 @@ Live git source installs support in-place source updates. Packaged macOS install
 
 DataMoat backs up supported local transcript files that are already present on your device and already accessible to you.
 
-It does not grant additional rights to content or source services. You remain responsible for complying with the terms, policies, plan restrictions, and internal rules that apply to Claude, Codex, OpenClaw, and any other source service you use.
+It does not grant additional rights to content or source services. You remain responsible for complying with the terms, policies, plan restrictions, and internal rules that apply to Claude, Codex, OpenClaw, Cursor, and any other source service you use.
 
 ## Enterprise
 

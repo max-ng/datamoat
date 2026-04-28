@@ -12,6 +12,7 @@ import {
   OFFSETS_FILE,
   SESSIONS_FILE,
   PUBLIC_STATUS_FILE,
+  ALL_SOURCES,
 } from './config'
 import {
   decryptBytesForSession,
@@ -142,14 +143,8 @@ export function ensureDirs(): void {
     VAULT_DIR,
     ATTACHMENTS_DIR,
     RAW_DIR,
-    path.join(VAULT_DIR, 'claude-cli'),
-    path.join(VAULT_DIR, 'codex-cli'),
-    path.join(VAULT_DIR, 'claude-app'),
-    path.join(VAULT_DIR, 'openclaw'),
-    path.join(RAW_DIR, 'claude-cli'),
-    path.join(RAW_DIR, 'codex-cli'),
-    path.join(RAW_DIR, 'claude-app'),
-    path.join(RAW_DIR, 'openclaw'),
+    ...ALL_SOURCES.map(source => path.join(VAULT_DIR, source)),
+    ...ALL_SOURCES.map(source => path.join(RAW_DIR, source)),
   ]
   let firstError: Error | null = null
   for (const dir of dirs) {
@@ -486,8 +481,7 @@ async function readNonEmptyLinePage(filePath: string, offset: number, limit: num
 
 export async function encryptVaultFiles(): Promise<void> {
   if (!hasVaultSession()) return
-  const sources = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw']
-  for (const source of sources) {
+  for (const source of ALL_SOURCES) {
     const dir = path.join(VAULT_DIR, source)
     if (!fs.existsSync(dir)) continue
     for (const file of fs.readdirSync(dir)) {

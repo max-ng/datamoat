@@ -17,6 +17,7 @@ import {
 import { extractClaudeLine, extractClaudeModel } from './extractors/claude'
 import { extractCodexLine, sessionIdFromPath as codexSessionIdFromPath } from './extractors/codex'
 import { extractOpenclawLine } from './extractors/openclaw'
+import { extractCursorLine, sessionIdFromPath as cursorSessionIdFromPath } from './extractors/cursor'
 import { detectInstallContext } from './install-context'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from './logging'
 import { buildSessionUid, sourceAccountFromPath } from './session-identity'
@@ -40,6 +41,14 @@ function peekSessionId(source: Source, obj: unknown): string {
   if (source === 'openclaw') {
     if (o.type === 'session') return (o.id as string) || ''
     return ''
+  }
+  if (source === 'cursor') {
+    return (o.sessionId as string)
+      || (o.session_id as string)
+      || (o.conversationId as string)
+      || (o.composerId as string)
+      || (o.chatId as string)
+      || ''
   }
   return ''
 }
@@ -83,6 +92,7 @@ const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
   'claude-app': new Set(['user', 'assistant', 'system', 'summary']),
   'codex-cli': new Set(['session_meta', 'turn_context', 'response_item']),
   'openclaw': new Set(['session', 'message', 'custom', 'thinking_level_change']),
+  'cursor': new Set(['message', 'user', 'assistant', 'system', 'tool']),
 }
 
 // Known top-level keys per source — same as above but for attribute drift.
@@ -93,6 +103,7 @@ const KNOWN_TOPLEVEL_KEYS: Record<Source, Set<string>> = {
   'claude-app': new Set(['type', 'uuid', 'sessionId', 'session_id', 'version', 'claude_code_version', 'timestamp', '_audit_timestamp', '_audit_hmac', 'message', 'cwd', 'parent_tool_use_id', 'model', 'client_platform']),
   'codex-cli': new Set(['type', 'timestamp', 'payload']),
   'openclaw': new Set(['type', 'id', 'timestamp', 'cwd', 'message', 'customType', 'data']),
+  'cursor': new Set(['type', 'id', 'sessionId', 'session_id', 'conversationId', 'composerId', 'chatId', 'role', 'message', 'content', 'text', 'timestamp', 'createdAt', 'updatedAt', 'model', 'usage', 'cwd', 'sourceClient', 'appVersion', 'cursorVersion']),
 }
 
 type DriftBuckets = {
@@ -352,7 +363,7 @@ function defaultState(source: Source): FileState {
     sourceClient: undefined,
     appVersion: '',
     model: 'unknown',
-    modelProvider: source.startsWith('codex') ? 'openai' : source === 'openclaw' ? 'openai/anthropic' : 'anthropic',
+    modelProvider: source.startsWith('codex') ? 'openai' : source === 'openclaw' || source === 'cursor' ? 'openai/anthropic' : 'anthropic',
     cwd: '',
     firstTimestamp: '',
     lastTimestamp: '',
@@ -364,7 +375,11 @@ function defaultState(source: Source): FileState {
 async function hydrateState(filePath: string, source: Source, offsets: OffsetState): Promise<FileState> {
   const state = defaultState(source)
   const saved = offsets[filePath]
-  const guessedSessionId = source === 'codex-cli' ? codexSessionIdFromPath(filePath) : saved?.sessionId
+  const guessedSessionId = source === 'codex-cli'
+    ? codexSessionIdFromPath(filePath)
+    : source === 'cursor'
+      ? cursorSessionIdFromPath(filePath)
+      : saved?.sessionId
 
   if (saved?.sessionId) state.sessionId = saved.sessionId
   if (guessedSessionId && !state.sessionId) state.sessionId = guessedSessionId
@@ -960,6 +975,25 @@ async function processLine(
     if (result.modelProvider) state.modelProvider = result.modelProvider
     if (result.cwd && !state.cwd) state.cwd = result.cwd
     if (result.message) {
+      decorateWithSessionState(result.message, state)
+      updateStateFromMessage(state, result.message)
+      out.push(result.message)
+    }
+    return
+  }
+
+  if (source === 'cursor') {
+    const result = extractCursorLine(line, filePath)
+    if (!result) return
+    if (result.sessionId && !state.sessionId) state.sessionId = result.sessionId
+    if (result.sourceClient && !state.sourceClient) state.sourceClient = result.sourceClient
+    if (result.appVersion && !state.appVersion) state.appVersion = result.appVersion
+    if (result.model && state.model === 'unknown') state.model = result.model
+    if (result.cwd && !state.cwd) state.cwd = result.cwd
+    if (result.message) {
+      if (captureAttachments) {
+        await attachRawImages(source, filePath, state, result.message, result.rawImages)
+      }
       decorateWithSessionState(result.message, state)
       updateStateFromMessage(state, result.message)
       out.push(result.message)

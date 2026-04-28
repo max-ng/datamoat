@@ -800,6 +800,14 @@ function promptInstallChoice(state: DualInstallState): InstallPreference {
 
 function resolveInstallChoiceOnStartup(): 'continue' | 'quit' {
   if (process.platform !== 'darwin') return 'continue'
+  if (!app.isReady()) {
+    updateHealth('electron', {
+      installChoiceDeferredUntilReady: true,
+      installChoiceDeferredAt: new Date().toISOString(),
+    })
+    return 'continue'
+  }
+
   const state = detectDualInstallState()
   if (!state.eligible || !state.hasBoth) return 'continue'
 

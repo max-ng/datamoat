@@ -23,9 +23,19 @@ function userHomeFromPath(filePath: string): string | null {
 }
 
 export function sourceAccountFromPath(source: Source, filePath: string): string | undefined {
-  if (source !== 'openclaw') return undefined
   const normalized = path.resolve(filePath)
   const user = usernameFromPath(normalized) ?? 'unknown'
+
+  if (source === 'cursor') {
+    const marker = `${path.sep}.cursor${path.sep}projects${path.sep}`
+    const markerIdx = normalized.indexOf(marker)
+    if (markerIdx === -1) return user
+    const afterRoot = normalized.slice(markerIdx + marker.length)
+    const parts = afterRoot.split(path.sep).filter(Boolean)
+    return parts[0] ? `${user}/${parts[0]}` : user
+  }
+
+  if (source !== 'openclaw') return undefined
   const userHome = userHomeFromPath(normalized)
   const marker = `${path.sep}.openclaw${path.sep}`
   const markerIdx = normalized.indexOf(marker)

@@ -18,6 +18,7 @@
     --claude:    #cc7830;
     --codex:     #3888e0;
     --openclaw:  #a060d0;
+    --cursor:    #d8b640;
     --app:       #20a840;
     --think-bg:  #0a1208;
     --think-border: #1a3020;
@@ -114,6 +115,7 @@
   .filter-btn[data-src="codex-cli"].active   { background: #081828; color: var(--codex); border-color: var(--codex); }
   .filter-btn[data-src="claude-app"].active  { background: #081808; color: var(--app); border-color: var(--app); }
   .filter-btn[data-src="openclaw"].active    { background: #180828; color: var(--openclaw); border-color: var(--openclaw); }
+  .filter-btn[data-src="cursor"].active      { background: #282408; color: var(--cursor); border-color: var(--cursor); }
 
   .stat {
     font-family: var(--font-mono);
@@ -378,6 +380,7 @@
   .source-dot.codex-cli   { background: var(--codex); }
   .source-dot.claude-app  { background: var(--app); }
   .source-dot.openclaw    { background: var(--openclaw); }
+  .source-dot.cursor      { background: var(--cursor); }
 
   .session-model {
     font-family: var(--font-mono);
@@ -495,6 +498,7 @@
   .badge.codex-cli   { color: var(--codex); border-color: var(--codex); background: #08182820; }
   .badge.claude-app  { color: var(--app); border-color: var(--app); background: #08180820; }
   .badge.openclaw    { color: var(--openclaw); border-color: var(--openclaw); background: #18082820; }
+  .badge.cursor      { color: var(--cursor); border-color: var(--cursor); background: #28240820; }
   /* ── Messages ── */
   .message { margin-bottom: 20px; }
   .message.tool,
@@ -1056,6 +1060,7 @@
   .backup-path-dot.codex-cli { background: var(--codex); }
   .backup-path-dot.claude-app { background: var(--app); }
   .backup-path-dot.openclaw { background: var(--openclaw); }
+  .backup-path-dot.cursor { background: var(--cursor); }
   .backup-path-items {
     display: grid;
     gap: 8px;
@@ -1119,6 +1124,7 @@
     <button class="filter-btn" data-src="codex-cli">codex</button>
     <button class="filter-btn" data-src="claude-app">claude app</button>
     <button class="filter-btn" data-src="openclaw">openclaw</button>
+    <button class="filter-btn" data-src="cursor">cursor</button>
   </div>
   <div class="stat" id="stat">loading…</div>
   <div class="header-actions">
@@ -1294,10 +1300,11 @@ const SOURCE_LABELS = {
   'codex-cli': 'Codex',
   'claude-app': 'Claude App',
   'openclaw': 'OpenClaw',
+  'cursor': 'Cursor',
 }
 
 function sessionSourceLabel(session) {
-  if (session?.source === 'codex-cli' && session?.sourceClient) {
+  if ((session?.source === 'codex-cli' || session?.source === 'cursor') && session?.sourceClient) {
     return session.sourceClient
   }
   return SOURCE_LABELS[session?.source] || session?.source || 'unknown'
@@ -2520,6 +2527,13 @@ function sourceRootFromOriginalPath(source, originalPath) {
     if (after[0] === 'cron') return `${normalized.slice(0, idx + marker.length - 1)}/cron/runs`
     return normalized.slice(0, idx + marker.length - 1)
   }
+  if (source === 'cursor') {
+    const marker = '/.cursor/projects/'
+    const idx = normalized.indexOf(marker)
+    if (idx === -1) return null
+    const after = normalized.slice(idx + marker.length).split('/').filter(Boolean)
+    return after[0] ? `${normalized.slice(0, idx + marker.length - 1)}/${after[0]}` : normalized.slice(0, idx + marker.length - 1)
+  }
   return null
 }
 
@@ -2552,7 +2566,7 @@ function renderBackupPathsPanel() {
     return
   }
 
-  const sourceOrder = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw']
+  const sourceOrder = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw', 'cursor']
   const html = sourceOrder
     .filter(source => groups.has(source))
     .map(source => {

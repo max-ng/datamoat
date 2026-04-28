@@ -59,6 +59,7 @@ import { bootstrapCaptureSummary, loadBootstrapCaptureState, preflightBootstrapC
 import { extractClaudeLine } from '../extractors/claude'
 import { extractCodexLine } from '../extractors/codex'
 import { extractOpenclawLine } from '../extractors/openclaw'
+import { extractCursorLine } from '../extractors/cursor'
 import { detectInstallContext } from '../install-context'
 import { updateReleasesUrl } from '../update-channel'
 
@@ -1717,7 +1718,9 @@ function extractThinkingMessageFromRawRecord(source: Source, raw: unknown): Mess
     ? extractCodexLine(rawLine)
     : source === 'openclaw'
       ? extractOpenclawLine(rawLine)
-      : extractClaudeLine(rawLine)
+      : source === 'cursor'
+        ? extractCursorLine(rawLine)
+        : extractClaudeLine(rawLine)
 
   if (!extracted?.message) return null
   return messageHasThinkingBlock(extracted.message) ? extracted.message : null

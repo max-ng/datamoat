@@ -40,7 +40,40 @@ export const CONFIG_FILE  = path.join(DATAMOAT_ROOT, 'config.json')
 export const AUTH_FILE    = path.join(DATAMOAT_ROOT, 'auth.json')
 export const BOOTSTRAP_CAPTURE_DIR = path.join(DATAMOAT_ROOT, 'bootstrap-capture')
 
-export const ALL_SOURCES: readonly Source[] = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw']
+export const ALL_SOURCES: readonly Source[] = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw', 'cursor']
+
+function discoverClaudeAppRoots(): string[] {
+  if (process.platform !== 'win32') {
+    return [
+      path.join(USER_HOME, 'Library', 'Application Support', 'Claude', 'local-agent-mode-sessions'),
+    ]
+  }
+
+  const roots = new Set<string>([
+    path.join(USER_HOME, 'AppData', 'Roaming', 'Claude', 'local-agent-mode-sessions'),
+    path.join(USER_HOME, 'AppData', 'Local', 'Claude', 'local-agent-mode-sessions'),
+  ])
+
+  const packageRoot = path.join(USER_HOME, 'AppData', 'Local', 'Packages')
+  try {
+    for (const entry of fs.readdirSync(packageRoot, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue
+      if (!/^Claude_/i.test(entry.name)) continue
+      roots.add(path.join(
+        packageRoot,
+        entry.name,
+        'LocalCache',
+        'Roaming',
+        'Claude',
+        'local-agent-mode-sessions',
+      ))
+    }
+  } catch {
+    // Missing Packages directory is normal on non-Store installs.
+  }
+
+  return Array.from(roots)
+}
 
 const STATIC_WATCH_PATHS: Record<Exclude<Source, 'openclaw'>, string[]> = {
   'claude-cli': envRoots('DATAMOAT_CLAUDE_CLI_ROOTS', [
@@ -49,8 +82,9 @@ const STATIC_WATCH_PATHS: Record<Exclude<Source, 'openclaw'>, string[]> = {
   'codex-cli': envRoots('DATAMOAT_CODEX_CLI_ROOTS', [
     path.join(USER_HOME, '.codex', 'sessions'),
   ]),
-  'claude-app': envRoots('DATAMOAT_CLAUDE_APP_ROOTS', [
-    path.join(USER_HOME, 'Library', 'Application Support', 'Claude', 'local-agent-mode-sessions'),
+  'claude-app': envRoots('DATAMOAT_CLAUDE_APP_ROOTS', discoverClaudeAppRoots()),
+  'cursor': envRoots('DATAMOAT_CURSOR_ROOTS', [
+    path.join(USER_HOME, '.cursor', 'projects'),
   ]),
 }
 
@@ -116,6 +150,7 @@ export const GLOB_PATTERNS = {
   'codex-cli':   '**/*.jsonl',
   'claude-app':  '**/audit.jsonl',
   'openclaw':    '**/*.jsonl',
+  'cursor':      '**/agent-transcripts/**/*.jsonl',
 } as const
 
 export const UI_PORT_RANGE = { min: 49200, max: 49300 }

@@ -187,7 +187,7 @@ function hasBackgroundCaptureConfigured(): boolean {
 
 program
   .name('datamoat')
-  .description('Automatically backs up Claude, Codex, and OpenClaw conversations')
+  .description('Automatically backs up Claude, Codex, OpenClaw, and Cursor conversations')
   .version(packageVersion())
   .action(openUI)  // default: open UI
 

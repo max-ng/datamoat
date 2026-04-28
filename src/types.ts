@@ -1,4 +1,4 @@
-export type Source = 'claude-cli' | 'codex-cli' | 'claude-app' | 'openclaw'
+export type Source = 'claude-cli' | 'codex-cli' | 'claude-app' | 'openclaw' | 'cursor'
 
 export interface ContentBlock {
   type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'image' | 'file' | 'other'
