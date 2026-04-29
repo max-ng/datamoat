@@ -122,6 +122,8 @@ type SetupInitPayload = {
   secret: string
   mnemonic: string
   qrDataUrl: string
+  platform: NodeJS.Platform
+  touchIdSupportedPlatform: boolean
   touchIdAvailable: boolean
   touchIdReason?: string
   bootstrapCapture: ReturnType<typeof bootstrapCaptureSummary>
@@ -140,6 +142,23 @@ function renderAboutMarkdown(markdown: string, version: string): string {
   return markdown
     .replace(/^# DataMoat(?: v[^\n]+)?$/m, '# DataMoat')
     .replace(/badge\/version-[^-]+-0F766E\?style=flat-square/gi, `badge/version-${version}-0F766E?style=flat-square`)
+}
+
+function readAboutMarkdown(): string {
+  const candidates = [
+    path.join(__dirname, '..', '..', 'README.public.md'),
+    path.join(__dirname, '..', '..', 'README.md'),
+  ]
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return fs.readFileSync(candidate, 'utf8')
+  }
+  return [
+    '# DataMoat',
+    '',
+    'DataMoat backs up supported local AI conversation records into an encrypted local vault.',
+    '',
+    'This packaged build does not include the full README file. Open Settings to check the current update path, or use the project release page for the latest packaged installer.',
+  ].join('\n')
 }
 
 export function hasAuthenticatedUiSession(): boolean {
@@ -201,6 +220,8 @@ async function setupInitPayload(): Promise<SetupInitPayload> {
       secret: setup.secret,
       mnemonic: setup.mnemonic,
       qrDataUrl,
+      platform: process.platform,
+      touchIdSupportedPlatform: IS_MAC,
       touchIdAvailable: touchIdStatus.available,
       touchIdReason: touchIdStatus.reason,
       bootstrapCapture: bootstrapCaptureSummary(),
@@ -820,7 +841,12 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   app.use(express.urlencoded({ extended: false }))
 
   app.get('/api/meta', (_req, res) => {
-    res.json({ pid: process.pid, route: isSetupDone() ? 'unlock' : 'setup' })
+    res.json({
+      pid: process.pid,
+      route: isSetupDone() ? 'unlock' : 'setup',
+      platform: process.platform,
+      touchIdSupportedPlatform: IS_MAC,
+    })
   })
 
   // ── Setup (first run only) ─────────────────────────────────────────────────
@@ -961,7 +987,12 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       })
       pendingSetup = null
       res.json(activationResponse(activation))
-    } catch {
+    } catch (error) {
+      writeLog('error', 'setup', 'setup_activate_failed', { error })
+      updateHealth('setup', {
+        lastErrorAt: new Date().toISOString(),
+        lastError: error instanceof Error ? error.message : String(error),
+      })
       const backgroundKeychainAccount = loadAuthConfig()?.backgroundKeychainAccount
       await lockVault()
       await stopBackgroundCapture()
@@ -1536,16 +1567,13 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
   app.get('/about', requireAuth, (_req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
-    const publicReadmePath = path.join(__dirname, '..', '..', 'README.public.md')
-    const readmePath = fs.existsSync(publicReadmePath)
-      ? publicReadmePath
-      : path.join(__dirname, '..', '..', 'README.md')
     try {
       const version = appVersion()
-      const md = renderAboutMarkdown(require('fs').readFileSync(readmePath, 'utf8'), version)
+      const md = renderAboutMarkdown(readAboutMarkdown(), version)
       res.send(markdownPageHTML('About', md, version))
-    } catch {
-      res.status(404).send('README not found')
+    } catch (error) {
+      writeLog('error', 'ui', 'about_render_failed', { error })
+      res.status(500).send(markdownPageHTML('About', '# DataMoat\n\nAbout information is temporarily unavailable.', appVersion()))
     }
   })
 
@@ -2221,6 +2249,7 @@ let _setupNonce = '', _secret = '', _mnemonic = '', _password = '', _enrollTotp 
 let _touchIdAvailable = false, _passwordEnabled = true, _touchIdEnabled = false;
 let _setupCommitted = false;
 let _passwordRequired = true;
+let _touchIdSupportedPlatform = true;
 let _touchIdReason = '';
 let _touchIdUserTouched = false;
 let _touchIdRefreshAttempts = 0;
@@ -2281,6 +2310,7 @@ async function init() {
   ).join('');
   document.getElementById('qr-img').src = d.qrDataUrl;
   document.getElementById('totp-secret-display').textContent = d.secret;
+  _touchIdSupportedPlatform = d.touchIdSupportedPlatform !== false;
   if (d.bootstrapCapture && d.bootstrapCapture.enabled) {
     const banner = document.getElementById('bootstrap-capture-banner');
     const copy = document.getElementById('bootstrap-capture-copy');
@@ -2290,7 +2320,7 @@ async function init() {
       ? '<strong>Remote no-screen capture already started.</strong> DataMoat is already collecting supported local records on this machine. Passwords, the 24-word recovery phrase, and recovery codes will only be shown on this desktop during final setup and should never be relayed through Telegram, WhatsApp, OpenClaw, screenshots, or any remote chat channel.'
       : '<strong>Background capture already started.</strong> DataMoat is already collecting supported local records on this machine. Passwords, the 24-word recovery phrase, and recovery codes will only be shown on this desktop during final setup and should never be relayed through Telegram, WhatsApp, OpenClaw, screenshots, or any remote chat channel.';
   }
-  setTouchIdAvailability(!!d.touchIdAvailable, typeof d.touchIdReason === 'string' ? d.touchIdReason : '', true);
+  setTouchIdAvailability(_touchIdSupportedPlatform && !!d.touchIdAvailable, typeof d.touchIdReason === 'string' ? d.touchIdReason : '', true);
   renderMethodCards();
   updatePwUI();
   scheduleTouchIdRefresh();
@@ -2328,6 +2358,7 @@ function setTouchIdAvailability(available, reason, enableIfAvailable) {
 }
 
 async function refreshTouchIdAvailability(enableIfAvailable = false) {
+  if (!_touchIdSupportedPlatform) return;
   try {
     const r = await apiFetch('/api/auth/touchid-available');
     const d = await r.json();
@@ -2342,6 +2373,7 @@ async function refreshTouchIdAvailability(enableIfAvailable = false) {
 }
 
 function scheduleTouchIdRefresh() {
+  if (!_touchIdSupportedPlatform) return;
   if (_touchIdAvailable || _touchIdRefreshAttempts >= 8) return;
   if (_touchIdRefreshTimer) clearTimeout(_touchIdRefreshTimer);
   const delay = _touchIdRefreshAttempts === 0 ? 750 : 2000;
@@ -2375,6 +2407,18 @@ function renderMethodCards() {
   const methodsLabel = document.getElementById('unlock-methods-label');
 
   pwCard.className = 'method-card password' + (_passwordEnabled ? ' selected' : '') + (_passwordRequired ? ' locked' : '');
+  if (!_touchIdSupportedPlatform) {
+    tiCard.style.display = 'none';
+    touchInfo.style.display = 'none';
+    pwState.style.display = 'none';
+    methodsLabel.textContent = 'Set a local password to unlock this vault';
+    pwFields.classList.toggle('hidden', !_passwordEnabled);
+    pwInputWrap.classList.toggle('off', !_passwordEnabled);
+    pwConfirmWrap.classList.toggle('off', !_passwordEnabled);
+    document.getElementById('pw-input').disabled = !_passwordEnabled;
+    document.getElementById('pw-confirm').disabled = !_passwordEnabled;
+    return;
+  }
   tiCard.className = 'method-card touchid' + (_touchIdEnabled ? ' selected' : '') + (_touchIdAvailable ? '' : ' disabled');
   pwState.className = 'method-switch password ' + (_passwordRequired ? 'locked enabled' : (_passwordEnabled ? 'enabled' : 'disabled'));
   tiState.className = 'method-switch touchid ' + (_touchIdAvailable ? (_touchIdEnabled ? 'enabled' : 'disabled') : 'unavailable');

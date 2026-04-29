@@ -6,7 +6,7 @@ import { INSTALL_INFO_FILE } from './config'
 import { isBranchAllowed, isBranchNameSafe, isRemoteAllowed, remoteToDisplay } from './update-policy'
 
 export type InstallMode = 'source-copy' | 'source-dev' | 'packaged' | 'unknown'
-export type UpdateStrategy = 'source-git-pull' | 'source-manual-reinstall' | 'packaged-auto-update' | 'packaged-auto-unavailable' | 'unknown'
+export type UpdateStrategy = 'source-git-pull' | 'source-manual-reinstall' | 'packaged-auto-update' | 'packaged-manual-update' | 'packaged-auto-unavailable' | 'unknown'
 
 export type InstallInfo = {
   schemaVersion?: number
@@ -104,7 +104,9 @@ function packagedInstallAppPaths(info: InstallInfo | null): string[] {
 }
 
 function looksPackagedInstall(root: string): boolean {
-  return /\/Contents\/Resources\/app(?:\.asar)?$/.test(root)
+  const normalized = root.replace(/\\/g, '/')
+  return /\/Contents\/Resources\/app(?:\.asar)?$/.test(normalized)
+    || /\/resources\/app(?:\.asar)?$/i.test(normalized)
 }
 
 function normalizeMode(info: InstallInfo | null, root: string): InstallMode {
@@ -134,14 +136,20 @@ export function detectInstallContext(): InstallContext {
   if (mode === 'packaged') {
     return {
       mode,
-      updateStrategy: process.platform === 'darwin' ? 'packaged-auto-update' : 'packaged-auto-unavailable',
+      updateStrategy: process.platform === 'darwin'
+        ? 'packaged-auto-update'
+        : process.platform === 'win32'
+          ? 'packaged-manual-update'
+          : 'packaged-auto-unavailable',
       installInfo: info,
       root: null,
       sourceRoot,
       nodeBin,
       reason: process.platform === 'darwin'
         ? null
-        : 'packaged app updates are not implemented on this platform',
+        : process.platform === 'win32'
+          ? 'packaged Windows app updates use manual download and replace'
+          : 'packaged app updates are not implemented on this platform',
     }
   }
 

@@ -935,6 +935,31 @@
     line-height: 1.5;
     color: var(--muted);
   }
+  .manual-update-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: #0a1016;
+  }
+  .manual-update-row[hidden] { display: none; }
+  .manual-update-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    border: 1px solid rgba(0, 200, 160, 0.35);
+    background: rgba(0, 200, 160, 0.12);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 18px;
+    flex-shrink: 0;
+  }
   .settings-actions {
     display: flex;
     flex-wrap: wrap;
@@ -1202,6 +1227,13 @@
           <span class="switch-subtitle">Only live git source installs can update in place. Other installs stay on manual download for safety for now and will not auto-update directly.</span>
         </span>
       </button>
+      <div id="manual-update-row" class="manual-update-row" hidden>
+        <span class="manual-update-icon">↓</span>
+        <span class="switch-copy">
+          <span id="manual-update-title" class="switch-title">Manual Updates</span>
+          <span id="manual-update-subtitle" class="switch-subtitle">Download the latest Windows version and run it to upgrade.</span>
+        </span>
+      </div>
 
       <div class="settings-actions">
         <button id="update-check-btn" class="settings-btn" type="button">Check Now</button>
@@ -1563,7 +1595,7 @@ async function submitRecoveryPasswordReset() {
       if (typeof data.captureWarning === 'string' && data.captureWarning.trim()) {
         showNotice(data.captureWarning.trim())
       } else if (data.backgroundStarted === true) {
-        showNotice('Master password updated. Background capture is active on this Mac, including while the vault is locked.')
+        showNotice('Master password updated. Background capture is active on this computer, including while the vault is locked.')
       } else {
         showNotice('Master password updated. Future unlocks can use the new password.')
       }
@@ -2253,6 +2285,7 @@ function humanUpdateStrategy(strategy) {
     case 'source-git-pull': return 'automatic source updates'
     case 'source-manual-reinstall': return 'manual source reinstall only'
     case 'packaged-auto-update': return 'automatic packaged updates'
+    case 'packaged-manual-update': return 'manual packaged update'
     case 'packaged-auto-unavailable': return 'manual packaged upgrade only'
     case 'unknown': return 'unknown'
     default: return 'detecting…'
@@ -2269,7 +2302,7 @@ function normalizeUpdateStateForUi(state) {
     state.installMode === 'packaged'
     && state.supported === true
     && hasDesktopPackagedUpdateBridge()
-    && state.updateStrategy !== 'packaged-auto-update'
+    && state.updateStrategy === 'packaged-auto-unavailable'
   ) {
     return {
       ...state,
@@ -2295,6 +2328,9 @@ function autoUpdateToggleSubtitle() {
     return 'Available on this install and enabled by default. This keeps fixes and improvements current automatically.'
   }
   if (updateState.installMode === 'packaged') {
+    if (updateState.updateStrategy === 'packaged-auto-unavailable') {
+      return 'This packaged app can be upgraded manually from the latest release. Automatic packaged updates are not implemented on this platform yet.'
+    }
     return 'This packaged app uses the recommended release path. Automatic updates are only available after DataMoat is installed outside the mounted DMG.'
   }
   return 'Not active on this install. For safety for now, this copy will only open the latest download page. To enable in-place updates later, choose a live git source folder below and reinstall from it.'
@@ -2318,6 +2354,9 @@ function defaultUpdateMessage() {
   }
   if (normalized?.updateStrategy === 'packaged-auto-update') {
     return 'This packaged app can check signed release updates automatically. DataMoat downloads the new version first and then waits for you to update the app when you are ready.'
+  }
+  if (normalized?.updateStrategy === 'packaged-manual-update') {
+    return 'This app is working normally. This packaged app is the recommended install type. Use Download Latest Version to download and replace the app safely.'
   }
   if (normalized?.updateStrategy === 'packaged-auto-unavailable') {
     return 'This app is working normally. This packaged app is the recommended install type. Use Download Latest Version to get the newest release manually.'
@@ -2440,6 +2479,9 @@ function renderUpdatePanel() {
   const toggleButton = document.getElementById('update-toggle')
   const toggleTitle = document.querySelector('#update-toggle .switch-title')
   const toggleSubtitle = document.querySelector('#update-toggle .switch-subtitle')
+  const manualUpdateRow = document.getElementById('manual-update-row')
+  const manualUpdateTitle = document.getElementById('manual-update-title')
+  const manualUpdateSubtitle = document.getElementById('manual-update-subtitle')
   const installLatestButton = document.getElementById('update-install-latest-btn')
   const checkUpdateButton = document.getElementById('update-check-btn')
   const applyUpdateButton = document.getElementById('update-apply-btn')
@@ -2455,11 +2497,18 @@ function renderUpdatePanel() {
   const canAutoUpdate = installCanAutoUpdate(updateState)
   const isPackagedInstall = updateState?.installMode === 'packaged'
   const showAutoUpdateToggle = !isPackagedInstall || canAutoUpdate
+  const showManualUpdateRow = isPackagedInstall && !canAutoUpdate
   const showSourceControls = !isPackagedInstall
   const wantsAutoUpdate = updateSettings?.autoUpdateEnabled !== false
   setSwitchState(canAutoUpdate && wantsAutoUpdate, updatePanelBusy || !canAutoUpdate)
   if (toggleTitle) toggleTitle.textContent = canAutoUpdate ? 'Auto-update' : 'Auto-update unavailable'
   if (toggleSubtitle) toggleSubtitle.textContent = autoUpdateToggleSubtitle()
+  if (manualUpdateTitle) manualUpdateTitle.textContent = 'Manual Updates'
+  if (manualUpdateSubtitle) {
+    manualUpdateSubtitle.textContent = updateState?.updateStrategy === 'packaged-manual-update'
+      ? 'Download the latest Windows version, replace this app, and reopen DataMoat automatically. Signing can be added later to reduce Windows warnings.'
+      : 'Download the latest Windows version and run it to upgrade. Automatic Windows updates need a signed installer/updater and are not enabled in this build.'
+  }
   document.getElementById('update-install-type').textContent = humanInstallMode(updateState?.installMode)
   document.getElementById('update-app-version').textContent = settingsAppVersion ? `v${settingsAppVersion}` : 'unknown'
   document.getElementById('update-path').textContent = humanUpdateStrategy(updateState?.updateStrategy)
@@ -2476,6 +2525,7 @@ function renderUpdatePanel() {
     installLatestButton.disabled = updatePanelBusy || running
   }
   if (toggleButton) toggleButton.hidden = !showAutoUpdateToggle
+  if (manualUpdateRow) manualUpdateRow.hidden = !showManualUpdateRow
   if (checkUpdateButton) {
     checkUpdateButton.hidden = !canAutoUpdate
     checkUpdateButton.disabled = updatePanelBusy || running
@@ -2772,11 +2822,14 @@ async function installLatestVersion() {
   updatePanelBusy = true
   renderUpdatePanel()
   try {
-    const data = updateState?.updateStrategy === 'packaged-auto-update' && window.datamoatDesktop?.update?.openLatest
+    const data = updateState?.installMode === 'packaged' && window.datamoatDesktop?.update?.openLatest
       ? await window.datamoatDesktop.update.openLatest()
       : await jsonOrThrow(await apiFetch('/api/update/install-latest', { method: 'POST' }))
     releasesUrl = data.url || releasesUrl
-    setUpdatePanelMessage('Opened the latest download page in your browser. Download the newest packaged release there and replace the current app when ready.', false)
+    if (data.state) updateState = normalizeUpdateStateForUi(data.state)
+    setUpdatePanelMessage(data.manualUpdateStarted
+      ? 'Downloaded the latest packaged release. DataMoat will close, replace the app, and reopen automatically.'
+      : 'Opened the latest download page in your browser. Download the newest packaged release there and replace the current app when ready.', false)
   } catch (error) {
     const fallback = releasesUrl
       ? `Could not open the latest download page automatically. You can open this link manually: ${releasesUrl}`

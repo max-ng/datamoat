@@ -118,6 +118,8 @@ function writePrivateTextAtomic(filePath: string, content: string): void {
   const fd = fs.openSync(tmpPath, 'r')
   try {
     fs.fsyncSync(fd)
+  } catch {
+    /* non-fatal on filesystems that do not allow fsync on read handles */
   } finally {
     fs.closeSync(fd)
   }

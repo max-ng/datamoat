@@ -31,6 +31,29 @@ export function launcherBinaryForScripts(): string {
   return nodeBinaryForBuildTasks()
 }
 
+type ProcessCommand = {
+  pid: number
+  command: string
+}
+
+function executableFromPath(command: string): string | null {
+  const lookupCommand = process.platform === 'win32' ? 'where.exe' : 'which'
+  try {
+    const out = child_process.execFileSync(lookupCommand, [command], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    })
+    const candidates = out
+      .split(/\r?\n/)
+      .map(line => line.trim().replace(/^"|"$/g, ''))
+      .filter(Boolean)
+    return candidates.find(candidate => fs.existsSync(candidate)) ?? null
+  } catch {
+    return null
+  }
+}
+
 export function nodeBinaryForBuildTasks(): string {
   const installInfo = loadInstallInfo()
   const configured = installInfo?.nodeBin?.trim()
@@ -38,12 +61,8 @@ export function nodeBinaryForBuildTasks(): string {
     return configured
   }
 
-  try {
-    const fromPath = child_process.execFileSync('which', ['node'], { encoding: 'utf8' }).trim()
-    if (fromPath && fs.existsSync(fromPath)) return fromPath
-  } catch {
-    // ignore
-  }
+  const fromPath = executableFromPath('node')
+  if (fromPath) return fromPath
 
   return process.execPath
 }
@@ -128,7 +147,49 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+function windowsProcessCommands(): ProcessCommand[] {
+  const script = [
+    'Get-CimInstance Win32_Process',
+    '| Where-Object { $null -ne $_.CommandLine }',
+    '| Select-Object ProcessId, CommandLine',
+    '| ConvertTo-Json -Compress',
+  ].join(' ')
+
+  try {
+    const out = child_process.execFileSync('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-Command',
+      script,
+    ], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      windowsHide: true,
+    }).trim()
+    if (!out) return []
+
+    const parsed = JSON.parse(out) as unknown
+    const rows = Array.isArray(parsed) ? parsed : [parsed]
+    return rows.flatMap(row => {
+      if (!row || typeof row !== 'object') return []
+      const record = row as { ProcessId?: unknown; CommandLine?: unknown }
+      const pid = Number(record.ProcessId)
+      const command = typeof record.CommandLine === 'string' ? record.CommandLine : ''
+      if (!Number.isFinite(pid) || !command) return []
+      return [{ pid, command }]
+    })
+  } catch {
+    return []
+  }
+}
+
 function commandForPid(pid: number): string | null {
+  if (process.platform === 'win32') {
+    return windowsProcessCommands().find(entry => entry.pid === pid)?.command ?? null
+  }
+
   try {
     return child_process.execFileSync('ps', ['-p', String(pid), '-o', 'command='], { encoding: 'utf8' }).trim() || null
   } catch {
@@ -136,11 +197,21 @@ function commandForPid(pid: number): string | null {
   }
 }
 
+function commandIncludes(command: string, needle: string): boolean {
+  if (process.platform !== 'win32') return command.includes(needle)
+
+  const haystack = command.toLowerCase()
+  const candidate = needle.toLowerCase()
+  return haystack.includes(candidate)
+    || haystack.includes(candidate.replace(/\//g, '\\'))
+    || haystack.includes(candidate.replace(/\\/g, '/'))
+}
+
 function isKnownDaemonCommand(command: string): boolean {
-  const matchesScript = daemonScriptCandidates().some(candidate => command.includes(candidate))
+  const matchesScript = daemonScriptCandidates().some(candidate => commandIncludes(command, candidate))
   if (!matchesScript) return false
   const marker = dataRootCommandMarker()
-  return !marker || command.includes(marker)
+  return !marker || commandIncludes(command, marker)
 }
 
 export function isDaemonRunning(): number | null {
@@ -169,6 +240,12 @@ export function getPort(): number | null {
 }
 
 export function findDaemonPids(): number[] {
+  if (process.platform === 'win32') {
+    return windowsProcessCommands()
+      .filter(entry => entry.pid !== process.pid && isKnownDaemonCommand(entry.command))
+      .map(entry => entry.pid)
+  }
+
   try {
     const candidates = daemonScriptCandidates()
     const out = child_process.execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' })
@@ -182,10 +259,10 @@ export function findDaemonPids(): number[] {
         const pid = Number(match[1])
         const cmd = match[2]
         if (!Number.isFinite(pid) || pid === process.pid) return []
-        const matchesScript = candidates.some(candidate => cmd.includes(candidate))
+        const matchesScript = candidates.some(candidate => commandIncludes(cmd, candidate))
         if (!matchesScript) return []
         const marker = dataRootCommandMarker()
-        if (marker && !cmd.includes(marker)) return []
+        if (marker && !commandIncludes(cmd, marker)) return []
         return [pid]
       })
   } catch {

@@ -4,12 +4,17 @@ const path = require('path')
 const { execFileSync } = require('child_process')
 const packager = require('@electron/packager')
 
-if (process.platform !== 'darwin') process.exit(0)
-
 const root = path.join(__dirname, '..')
+const packageJson = require(path.join(root, 'package.json'))
 const releaseDir = path.join(root, 'release')
 const iconBasePath = path.join(releaseDir, 'DataMoat')
 const iconPath = path.join(releaseDir, 'DataMoat.icns')
+const windowsIconPath = path.join(releaseDir, 'DataMoat.ico')
+const windowsTrayIconPaths = {
+  active: path.join(releaseDir, 'DataMoatTray-active.ico'),
+  idle: path.join(releaseDir, 'DataMoatTray-idle.ico'),
+  error: path.join(releaseDir, 'DataMoatTray-error.ico'),
+}
 const trayTemplatePath = path.join(releaseDir, 'DataMoatStatusTemplate.png')
 const trayTemplate2xPath = path.join(releaseDir, 'DataMoatStatusTemplate@2x.png')
 const bundleRoot = path.join(releaseDir, `DataMoat-darwin-${process.arch}`)
@@ -18,6 +23,25 @@ const bundleResourcesPath = path.join(bundlePath, 'Contents', 'Resources')
 const bundleHelpersPath = path.join(bundlePath, 'Contents', 'Helpers')
 const appBundleId = process.env.DATAMOAT_BUNDLE_ID || 'com.datamoat.app'
 const touchIdHelperAppPath = path.join(root, 'dist', 'helpers', 'DataMoatTouchID.app')
+
+function commonIgnorePatterns() {
+  return [
+    /^\/artifacts($|\/)/,
+    /^\/release($|\/)/,
+    /^\/\.git($|\/)/,
+    /^\/\.github($|\/)/,
+    /^\/\.gitignore$/,
+    /^\/src($|\/)/,
+    /^\/scripts($|\/)/,
+    /^\/verification($|\/)/,
+    /^\/\.DS_Store$/,
+    /^\/(?!README(?:\.public)?\.md$)[^/]+\.md$/,
+    /^\/[^/]+\.backup-[0-9-]+\.md$/,
+    /^\/package-lock\.json$/,
+    /^\/tsconfig\.json$/,
+    /^\/install\.sh$/,
+  ]
+}
 
 function wallMerlons(cx, cy, radius, count, width, height, fill, stroke, strokeWidth = 0) {
   const x = cx - width / 2
@@ -485,7 +509,258 @@ draw_icon(32, r"${outputPng2x}")
   execFileSync('python3', ['-c', script], { stdio: 'ignore' })
 }
 
-async function main() {
+function hexColor(hex, alpha = 255) {
+  const raw = String(hex).replace(/^#/, '')
+  return [
+    Number.parseInt(raw.slice(0, 2), 16),
+    Number.parseInt(raw.slice(2, 4), 16),
+    Number.parseInt(raw.slice(4, 6), 16),
+    alpha,
+  ]
+}
+
+function blendPixel(buf, width, x, y, color) {
+  const ix = Math.round(x)
+  const iy = Math.round(y)
+  if (ix < 0 || iy < 0 || ix >= width || iy >= width) return
+  const i = (iy * width + ix) * 4
+  const srcA = color[3] / 255
+  const dstA = buf[i + 3] / 255
+  const outA = srcA + dstA * (1 - srcA)
+  if (outA <= 0) return
+  buf[i] = Math.round((color[0] * srcA + buf[i] * dstA * (1 - srcA)) / outA)
+  buf[i + 1] = Math.round((color[1] * srcA + buf[i + 1] * dstA * (1 - srcA)) / outA)
+  buf[i + 2] = Math.round((color[2] * srcA + buf[i + 2] * dstA * (1 - srcA)) / outA)
+  buf[i + 3] = Math.round(outA * 255)
+}
+
+function fillEllipse(buf, width, cx, cy, rx, ry, color) {
+  const minX = Math.floor(cx - rx)
+  const maxX = Math.ceil(cx + rx)
+  const minY = Math.floor(cy - ry)
+  const maxY = Math.ceil(cy + ry)
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      const nx = (x + 0.5 - cx) / rx
+      const ny = (y + 0.5 - cy) / ry
+      if (nx * nx + ny * ny <= 1) blendPixel(buf, width, x, y, color)
+    }
+  }
+}
+
+function strokeEllipse(buf, width, cx, cy, rx, ry, strokeWidth, color) {
+  const minX = Math.floor(cx - rx - strokeWidth)
+  const maxX = Math.ceil(cx + rx + strokeWidth)
+  const minY = Math.floor(cy - ry - strokeWidth)
+  const maxY = Math.ceil(cy + ry + strokeWidth)
+  const innerRx = Math.max(1, rx - strokeWidth)
+  const innerRy = Math.max(1, ry - strokeWidth)
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      const ox = (x + 0.5 - cx) / rx
+      const oy = (y + 0.5 - cy) / ry
+      const ix = (x + 0.5 - cx) / innerRx
+      const iy = (y + 0.5 - cy) / innerRy
+      if (ox * ox + oy * oy <= 1 && ix * ix + iy * iy >= 1) {
+        blendPixel(buf, width, x, y, color)
+      }
+    }
+  }
+}
+
+function fillRoundedRect(buf, width, x, y, w, h, r, color) {
+  const minX = Math.floor(x)
+  const maxX = Math.ceil(x + w)
+  const minY = Math.floor(y)
+  const maxY = Math.ceil(y + h)
+  for (let py = minY; py <= maxY; py += 1) {
+    for (let px = minX; px <= maxX; px += 1) {
+      const cx = px < x + r ? x + r : px > x + w - r ? x + w - r : px
+      const cy = py < y + r ? y + r : py > y + h - r ? y + h - r : py
+      const dx = px - cx
+      const dy = py - cy
+      if (dx * dx + dy * dy <= r * r) blendPixel(buf, width, px, py, color)
+    }
+  }
+}
+
+function pointInPolygon(x, y, points) {
+  let inside = false
+  for (let i = 0, j = points.length - 1; i < points.length; j = i, i += 1) {
+    const xi = points[i][0]
+    const yi = points[i][1]
+    const xj = points[j][0]
+    const yj = points[j][1]
+    const intersect = ((yi > y) !== (yj > y))
+      && (x < ((xj - xi) * (y - yi)) / ((yj - yi) || 1e-9) + xi)
+    if (intersect) inside = !inside
+  }
+  return inside
+}
+
+function fillPolygon(buf, width, points, color) {
+  const xs = points.map(point => point[0])
+  const ys = points.map(point => point[1])
+  const minX = Math.floor(Math.min(...xs))
+  const maxX = Math.ceil(Math.max(...xs))
+  const minY = Math.floor(Math.min(...ys))
+  const maxY = Math.ceil(Math.max(...ys))
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      if (pointInPolygon(x + 0.5, y + 0.5, points)) blendPixel(buf, width, x, y, color)
+    }
+  }
+}
+
+function strokeLine(buf, width, x1, y1, x2, y2, strokeWidth, color) {
+  const minX = Math.floor(Math.min(x1, x2) - strokeWidth)
+  const maxX = Math.ceil(Math.max(x1, x2) + strokeWidth)
+  const minY = Math.floor(Math.min(y1, y2) - strokeWidth)
+  const maxY = Math.ceil(Math.max(y1, y2) + strokeWidth)
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const lenSq = dx * dx + dy * dy || 1
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      const t = Math.max(0, Math.min(1, ((x + 0.5 - x1) * dx + (y + 0.5 - y1) * dy) / lenSq))
+      const px = x1 + t * dx
+      const py = y1 + t * dy
+      const distX = x + 0.5 - px
+      const distY = y + 0.5 - py
+      if (distX * distX + distY * distY <= (strokeWidth / 2) ** 2) blendPixel(buf, width, x, y, color)
+    }
+  }
+}
+
+function strokePolygon(buf, width, points, strokeWidth, color) {
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i]
+    const b = points[(i + 1) % points.length]
+    strokeLine(buf, width, a[0], a[1], b[0], b[1], strokeWidth, color)
+  }
+}
+
+function drawWindowsIconImage(size, mode = 'idle', variant = 'app') {
+  const buf = Buffer.alloc(size * size * 4)
+  const s = value => (value * size) / 256
+  const statusColor = mode === 'active'
+    ? hexColor('#4bd6a5')
+    : mode === 'error'
+      ? hexColor('#f06b78')
+      : hexColor('#4ba7ff')
+  const dark = hexColor('#09131d')
+  const darkStroke = hexColor('#404a56')
+  const leftStone = hexColor('#c6ced8')
+  const rightStone = hexColor('#8c97a4')
+  const topStone = hexColor('#e0e5eb')
+  const globe = hexColor('#348fff')
+  const globeDark = hexColor('#1b49c7')
+  const land = hexColor('#c9f5f0', 220)
+
+  if (variant === 'app') {
+    fillRoundedRect(buf, size, s(18), s(18), s(220), s(220), s(54), dark)
+    fillRoundedRect(buf, size, s(18), s(18), s(220), s(220), s(54), hexColor('#122236', 120))
+  }
+
+  fillEllipse(buf, size, s(128), s(190), s(92), s(36), hexColor('#316fff', variant === 'app' ? 52 : 28))
+  strokeEllipse(buf, size, s(128), s(186), s(86), s(28), Math.max(1, s(12)), statusColor)
+  strokeEllipse(buf, size, s(128), s(186), s(68), s(20), Math.max(1, s(4.5)), hexColor('#cbf3ff', 190))
+
+  if (size >= 32) {
+    strokeLine(buf, size, s(90), s(111), s(90), s(63), Math.max(1, s(4)), darkStroke)
+    strokeLine(buf, size, s(166), s(111), s(166), s(61), Math.max(1, s(4)), darkStroke)
+    fillPolygon(buf, size, [[s(90), s(67)], [s(63), s(80)], [s(90), s(87)]], hexColor('#ff6f7b'))
+    fillPolygon(buf, size, [[s(166), s(65)], [s(193), s(52)], [s(166), s(47)]], hexColor('#ff6f7b'))
+  }
+
+  const left = [[s(68), s(120)], [s(105), s(94)], [s(128), s(109)], [s(128), s(202)], [s(68), s(171)]]
+  const right = [[s(128), s(109)], [s(151), s(94)], [s(188), s(120)], [s(188), s(171)], [s(128), s(202)]]
+  const top = [[s(105), s(94)], [s(151), s(94)], [s(188), s(120)], [s(128), s(145)], [s(68), s(120)]]
+  fillPolygon(buf, size, left, leftStone)
+  fillPolygon(buf, size, right, rightStone)
+  fillPolygon(buf, size, top, topStone)
+  strokePolygon(buf, size, left, Math.max(1, s(4.5)), darkStroke)
+  strokePolygon(buf, size, right, Math.max(1, s(4.5)), darkStroke)
+  strokePolygon(buf, size, top, Math.max(1, s(4)), darkStroke)
+  strokeLine(buf, size, s(68), s(120), s(128), s(145), Math.max(1, s(4)), hexColor('#3b4550'))
+  strokeLine(buf, size, s(128), s(145), s(188), s(120), Math.max(1, s(4)), hexColor('#3b4550'))
+  strokeLine(buf, size, s(128), s(145), s(128), s(202), Math.max(1, s(4)), hexColor('#39424e'))
+
+  fillEllipse(buf, size, s(128), s(112), s(32), s(32), globeDark)
+  fillEllipse(buf, size, s(122), s(104), s(27), s(24), globe)
+  fillPolygon(buf, size, [[s(108), s(101)], [s(126), s(91)], [s(148), s(96)], [s(154), s(111)], [s(136), s(125)], [s(118), s(130)], [s(99), s(118)]], land)
+  fillPolygon(buf, size, [[s(137), s(122)], [s(158), s(120)], [s(162), s(136)], [s(145), s(143)], [s(134), s(136)]], hexColor('#c9f5f0', 160))
+  strokeEllipse(buf, size, s(128), s(112), s(32), s(32), Math.max(1, s(2.4)), hexColor('#ffffff', 70))
+
+  if (size >= 32) {
+    strokeLine(buf, size, s(90), s(128), s(90), s(178), Math.max(1, s(2.3)), hexColor('#333c47', 125))
+    strokeLine(buf, size, s(108), s(103), s(108), s(192), Math.max(1, s(2.3)), hexColor('#333c47', 125))
+    strokeLine(buf, size, s(148), s(103), s(148), s(192), Math.max(1, s(2.3)), hexColor('#333c47', 125))
+    strokeLine(buf, size, s(166), s(128), s(166), s(178), Math.max(1, s(2.3)), hexColor('#333c47', 125))
+  }
+
+  return buf
+}
+
+function rgbaToDibImage(rgba, size) {
+  const xor = Buffer.alloc(size * size * 4)
+  for (let y = 0; y < size; y += 1) {
+    const srcY = size - 1 - y
+    for (let x = 0; x < size; x += 1) {
+      const src = (srcY * size + x) * 4
+      const dst = (y * size + x) * 4
+      xor[dst] = rgba[src + 2]
+      xor[dst + 1] = rgba[src + 1]
+      xor[dst + 2] = rgba[src]
+      xor[dst + 3] = rgba[src + 3]
+    }
+  }
+  const maskStride = Math.ceil(size / 32) * 4
+  const mask = Buffer.alloc(maskStride * size)
+  const header = Buffer.alloc(40)
+  header.writeUInt32LE(40, 0)
+  header.writeInt32LE(size, 4)
+  header.writeInt32LE(size * 2, 8)
+  header.writeUInt16LE(1, 12)
+  header.writeUInt16LE(32, 14)
+  header.writeUInt32LE(0, 16)
+  header.writeUInt32LE(xor.length + mask.length, 20)
+  return Buffer.concat([header, xor, mask])
+}
+
+function writeWindowsIco(outputPath, sizes, mode = 'idle', variant = 'app') {
+  const images = sizes.map(size => rgbaToDibImage(drawWindowsIconImage(size, mode, variant), size))
+  const header = Buffer.alloc(6)
+  header.writeUInt16LE(0, 0)
+  header.writeUInt16LE(1, 2)
+  header.writeUInt16LE(images.length, 4)
+  const directory = Buffer.alloc(images.length * 16)
+  let offset = header.length + directory.length
+  images.forEach((image, index) => {
+    const size = sizes[index]
+    const entry = index * 16
+    directory.writeUInt8(size >= 256 ? 0 : size, entry)
+    directory.writeUInt8(size >= 256 ? 0 : size, entry + 1)
+    directory.writeUInt8(0, entry + 2)
+    directory.writeUInt8(0, entry + 3)
+    directory.writeUInt16LE(1, entry + 4)
+    directory.writeUInt16LE(32, entry + 6)
+    directory.writeUInt32LE(image.length, entry + 8)
+    directory.writeUInt32LE(offset, entry + 12)
+    offset += image.length
+  })
+  fs.writeFileSync(outputPath, Buffer.concat([header, directory, ...images]))
+}
+
+function writeWindowsIconAssets() {
+  fs.mkdirSync(releaseDir, { recursive: true })
+  writeWindowsIco(windowsIconPath, [16, 24, 32, 48, 64, 128, 256], 'idle', 'app')
+  writeWindowsIco(windowsTrayIconPaths.active, [16, 20, 24, 32], 'active', 'tray')
+  writeWindowsIco(windowsTrayIconPaths.idle, [16, 20, 24, 32], 'idle', 'tray')
+  writeWindowsIco(windowsTrayIconPaths.error, [16, 20, 24, 32], 'error', 'tray')
+}
+
+async function packageDarwin() {
   fs.rmSync(releaseDir, { recursive: true, force: true })
   fs.mkdirSync(releaseDir, { recursive: true })
   writeIcon(iconPath)
@@ -503,22 +778,7 @@ async function main() {
     appCategoryType: 'public.app-category.productivity',
     icon: iconBasePath,
     prune: true,
-    ignore: [
-      /^\/artifacts($|\/)/,
-      /^\/release($|\/)/,
-      /^\/\.git($|\/)/,
-      /^\/\.github($|\/)/,
-      /^\/\.gitignore$/,
-      /^\/src($|\/)/,
-      /^\/scripts($|\/)/,
-      /^\/verification($|\/)/,
-      /^\/\.DS_Store$/,
-      /^\/[^/]+\.md$/,
-      /^\/[^/]+\.backup-[0-9-]+\.md$/,
-      /^\/package-lock\.json$/,
-      /^\/tsconfig\.json$/,
-      /^\/install\.sh$/,
-    ],
+    ignore: commonIgnorePatterns(),
   })
 
   if (!fs.existsSync(bundlePath)) {
@@ -532,6 +792,60 @@ async function main() {
     fs.mkdirSync(bundleHelpersPath, { recursive: true })
     execFileSync('ditto', [touchIdHelperAppPath, path.join(bundleHelpersPath, 'DataMoatTouchID.app')], { stdio: 'ignore' })
   }
+}
+
+async function packageWindows() {
+  const arch = process.env.DATAMOAT_PACKAGE_ARCH || process.arch
+  const appRoot = path.join(releaseDir, `DataMoat-win32-${arch}`)
+  const exePath = path.join(appRoot, 'DataMoat.exe')
+  const resourcesPath = path.join(appRoot, 'resources')
+
+  fs.mkdirSync(releaseDir, { recursive: true })
+  fs.rmSync(appRoot, { recursive: true, force: true })
+  writeWindowsIconAssets()
+
+  await packager({
+    dir: root,
+    out: releaseDir,
+    overwrite: true,
+    platform: 'win32',
+    arch,
+    name: 'DataMoat',
+    executableName: 'DataMoat',
+    appVersion: packageJson.version,
+    icon: windowsIconPath,
+    win32metadata: {
+      CompanyName: 'DataMoat',
+      FileDescription: 'DataMoat',
+      OriginalFilename: 'DataMoat.exe',
+      ProductName: 'DataMoat',
+      InternalName: 'DataMoat',
+    },
+    prune: true,
+    ignore: commonIgnorePatterns(),
+  })
+
+  if (!fs.existsSync(exePath)) {
+    throw new Error(`packaged app missing at ${exePath}`)
+  }
+
+  fs.copyFileSync(windowsIconPath, path.join(resourcesPath, 'DataMoat.ico'))
+  for (const [mode, icon] of Object.entries(windowsTrayIconPaths)) {
+    fs.copyFileSync(icon, path.join(resourcesPath, `DataMoatTray-${mode}.ico`))
+  }
+}
+
+async function main() {
+  const targetPlatform = process.env.DATAMOAT_PACKAGE_PLATFORM || process.platform
+  if (targetPlatform === 'darwin') {
+    await packageDarwin()
+    return
+  }
+  if (targetPlatform === 'win32') {
+    await packageWindows()
+    return
+  }
+  throw new Error(`Electron packaging is not configured for ${targetPlatform}`)
 }
 
 void main().catch(error => {

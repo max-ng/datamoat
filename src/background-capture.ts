@@ -22,6 +22,7 @@ import {
 } from './vault-helper'
 import { startWatchers } from './watcher'
 import { updateHealth, writeAuditEvent, writeLog } from './logging'
+import { ensureWindowsAutostart } from './windows-autostart'
 
 const BACKGROUND_CAPTURE_SECRET_PREFIX = 'backgroundCaptureSecret'
 
@@ -67,6 +68,7 @@ async function createBackgroundCaptureConfig(
   config.backgroundKeychainAccount = account
   config.backgroundKeychainRequester = currentKeychainRequester()
   saveAuthConfig(config)
+  ensureWindowsAutostart()
 
   updateHealth('capture', {
     configured: true,
@@ -207,6 +209,7 @@ export async function ensureBackgroundCaptureSession(): Promise<string | null> {
 export async function startBackgroundCapture(): Promise<boolean> {
   const sessionId = await ensureBackgroundCaptureSession()
   if (!sessionId) return false
+  ensureWindowsAutostart()
 
   updateHealth('capture', {
     configured: true,

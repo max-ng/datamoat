@@ -1,6 +1,6 @@
 {
   "name": "datamoat",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Automatically backs up Claude, Codex, OpenClaw, and Cursor conversations",
   "license": "BUSL-1.1",
   "bin": {
@@ -8,11 +8,17 @@
   },
   "main": "./dist/electron/main.js",
   "scripts": {
-    "build": "tsc && cp src/ui/index.html dist/ui/index.html && mkdir -p dist/electron/assets && cp src/electron/assets/*.png dist/electron/assets/ && node scripts/build-helper.js && node scripts/build-electron-app.js",
+    "build": "tsc && node scripts/build-copy-assets.js && node scripts/build-helper.js && node scripts/build-electron-app.js",
     "dev": "ts-node src/cli.ts",
     "dev:electron": "npm run build && electron dist/electron/main.js",
     "daemon": "ts-node src/daemon.ts",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "smoke:windows-sources": "node scripts/windows-source-smoke.js",
+    "smoke:windows-background": "node scripts/windows-background-smoke.js",
+    "smoke:windows-auth": "node scripts/windows-auth-smoke.js",
+    "smoke:windows-electron": "node scripts/windows-electron-smoke.js",
+    "smoke:windows-reboot-capture": "node scripts/windows-reboot-capture-smoke.js",
+    "windows:ensure-autostart": "node scripts/windows-ensure-autostart.js"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

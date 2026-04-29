@@ -209,7 +209,11 @@ export function loadUpdateState(): UpdateState {
     updateStrategy: context.updateStrategy,
     running: isUpdateRunning(),
   }
-  if (context.updateStrategy !== 'source-git-pull' && context.updateStrategy !== 'packaged-auto-update') {
+  if (
+    context.updateStrategy !== 'source-git-pull'
+    && context.updateStrategy !== 'packaged-auto-update'
+    && context.updateStrategy !== 'packaged-manual-update'
+  ) {
     state.supported = false
     state.branch = null
     state.remote = null
@@ -219,13 +223,17 @@ export function loadUpdateState(): UpdateState {
     if (state.lastResult !== 'error' && state.lastResult !== 'unsupported') {
       state.lastResult = 'unsupported'
     }
-  } else if (context.updateStrategy === 'packaged-auto-update') {
+  } else if (context.updateStrategy === 'packaged-auto-update' || context.updateStrategy === 'packaged-manual-update') {
     state.branch = null
     state.remote = null
     state.ahead = null
     state.behind = null
     state.clean = null
     if (state.supported === null) state.supported = true
+    if (context.updateStrategy === 'packaged-manual-update' && state.lastResult === 'unsupported') {
+      state.lastResult = 'idle'
+      state.message = null
+    }
   }
   return state
 }
@@ -241,7 +249,11 @@ export function writeUpdateState(next: Partial<UpdateState>): UpdateState {
     running: typeof next.running === 'boolean' ? next.running : isUpdateRunning(),
     updatedAt: new Date().toISOString(),
   }
-  if (context.updateStrategy !== 'source-git-pull' && context.updateStrategy !== 'packaged-auto-update') {
+  if (
+    context.updateStrategy !== 'source-git-pull'
+    && context.updateStrategy !== 'packaged-auto-update'
+    && context.updateStrategy !== 'packaged-manual-update'
+  ) {
     state.supported = false
     state.branch = null
     state.remote = null
@@ -251,7 +263,7 @@ export function writeUpdateState(next: Partial<UpdateState>): UpdateState {
     if (state.lastResult !== 'error' && state.lastResult !== 'unsupported') {
       state.lastResult = 'unsupported'
     }
-  } else if (context.updateStrategy === 'packaged-auto-update') {
+  } else if (context.updateStrategy === 'packaged-auto-update' || context.updateStrategy === 'packaged-manual-update') {
     state.supported = typeof state.supported === 'boolean' ? state.supported : true
     state.branch = null
     state.remote = null

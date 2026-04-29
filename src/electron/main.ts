@@ -26,8 +26,15 @@ let allowedOrigin: string | null = null
 let quitRequested = false
 let trayRefreshTimer: NodeJS.Timeout | null = null
 let trayOnlyLaunch = process.env.DATAMOAT_TRAY_ONLY === '1' || process.argv.includes('--datamoat-tray-only')
-const runtimeIcon = professionalFortressAppIcon()
+const runtimeIcon = resolveRuntimeIcon()
 const trayTemplateAsset = process.platform === 'darwin' ? resolveTrayTemplateAsset() : null
+
+const smokeRemoteDebugPort = process.env.DATAMOAT_ELECTRON_SMOKE === '1'
+  ? (process.env.DATAMOAT_ELECTRON_REMOTE_DEBUG_PORT || process.argv.find(arg => arg.startsWith('--remote-debugging-port='))?.split('=')[1] || '')
+  : ''
+if (/^\d+$/.test(smokeRemoteDebugPort)) {
+  app.commandLine.appendSwitch('remote-debugging-port', smokeRemoteDebugPort)
+}
 
 // On login-item / LaunchAgent startup we want a true menu-bar-only app from the
 // very beginning. Waiting until `whenReady()` is too late on macOS because the
@@ -391,6 +398,36 @@ function resolveLinuxTrayAsset(mode: TrayMode): string | null {
   return fs.existsSync(candidate) ? candidate : null
 }
 
+function nativeImageFromFirstExistingPath(candidates: string[]): Electron.NativeImage | null {
+  for (const candidate of candidates) {
+    if (!fs.existsSync(candidate)) continue
+    const image = nativeImage.createFromPath(candidate)
+    if (!image.isEmpty()) return image
+  }
+  return null
+}
+
+function resolveRuntimeIcon(): Electron.NativeImage {
+  if (process.platform === 'win32') {
+    const image = nativeImageFromFirstExistingPath([
+      path.join(process.resourcesPath, 'DataMoat.ico'),
+      path.join(__dirname, '..', '..', 'release', 'DataMoat.ico'),
+    ])
+    if (image) return image
+  }
+  return professionalFortressAppIcon()
+}
+
+function resolveWindowsTrayIcon(mode: TrayMode): Electron.NativeImage | null {
+  if (process.platform !== 'win32') return null
+  return nativeImageFromFirstExistingPath([
+    path.join(process.resourcesPath, `DataMoatTray-${mode}.ico`),
+    path.join(process.resourcesPath, 'DataMoat.ico'),
+    path.join(__dirname, '..', '..', 'release', `DataMoatTray-${mode}.ico`),
+    path.join(__dirname, '..', '..', 'release', 'DataMoat.ico'),
+  ])
+}
+
 function trayIcon(mode: TrayMode): Electron.NativeImage {
   const accent = mode === 'active' ? '#3fd7a3' : mode === 'idle' ? '#f1b14d' : '#f06b78'
   const wall = '#d7c19a'
@@ -711,6 +748,227 @@ async function createMainWindowInner(showOnReady = true): Promise<void> {
   })
 
   await win.loadURL(runtime.url)
+  if (electronRealUiSmokeEnabled()) {
+    void runElectronRealUiSmoke(win, runtime.url)
+  }
+}
+
+function electronRealUiSmokeEnabled(): boolean {
+  return process.env.DATAMOAT_ELECTRON_REAL_UI_SMOKE === '1'
+}
+
+function requiredSmokeEnv(name: string): string {
+  const value = process.env[name]
+  if (!value || !value.trim()) throw new Error(`${name} is required`)
+  return value
+}
+
+function smokeTimeoutMs(): number {
+  const parsed = Number(process.env.DATAMOAT_UI_TIMEOUT_MS)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 90000
+}
+
+function smokeScreenshotDir(): string {
+  return process.env.DATAMOAT_UI_SCREENSHOT_DIR?.trim()
+    ? path.resolve(process.env.DATAMOAT_UI_SCREENSHOT_DIR.trim())
+    : path.join(process.cwd(), 'datamoat-real-ui-proof')
+}
+
+function smokeResultFile(): string {
+  return process.env.DATAMOAT_UI_RESULT_FILE?.trim()
+    ? path.resolve(process.env.DATAMOAT_UI_RESULT_FILE.trim())
+    : path.join(smokeScreenshotDir(), 'result.json')
+}
+
+function writeElectronRealUiSmokeResult(result: Record<string, unknown>): void {
+  const file = smokeResultFile()
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, `${JSON.stringify(result, null, 2)}\n`, 'utf8')
+}
+
+async function evalInSmokeWindow<T = unknown>(win: BrowserWindow, expression: string): Promise<T> {
+  return await win.webContents.executeJavaScript(expression, true) as T
+}
+
+async function waitForSmokeWindow(win: BrowserWindow, predicate: string, label: string, timeout = smokeTimeoutMs()): Promise<void> {
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < timeout) {
+    try {
+      if (await evalInSmokeWindow<boolean>(win, `Boolean((${predicate})())`)) return
+    } catch {
+      // Renderer can be between navigations.
+    }
+    await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  throw new Error(`Timed out waiting for ${label}`)
+}
+
+async function loadSmokeUrl(win: BrowserWindow, url: string): Promise<void> {
+  await win.loadURL(url)
+  await waitForSmokeWindow(win, '() => document.readyState === "complete"', `load ${url}`)
+}
+
+async function fillSmokeInput(win: BrowserWindow, selector: string, value: string): Promise<void> {
+  await waitForSmokeWindow(win, `() => !!document.querySelector(${JSON.stringify(selector)})`, selector)
+  await evalInSmokeWindow(win, `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) throw new Error('input not found');
+    el.focus();
+    el.value = ${JSON.stringify(value)};
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  })()`)
+}
+
+async function clickSmokeSelector(win: BrowserWindow, selector: string): Promise<void> {
+  await waitForSmokeWindow(win, `() => !!document.querySelector(${JSON.stringify(selector)})`, selector)
+  await evalInSmokeWindow(win, `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!(el instanceof HTMLElement)) throw new Error('click target not found');
+    el.click();
+    return true;
+  })()`)
+}
+
+async function smokeScreenshot(win: BrowserWindow, name: string): Promise<string> {
+  const dir = smokeScreenshotDir()
+  fs.mkdirSync(dir, { recursive: true })
+  const file = path.join(dir, `${name}.png`)
+  const image = await win.webContents.capturePage()
+  fs.writeFileSync(file, image.toPNG())
+  return file
+}
+
+async function relockSmokeWindow(win: BrowserWindow, baseUrl: string): Promise<void> {
+  await loadSmokeUrl(win, `${baseUrl}/`)
+  win.webContents.reloadIgnoringCache()
+  await waitForSmokeWindow(win, '() => location.pathname === "/unlock"', 'unlock page after reload')
+}
+
+async function recoverAndResetSmokeWindow(win: BrowserWindow, baseUrl: string, kind: string, secret: string, password: string): Promise<void> {
+  await loadSmokeUrl(win, `${baseUrl}/unlock`)
+  await waitForSmokeWindow(win, '() => document.querySelector("#password-section")', 'unlock form')
+  await smokeScreenshot(win, `${kind}-01-unlock`)
+  await clickSmokeSelector(win, '.recovery-link button')
+  await waitForSmokeWindow(win, '() => document.querySelector("#recovery-section") && document.querySelector("#recovery-section").style.display !== "none"', 'recovery section')
+  await fillSmokeInput(win, '#recovery-input', secret)
+  await clickSmokeSelector(win, '#btn-recover')
+  await waitForSmokeWindow(win, '() => location.pathname === "/" && document.querySelector("#recovery-reset-backdrop") && !document.querySelector("#recovery-reset-backdrop").hidden', `${kind} reset prompt`)
+  await smokeScreenshot(win, `${kind}-02-reset-prompt`)
+  await fillSmokeInput(win, '#recovery-reset-password', password)
+  await fillSmokeInput(win, '#recovery-reset-confirm', password)
+  await clickSmokeSelector(win, '#recovery-reset-save')
+  await waitForSmokeWindow(win, '() => document.querySelector("#recovery-reset-backdrop") && document.querySelector("#recovery-reset-backdrop").hidden', `${kind} reset saved`)
+  await smokeScreenshot(win, `${kind}-03-reset-success`)
+}
+
+async function passwordUnlockSmokeWindow(win: BrowserWindow, baseUrl: string, password: string, arch: string): Promise<void> {
+  await loadSmokeUrl(win, `${baseUrl}/unlock`)
+  await waitForSmokeWindow(win, '() => location.pathname === "/unlock" || document.querySelector("#pw-input")', 'unlock page')
+  await fillSmokeInput(win, '#pw-input', password)
+  await clickSmokeSelector(win, '#btn-unlock')
+  await waitForSmokeWindow(win, '() => location.pathname === "/" && document.querySelector("#session-list")', 'main app after password unlock')
+  await smokeScreenshot(win, `${arch}-password-unlock-success`)
+}
+
+async function settingsSmokeWindow(win: BrowserWindow): Promise<Record<string, string>> {
+  await clickSmokeSelector(win, '#open-settings-btn')
+  await waitForSmokeWindow(win, '() => document.querySelector("#settings-backdrop") && !document.querySelector("#settings-backdrop").hidden', 'settings panel')
+  await waitForSmokeWindow(win, '() => !document.querySelector("#update-install-type").textContent.includes("detecting")', 'update settings loaded')
+  await smokeScreenshot(win, 'settings-update-state')
+  return await evalInSmokeWindow<Record<string, string>>(win, `(() => ({
+    title: document.querySelector('#manual-update-title')?.textContent || document.querySelector('#update-toggle .switch-title')?.textContent || '',
+    subtitle: document.querySelector('#manual-update-subtitle')?.textContent || document.querySelector('#update-toggle .switch-subtitle')?.textContent || '',
+    toggleHidden: String(!!document.querySelector('#update-toggle')?.hidden),
+    manualRowHidden: String(!!document.querySelector('#manual-update-row')?.hidden),
+    install: document.querySelector('#update-install-type')?.textContent || '',
+    method: document.querySelector('#update-path')?.textContent || '',
+    version: document.querySelector('#update-app-version')?.textContent || ''
+  }))()`)
+}
+
+async function clickManualUpdateSmokeWindow(win: BrowserWindow): Promise<Record<string, string>> {
+  await clickSmokeSelector(win, '#update-install-latest-btn')
+  await waitForSmokeWindow(win, `() => {
+    const message = document.querySelector('#update-message')?.textContent || '';
+    const state = document.querySelector('#update-state')?.textContent || '';
+    return /Downloaded the latest packaged release|close, replace the app|downloading|installing/i.test(message)
+      || /running|downloading|installing/i.test(state);
+  }`, 'manual update download/install state', Math.max(smokeTimeoutMs(), 240000))
+  await smokeScreenshot(win, 'manual-update-clicked')
+  return await evalInSmokeWindow<Record<string, string>>(win, `(() => ({
+    message: document.querySelector('#update-message')?.textContent || '',
+    state: document.querySelector('#update-state')?.textContent || '',
+    version: document.querySelector('#update-app-version')?.textContent || '',
+    toggleHidden: String(!!document.querySelector('#update-toggle')?.hidden),
+    manualRowHidden: String(!!document.querySelector('#manual-update-row')?.hidden)
+  }))()`)
+}
+
+async function runElectronRealUiSmoke(win: BrowserWindow, baseUrl: string): Promise<void> {
+  const startedAt = new Date().toISOString()
+  const arch = process.env.DATAMOAT_PACKAGE_ARCH || process.arch
+  const mode = process.env.DATAMOAT_UI_MODE || 'recovery-and-password'
+  try {
+    const password = requiredSmokeEnv('DATAMOAT_UI_PASSWORD')
+    const phrase = mode === 'password-only' ? '' : requiredSmokeEnv('DATAMOAT_UI_RECOVERY_PHRASE')
+    const recoveryCodes = String(process.env.DATAMOAT_UI_RECOVERY_CODES || '')
+      .split(/[,\s]+/)
+      .map(code => code.trim())
+      .filter(Boolean)
+    if (mode !== 'password-only' && recoveryCodes.length === 0) throw new Error('DATAMOAT_UI_RECOVERY_CODES must contain at least one code')
+
+    let flow: Record<string, unknown>
+    if (mode === 'password-only') {
+      await passwordUnlockSmokeWindow(win, baseUrl, password, arch)
+      flow = { settings: await settingsSmokeWindow(win) }
+    } else if (mode === 'manual-update') {
+      await passwordUnlockSmokeWindow(win, baseUrl, password, arch)
+      const settings = await settingsSmokeWindow(win)
+      const manualUpdate = await clickManualUpdateSmokeWindow(win)
+      flow = { settings, manualUpdate }
+    } else {
+      await recoverAndResetSmokeWindow(win, baseUrl, 'recovery-code', recoveryCodes[0], password)
+      await relockSmokeWindow(win, baseUrl)
+      await recoverAndResetSmokeWindow(win, baseUrl, 'recovery-phrase', phrase, password)
+      await relockSmokeWindow(win, baseUrl)
+      await passwordUnlockSmokeWindow(win, baseUrl, password, arch)
+      flow = { usedRecoveryCode: recoveryCodes[0], settings: await settingsSmokeWindow(win) }
+    }
+
+    const screenshots = fs.readdirSync(smokeScreenshotDir())
+      .filter(file => file.endsWith('.png'))
+      .sort()
+    writeElectronRealUiSmokeResult({
+      ok: true,
+      driver: 'electron-main',
+      mode,
+      arch,
+      baseUrl,
+      screenshotDir: smokeScreenshotDir(),
+      screenshots,
+      flow,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+    })
+  } catch (error) {
+    try { await smokeScreenshot(win, 'failure-state') } catch { /* ignore */ }
+    writeElectronRealUiSmokeResult({
+      ok: false,
+      driver: 'electron-main',
+      mode,
+      arch,
+      baseUrl,
+      screenshotDir: smokeScreenshotDir(),
+      error: error instanceof Error ? error.message : String(error),
+      startedAt,
+      finishedAt: new Date().toISOString(),
+    })
+  } finally {
+    quitRequested = true
+    app.quit()
+  }
 }
 
 function toggleMainWindow(): void {
@@ -792,7 +1050,7 @@ function promptInstallChoice(state: DualInstallState): InstallPreference {
     cancelId: defaultId,
     noLink: true,
     title: 'DataMoat: multiple installs detected',
-    message: 'Two DataMoat installs found on this Mac',
+    message: 'Two DataMoat installs found on this computer',
     detail: 'Pick which one to run. This choice is remembered; you will only be asked again if a different install appears or moves.',
   })
   return clicked === 1 ? 'source' : 'packaged'
@@ -854,6 +1112,7 @@ function updateTray(): void {
   if (!tray) return
   const status = currentTrayStatus()
   if (process.platform === 'darwin' && trayTemplateAsset) tray.setImage(trayTemplateAsset)
+  else if (process.platform === 'win32' && resolveWindowsTrayIcon(status.mode)) tray.setImage(resolveWindowsTrayIcon(status.mode)!)
   else if (process.platform === 'linux' && resolveLinuxTrayAsset(status.mode)) tray.setImage(resolveLinuxTrayAsset(status.mode)!)
   else tray.setImage(professionalFortressTrayIcon(status.mode))
   tray.setToolTip(
@@ -886,6 +1145,8 @@ function createTray(): void {
   const initialIcon =
     process.platform === 'darwin' && trayTemplateAsset
       ? trayTemplateAsset
+      : process.platform === 'win32' && resolveWindowsTrayIcon('idle')
+        ? resolveWindowsTrayIcon('idle')!
       : process.platform === 'linux' && resolveLinuxTrayAsset('idle')
         ? resolveLinuxTrayAsset('idle')!
       : professionalFortressTrayIcon('idle')
@@ -913,7 +1174,7 @@ function installDesktopIpc(): void {
     return applyPackagedUpdate()
   })
   ipcMain.handle('datamoat:update:openLatest', async () => {
-    return { ok: true, url: await openPackagedReleasePage() }
+    return await openPackagedReleasePage()
   })
 }
 
