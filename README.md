@@ -60,13 +60,13 @@ DataMoat is an encrypted local vault for Claude, Codex, OpenClaw, and Cursor wor
 
 | Source | Status | What DataMoat preserves |
 |---|---|---|
-| **Claude CLI** | Supported | Full local transcript, including locally written thinking blocks when present |
-| **Codex CLI** | Supported | Captures supported local Codex CLI session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
-| **Codex Mac app** | Supported | Captures supported local Codex Mac app session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
-| **Claude Desktop local-agent sessions (macOS)** | Supported | Supported local Claude Desktop agent session records when present |
-| **OpenClaw** | Supported | Supported local OpenClaw session transcripts and metadata |
-| **Cursor** | Supported | Captures readable local Cursor `agent-transcripts` JSONL records, including text and tool blocks when present |
-| **Claude attachments** | Supported | Encrypted image and supported file/PDF blocks |
+| **Claude CLI** | ✅ | Full local transcript, including locally written thinking blocks when present |
+| **Codex CLI** | ✅ | Captures supported local Codex CLI session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
+| **Codex Mac app** | ✅ | Captures supported local Codex Mac app session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
+| **Claude Desktop local-agent sessions (macOS)** | ✅ | Supported local Claude Desktop agent session records when present |
+| **OpenClaw** | ✅ | Supported local OpenClaw session transcripts and metadata |
+| **Cursor** | ✅ | Captures readable local Cursor `agent-transcripts` JSONL records, including text and tool blocks when present |
+| **Claude attachments** | ✅ | Encrypted image and supported file/PDF blocks |
 
 ## Security At A Glance
 
@@ -117,10 +117,10 @@ Source install on macOS and Linux is available now. A signed / notarized Apple S
 
 Windows preview packages:
 
-- [Download Windows x64 preview zip](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.12-win32-x64.zip)
-- [Download Windows ARM64 preview zip](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.12-win32-arm64.zip)
+[![Download Windows x64 ZIP](https://img.shields.io/badge/Download-Windows%20x64%20ZIP-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.12-win32-x64.zip)
+[![Download Windows ARM64 ZIP](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.12-win32-arm64.zip)
 
-Unzip the Windows package and run `DataMoat.exe` from inside the extracted folder. Keep the folder contents together; this is not a standalone single-file `.exe` installer yet.
+Each Windows zip includes `DataMoat.exe` plus the required app files. Unzip the Windows package and run `DataMoat.exe` from inside the extracted folder. Keep the folder contents together; this is not a standalone single-file `.exe` installer yet.
 
 ### AI-Assisted Install
 
