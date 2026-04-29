@@ -16,6 +16,8 @@
 > **Automatically captures Claude, Codex, OpenClaw, and Cursor work records into an encrypted local vault.**
 > Search past prompts, tool output, and locally available reasoning content while keeping your full record protected on your own machine. Back up your AI workflows before they disappear.
 
+The people and companies that own their AI data will be the winners of the future.
+
 DataMoat is an encrypted local vault for Claude, Codex, OpenClaw, and Cursor work records. It preserves searchable transcripts, prompts, tool output, locally available reasoning content, metadata, and attachments on the same machine, so your full AI work history stays reviewable, protected, and easier to hand off later.
 
 ![DataMoat conversation search and session detail UI](.github/assets/screenshot.png)
