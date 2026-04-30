@@ -7,22 +7,22 @@
 [![Linux](https://img.shields.io/badge/Linux-supported-F59E0B?style=flat-square&logo=linux&logoColor=white)](#supported-today)
 [![Packaged macOS App](https://img.shields.io/badge/packaged%20macOS%20app-available-0F766E?style=flat-square)](#install)
 [![Windows](https://img.shields.io/badge/Windows-ZIP%20%2B%20EXE%20preview-2563EB?style=flat-square&logo=windows&logoColor=white)](#install)
-[![Claude](https://img.shields.io/badge/Claude-supported-16A34A?style=flat-square)](#supported-today)
+[![Claude CLI](https://img.shields.io/badge/Claude%20CLI-supported-16A34A?style=flat-square)](#supported-today)
 [![Claude Desktop Agent](https://img.shields.io/badge/Claude%20Desktop%20agent-supported-0F766E?style=flat-square)](#supported-today)
 [![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
 
-> **Automatically captures Claude, Codex, OpenClaw, and Cursor work records into an encrypted local vault.**
+> **Automatically captures Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records into an encrypted local vault.**
 > Search past prompts, tool output, and locally available reasoning content while keeping your full record protected on your own machine. Back up your AI workflows before they disappear.
 
 **The people and companies that own their AI data will win the future.**
 
-DataMoat is an encrypted local vault for Claude, Codex, OpenClaw, and Cursor work records. It preserves searchable transcripts, prompts, tool output, locally available reasoning content, metadata, and attachments on the same machine, so your full AI work history stays reviewable, protected, and easier to hand off later.
+DataMoat is an encrypted local vault for Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records. It preserves searchable transcripts, prompts, tool output, locally available reasoning content, metadata, and attachments on the same machine, so your full AI work history stays reviewable, protected, and easier to hand off later.
 
 ![DataMoat conversation search and session detail UI](.github/assets/screenshot.png)
 
-**Supported sources today:** Claude, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local OpenClaw session records, and supported local Cursor agent transcripts.
+**Supported sources today:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local OpenClaw session records, and supported local Cursor agent transcripts.
 **More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
 
 ## Why Install DataMoat
@@ -60,13 +60,13 @@ DataMoat is an encrypted local vault for Claude, Codex, OpenClaw, and Cursor wor
 
 | Source | Status | What DataMoat preserves |
 |---|---|---|
-| **Claude** | ✅ | Full local transcript, including locally written thinking blocks when present |
+| **Claude CLI** | ✅ | Full local transcript, including locally written thinking blocks when present |
 | **Codex CLI** | ✅ | Captures supported local Codex CLI session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
 | **Codex app** | ✅ | Captures supported local Codex app session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
 | **Claude Desktop local-agent sessions (macOS)** | ✅ | Supported local Claude Desktop agent session records when present |
 | **OpenClaw** | ✅ | Supported local OpenClaw session transcripts and metadata |
 | **Cursor** | ✅ | Captures readable local Cursor `agent-transcripts` JSONL records, including text and tool blocks when present |
-| **Claude attachments** | ✅ | Encrypted image and supported file/PDF blocks |
+| **Claude CLI attachments** | ✅ | Encrypted image and supported file/PDF blocks |
 
 ## Security At A Glance
 
@@ -221,3 +221,9 @@ This means:
 This is **source-available**, not OSI-approved open source.
 
 See [LICENSE.md](LICENSE.md) for the full terms.
+
+---
+
+## Official Website
+
+Official DataMoat website: [https://datamoat.org](https://datamoat.org)
