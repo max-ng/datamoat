@@ -158,8 +158,6 @@ Steps:
    ~/Applications/DataMoat.app/Contents/MacOS/DataMoat --datamoat-remote-no-screen
 
 Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
-Do not set DATAMOAT_HOME, DATAMOAT_TRAY_ONLY, or other test-only environment variables.
-Do not use --datamoat-capture-before-setup.
 Do not complete password, authenticator, Touch ID, recovery phrase, or recovery-code setup in this chat.
 
 After launch, tell me:
@@ -183,8 +181,6 @@ Steps:
 
 Use DataMoat-win32-x64 for x64 or DataMoat-win32-arm64 for ARM64.
 Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
-Do not set DATAMOAT_HOME, DATAMOAT_CLAUDE_CLI_ROOTS, DATAMOAT_TRAY_ONLY, or other test-only environment variables.
-Do not use --datamoat-capture-before-setup.
 Do not complete password, authenticator, recovery phrase, or recovery-code setup in this chat.
 
 After launch, tell me:
