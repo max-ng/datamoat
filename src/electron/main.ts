@@ -2,11 +2,15 @@ import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Menu, Tray, dialo
 import * as child_process from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
-import { ensureDaemonRunning } from '../runtime'
+import { ensureDaemonRunning, findDaemonPids, stopDaemonPids } from '../runtime'
 import { HEALTH_FILE, PUBLIC_STATUS_FILE } from '../config'
+import { isSetupDone } from '../auth'
+import { disableBootstrapCapture, enableBootstrapCapture, preflightBootstrapCapture } from '../bootstrap-capture'
 import { detectInstallContext } from '../install-context'
 import { installCrashHandlers, updateHealth, writeLog } from '../logging'
 import { applyInstallPreference, clearInstallChoice, detectDualInstallState, saveInstallChoice, type DualInstallState, type InstallPreference } from '../packaged-handoff'
+import { ensureLinuxRemoteNoScreenAutostart } from '../linux-autostart'
+import { ensureWindowsRemoteNoScreenAutostart } from '../windows-autostart'
 import { ensureDirs } from '../store'
 import {
   applyPackagedUpdate,
@@ -16,7 +20,7 @@ import {
   openPackagedReleasePage,
   savePackagedUpdateSettings,
 } from './packaged-updater'
-import { ensurePackagedTrayLaunchAgent } from './launch-agent'
+import { ensureMacRemoteNoScreenLaunchAgent, ensurePackagedTrayLaunchAgent } from './launch-agent'
 
 let mainWindow: BrowserWindow | null = null
 let mainWindowCreation: Promise<void> | null = null
@@ -25,7 +29,22 @@ let tray: Tray | null = null
 let allowedOrigin: string | null = null
 let quitRequested = false
 let trayRefreshTimer: NodeJS.Timeout | null = null
-let trayOnlyLaunch = process.env.DATAMOAT_TRAY_ONLY === '1' || process.argv.includes('--datamoat-tray-only')
+const REMOTE_NO_SCREEN_FLAGS = new Set([
+  '--datamoat-remote-no-screen',
+  '--datamoat-capture-before-setup',
+  '--remote-no-screen',
+  '--capture-before-setup',
+  '--openclaw-remote',
+])
+
+function argvRequestsRemoteNoScreen(argv = process.argv): boolean {
+  return argv.some(arg => REMOTE_NO_SCREEN_FLAGS.has(arg))
+}
+
+const remoteNoScreenLaunch = argvRequestsRemoteNoScreen()
+let trayOnlyLaunch = process.env.DATAMOAT_TRAY_ONLY === '1'
+  || process.argv.includes('--datamoat-tray-only')
+  || remoteNoScreenLaunch
 const runtimeIcon = resolveRuntimeIcon()
 const trayTemplateAsset = process.platform === 'darwin' ? resolveTrayTemplateAsset() : null
 
@@ -34,6 +53,25 @@ const smokeRemoteDebugPort = process.env.DATAMOAT_ELECTRON_SMOKE === '1'
   : ''
 if (/^\d+$/.test(smokeRemoteDebugPort)) {
   app.commandLine.appendSwitch('remote-debugging-port', smokeRemoteDebugPort)
+}
+
+if (
+  process.platform === 'darwin'
+  && remoteNoScreenLaunch
+  && process.env.DATAMOAT_MAC_LAUNCH_AGENT !== 'remote-no-screen'
+  && detectInstallContext().mode === 'packaged'
+) {
+  try {
+    ensureMacRemoteNoScreenLaunchAgent()
+    console.log('DataMoat remote no-screen capture is enabled.')
+    console.log('DataMoat is launching in the menu bar and collecting supported local records with pre-setup encrypted capture.')
+    console.log('Complete password, authenticator, and recovery setup later on the protected desktop GUI, not in this chat.')
+    app.exit(0)
+  } catch (error) {
+    console.error('DataMoat remote no-screen launch could not be handed off to the macOS LaunchAgent.')
+    console.error(error instanceof Error ? error.message : String(error))
+    app.exit(1)
+  }
 }
 
 // On login-item / LaunchAgent startup we want a true menu-bar-only app from the
@@ -174,6 +212,105 @@ function nudgeLinuxWindowToFront(): void {
       // try next helper if available
     }
   }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function reportRemoteNoScreenDaemonFailure(error: unknown, reason: string): void {
+  writeLog('error', 'electron', 'remote_no_screen_daemon_start_failed', { error, reason })
+  updateHealth('electron', {
+    running: true,
+    trayOnly: true,
+    daemonStartFailedAt: new Date().toISOString(),
+    daemonStartError: error instanceof Error ? error.message : String(error),
+    daemonStartErrorReason: reason,
+  })
+  console.error('DataMoat remote no-screen capture is enabled, but the daemon did not start yet.')
+  console.error(error instanceof Error ? error.message : String(error))
+}
+
+async function ensureDaemonRunningForRemoteNoScreenWithRetry(reason: string): Promise<void> {
+  try {
+    const runtime = await ensureDaemonRunningForRemoteNoScreen()
+    updateHealth('electron', {
+      running: true,
+      port: runtime.port,
+      startedAt: new Date().toISOString(),
+      trayOnly: true,
+      daemonStartError: null,
+      daemonStartFailedAt: null,
+      daemonStartErrorReason: null,
+    })
+    return
+  } catch (error) {
+    reportRemoteNoScreenDaemonFailure(error, reason)
+  }
+
+  setTimeout(() => {
+    void ensureDaemonRunningForRemoteNoScreenWithRetry('retry')
+  }, 5000)
+}
+
+async function enableRemoteNoScreenCapture(reason: string): Promise<boolean> {
+  if (isSetupDone()) {
+    console.log('DataMoat is already set up. Launching the packaged app without opening a setup flow.')
+    return true
+  }
+
+  const state = enableBootstrapCapture('remote-no-screen')
+  if (await preflightBootstrapCapture()) {
+    updateHealth('electron', {
+      bootstrapCapture: true,
+      bootstrapCaptureRequestedBy: state.requestedBy,
+      bootstrapCaptureStartedAt: state.createdAt,
+      bootstrapCaptureEnabledBy: reason,
+    })
+    writeLog('info', 'electron', 'remote_no_screen_capture_enabled', {
+      requestedBy: state.requestedBy,
+      startedAt: state.createdAt,
+      reason,
+    })
+    ensureRemoteNoScreenAutostart()
+    console.log('DataMoat remote no-screen capture is enabled.')
+    console.log('DataMoat is already collecting supported local records with pre-setup encrypted capture.')
+    console.log('Complete password, authenticator, and recovery setup later on the protected desktop GUI, not in this chat.')
+    return true
+  }
+
+  disableBootstrapCapture()
+  updateHealth('electron', {
+    bootstrapCapture: false,
+    bootstrapCaptureErrorAt: new Date().toISOString(),
+    bootstrapCaptureError: 'bootstrap capture secret unavailable in OS keychain',
+    bootstrapCaptureEnabledBy: reason,
+  })
+  writeLog('error', 'electron', 'remote_no_screen_capture_unavailable', { reason })
+  console.error('DataMoat remote no-screen capture could not start securely.')
+  console.error('A working local OS keychain is required before pre-setup capture can begin.')
+  return false
+}
+
+function ensureRemoteNoScreenAutostart(): void {
+  if (process.platform === 'win32') {
+    ensureWindowsRemoteNoScreenAutostart()
+  } else if (process.platform === 'darwin') {
+    ensureMacRemoteNoScreenLaunchAgent()
+  } else if (process.platform === 'linux') {
+    ensureLinuxRemoteNoScreenAutostart()
+  }
+}
+
+async function ensureDaemonRunningForRemoteNoScreen(): Promise<Awaited<ReturnType<typeof ensureDaemonRunning>>> {
+  if (!isSetupDone()) {
+    const pids = Array.from(new Set(findDaemonPids()))
+    if (pids.length > 0) {
+      stopDaemonPids(pids)
+      await sleep(800)
+    }
+  }
+  return ensureDaemonRunning()
 }
 
 function dataMoatIcon(): Electron.NativeImage {
@@ -390,6 +527,14 @@ function resolveTrayTemplateAsset(): string | null {
     if (fs.existsSync(candidate)) return candidate
   }
   return null
+}
+
+function macTrayTemplateIcon(): Electron.NativeImage | null {
+  if (process.platform !== 'darwin' || !trayTemplateAsset) return null
+  const image = nativeImage.createFromPath(trayTemplateAsset)
+  if (image.isEmpty()) return null
+  image.setTemplateImage(true)
+  return image
 }
 
 function resolveLinuxTrayAsset(mode: TrayMode): string | null {
@@ -1111,7 +1256,8 @@ function resolveInstallChoiceOnStartup(): 'continue' | 'quit' {
 function updateTray(): void {
   if (!tray) return
   const status = currentTrayStatus()
-  if (process.platform === 'darwin' && trayTemplateAsset) tray.setImage(trayTemplateAsset)
+  const macIcon = macTrayTemplateIcon()
+  if (macIcon) tray.setImage(macIcon)
   else if (process.platform === 'win32' && resolveWindowsTrayIcon(status.mode)) tray.setImage(resolveWindowsTrayIcon(status.mode)!)
   else if (process.platform === 'linux' && resolveLinuxTrayAsset(status.mode)) tray.setImage(resolveLinuxTrayAsset(status.mode)!)
   else tray.setImage(professionalFortressTrayIcon(status.mode))
@@ -1142,9 +1288,10 @@ function updateTray(): void {
 
 function createTray(): void {
   if (tray) return
+  const macIcon = macTrayTemplateIcon()
   const initialIcon =
-    process.platform === 'darwin' && trayTemplateAsset
-      ? trayTemplateAsset
+    macIcon
+      ? macIcon
       : process.platform === 'win32' && resolveWindowsTrayIcon('idle')
         ? resolveWindowsTrayIcon('idle')!
       : process.platform === 'linux' && resolveLinuxTrayAsset('idle')
@@ -1185,7 +1332,17 @@ if (!app.requestSingleInstanceLock()) {
   app.enableSandbox()
   installDesktopIpc()
 
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    if (argvRequestsRemoteNoScreen(argv)) {
+      trayOnlyLaunch = true
+      void (async () => {
+        if (!await enableRemoteNoScreenCapture('second-instance')) return
+        await ensureDaemonRunningForRemoteNoScreenWithRetry('second-instance')
+        updateTray()
+      })()
+      return
+    }
+
     trayOnlyLaunch = false
     if (resolveInstallChoiceOnStartup() === 'quit') {
       app.quit()
@@ -1198,13 +1355,19 @@ if (!app.requestSingleInstanceLock()) {
     try { ensureDirs() } catch { /* non-fatal: crash handler is defensive */ }
     installCrashHandlers('electron')
     installSessionPolicy()
+    if (remoteNoScreenLaunch && !await enableRemoteNoScreenCapture('startup-argv')) {
+      app.exit(1)
+      return
+    }
     try {
       await initializePackagedUpdater()
     } catch (error) {
       writeLog('warn', 'electron', 'packaged_update_init_failed', { error })
     }
     try {
-      if (detectInstallContext().mode === 'packaged') ensurePackagedTrayLaunchAgent()
+      if (detectInstallContext().mode === 'packaged') {
+        ensurePackagedTrayLaunchAgent({ remoteNoScreen: remoteNoScreenLaunch })
+      }
     } catch (error) {
       writeLog('warn', 'electron', 'packaged_launch_agent_init_failed', { error })
     }
@@ -1226,13 +1389,17 @@ if (!app.requestSingleInstanceLock()) {
       if (!trayOnlyLaunch) app.dock?.setIcon(runtimeIcon)
     }
     if (trayOnlyLaunch) {
-      const runtime = await ensureDaemonRunning()
-      updateHealth('electron', {
-        running: true,
-        port: runtime.port,
-        startedAt: new Date().toISOString(),
-        trayOnly: true,
-      })
+      if (remoteNoScreenLaunch) {
+        await ensureDaemonRunningForRemoteNoScreenWithRetry('startup-argv')
+      } else {
+        const runtime = await ensureDaemonRunning()
+        updateHealth('electron', {
+          running: true,
+          port: runtime.port,
+          startedAt: new Date().toISOString(),
+          trayOnly: true,
+        })
+      }
       enforceTrayOnlyPresentation()
       setTimeout(() => enforceTrayOnlyPresentation(), 250)
       setTimeout(() => enforceTrayOnlyPresentation(), 1000)

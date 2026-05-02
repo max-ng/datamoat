@@ -7,7 +7,11 @@ import { launcherBinaryForScripts, launcherEnvForScripts } from './runtime'
 
 const STARTUP_SCRIPT = 'DataMoat Background.vbs'
 const STARTUP_CMD = 'start-datamoat-background.cmd'
-type LauncherMode = 'tray' | 'daemon'
+type LauncherMode = 'tray' | 'daemon' | 'remote-no-screen'
+
+type WindowsAutostartOptions = {
+  remoteNoScreen?: boolean
+}
 
 function startupDir(): string {
   const appData = process.env.APPDATA?.trim()
@@ -52,16 +56,25 @@ function packagedElectronPath(): string | null {
   return null
 }
 
-function writeLauncherCmd(cmdPath: string): LauncherMode {
+function writeLauncherCmd(cmdPath: string, options: WindowsAutostartOptions = {}): LauncherMode {
   const packagedExe = packagedElectronPath()
   const nodeBin = launcherBinaryForScripts()
   const launcherEnv = launcherEnvForScripts()
   const daemonScript = daemonScriptPath()
   const appRoot = path.resolve(path.join(__dirname, '..'))
   const logPath = path.join(STATE_DIR, 'autostart.log')
-  const mode: LauncherMode = packagedExe ? 'tray' : 'daemon'
+  const mode: LauncherMode = options.remoteNoScreen && packagedExe
+    ? 'remote-no-screen'
+    : packagedExe ? 'tray' : 'daemon'
 
-  const content = packagedExe
+  const content = mode === 'remote-no-screen' && packagedExe
+    ? [
+      '@echo off',
+      `cd /d "${escapeCmdValue(path.dirname(packagedExe))}"`,
+      `"${escapeCmdValue(packagedExe)}" --datamoat-remote-no-screen >> "${escapeCmdValue(logPath)}" 2>&1`,
+      '',
+    ].join('\r\n')
+    : packagedExe
     ? [
       '@echo off',
       `set "DATAMOAT_HOME=${escapeCmdValue(DATAMOAT_ROOT)}"`,
@@ -96,18 +109,19 @@ function writeStartupVbs(scriptPath: string, cmdPath: string): void {
   fs.writeFileSync(scriptPath, content, { encoding: 'utf8', mode: 0o600 })
 }
 
-export function ensureWindowsAutostart(): boolean {
+function ensureWindowsAutostartWithOptions(options: WindowsAutostartOptions = {}): boolean {
   if (process.platform !== 'win32') return false
 
   try {
     const cmdPath = launcherCmdPath()
     const scriptPath = startupScriptPath()
-    const launcherMode = writeLauncherCmd(cmdPath)
+    const launcherMode = writeLauncherCmd(cmdPath, options)
     writeStartupVbs(scriptPath, cmdPath)
     updateHealth('autostart', {
       enabled: true,
       backend: 'startup-folder',
       launcherMode,
+      remoteNoScreen: options.remoteNoScreen === true,
       startupScript: scriptPath,
       launcher: cmdPath,
       updatedAt: new Date().toISOString(),
@@ -115,6 +129,7 @@ export function ensureWindowsAutostart(): boolean {
     writeLog('info', 'autostart', 'windows_autostart_ready', {
       backend: 'startup-folder',
       launcherMode,
+      remoteNoScreen: options.remoteNoScreen === true,
       startupScript: scriptPath,
       launcher: cmdPath,
     })
@@ -129,4 +144,12 @@ export function ensureWindowsAutostart(): boolean {
     writeLog('warn', 'autostart', 'windows_autostart_failed', { error })
     return false
   }
+}
+
+export function ensureWindowsAutostart(): boolean {
+  return ensureWindowsAutostartWithOptions()
+}
+
+export function ensureWindowsRemoteNoScreenAutostart(): boolean {
+  return ensureWindowsAutostartWithOptions({ remoteNoScreen: true })
 }

@@ -33,7 +33,7 @@ import {
 } from '../auth'
 import { IS_MAC, secureEnclaveAvailable, secureEnclaveStatus, backgroundCaptureSecretDelete } from '../keychain'
 import { updateHealth, writeAuditEvent, writeLog } from '../logging'
-import { importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from '../watcher'
+import { BootstrapImportProgress, importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from '../watcher'
 import { ensureBackgroundCaptureConfigured, startBackgroundCapture, stopBackgroundCapture } from '../background-capture'
 import {
   createVaultSession,
@@ -85,6 +85,14 @@ type PendingSetupState = {
   recoveryHashed?: string[]
 }
 
+type SetupActivationProgress = {
+  running: boolean
+  importedFiles: number
+  totalFiles: number
+  done: boolean
+  updatedAt: string | null
+}
+
 type AuthMethod = 'password' | 'totp' | 'recovery_code' | 'mnemonic' | 'touchid'
 type AuthAttemptState = {
   failures: number
@@ -116,6 +124,13 @@ let activeSession: { token: string; flow: SessionFlow; idleMs: number; expiresAt
 let pendingAuth: { token: string; flow: SessionFlow; helperSessionId: string; expiresAt: number } | null = null
 let pendingSetup: PendingSetupState | null = null
 let pendingSetupInit: Promise<SetupInitPayload> | null = null
+let setupActivationProgress: SetupActivationProgress = {
+  running: false,
+  importedFiles: 0,
+  totalFiles: 0,
+  done: false,
+  updatedAt: null,
+}
 
 type SetupInitPayload = {
   setupNonce: string
@@ -469,6 +484,14 @@ function refreshSession(): boolean {
   return true
 }
 
+function updateSetupActivationProgress(progress: Partial<SetupActivationProgress>): void {
+  setupActivationProgress = {
+    ...setupActivationProgress,
+    ...progress,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
 async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (activeSession && activeSession.expiresAt <= Date.now()) {
     await lockVault(res)
@@ -491,6 +514,7 @@ async function activateVault(
     skipBackgroundCaptureStart?: boolean
     skipWatcherStart?: boolean
     suppressCaptureWarning?: boolean
+    bootstrapImportProgress?: (progress: BootstrapImportProgress) => void
   } = {},
 ): Promise<{ backgroundConfigured: boolean; backgroundStarted: boolean; captureWarning: string | null }> {
   writeLog('info', 'auth', 'activate_vault_started', {
@@ -531,8 +555,14 @@ async function activateVault(
   writeLog('info', 'auth', 'activate_vault_step', { step: 'encrypt_state_files_start' })
   await encryptStateFiles()
   writeLog('info', 'auth', 'activate_vault_step', { step: 'encrypt_state_files_done' })
+  const bootstrapBeforeImport = bootstrapCaptureSummary()
+  if (bootstrapBeforeImport.enabled || bootstrapBeforeImport.entries > 0) {
+    writeLog('info', 'auth', 'activate_vault_step', { step: 'bootstrap_watchers_stop_start', ...bootstrapBeforeImport })
+    await stopWatchers()
+    writeLog('info', 'auth', 'activate_vault_step', { step: 'bootstrap_watchers_stop_done' })
+  }
   writeLog('info', 'auth', 'activate_vault_step', { step: 'bootstrap_import_start' })
-  const bootstrapImport = await importBootstrapCaptureIntoVault()
+  const bootstrapImport = await importBootstrapCaptureIntoVault(options.bootstrapImportProgress)
   writeLog('info', 'auth', 'activate_vault_step', { step: 'bootstrap_import_done', ...bootstrapImport })
   writeLog('info', 'auth', 'activate_vault_step', { step: 'state_migration_start' })
   const stateMigration = await migrateStateStorage()
@@ -664,9 +694,13 @@ function activationResponse(
   return { ...base, ...extras }
 }
 
-async function activateVaultForSetup(helperSessionId: string): Promise<Awaited<ReturnType<typeof activateVault>>> {
+async function activateVaultForSetup(
+  helperSessionId: string,
+  bootstrapImportProgress?: (progress: BootstrapImportProgress) => void,
+): Promise<Awaited<ReturnType<typeof activateVault>>> {
   return activateVault(helperSessionId, {
     suppressCaptureWarning: true,
+    bootstrapImportProgress,
   })
 }
 
@@ -859,11 +893,27 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
   app.post('/api/setup/init', async (_req, res) => {
     if (isSetupDone()) return res.json({ error: 'already setup' })
+    updateSetupActivationProgress({
+      running: false,
+      importedFiles: 0,
+      totalFiles: 0,
+      done: false,
+    })
     res.json(await setupInitPayload())
+  })
+
+  app.get('/api/setup/progress', (_req, res) => {
+    res.json(setupActivationProgress)
   })
 
   app.post('/api/setup/reset', (_req, res) => {
     pendingSetup = null
+    updateSetupActivationProgress({
+      running: false,
+      importedFiles: 0,
+      totalFiles: 0,
+      done: false,
+    })
     writeAuditEvent('setup', 'setup_reset')
     res.json({ ok: true })
   })
@@ -973,7 +1023,24 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       authRecord.recoveryWrapSalts = recoveryWrapped.map(item => item.salt)
 
       saveAuthConfig(authRecord)
-      const activation = await activateVaultForSetup(helperSessionId)
+      updateSetupActivationProgress({
+        running: true,
+        importedFiles: 0,
+        totalFiles: bootstrapCaptureSummary().entries,
+        done: false,
+      })
+      const activation = await activateVaultForSetup(helperSessionId, progress => {
+        updateSetupActivationProgress({
+          running: !progress.done,
+          importedFiles: progress.importedFiles,
+          totalFiles: progress.totalFiles,
+          done: progress.done,
+        })
+      })
+      updateSetupActivationProgress({
+        running: false,
+        done: true,
+      })
       saveAuthConfig({
         ...(loadAuthConfig() || {}),
         ...authRecord,
@@ -988,6 +1055,10 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       pendingSetup = null
       res.json(activationResponse(activation))
     } catch (error) {
+      updateSetupActivationProgress({
+        running: false,
+        done: false,
+      })
       writeLog('error', 'setup', 'setup_activate_failed', { error })
       updateHealth('setup', {
         lastErrorAt: new Date().toISOString(),
@@ -1890,6 +1961,7 @@ function setupPageHTML(): string {
   .warning-box { background: rgba(240,93,84,0.08); border: 1px solid rgba(240,93,84,0.28); border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.6; color: #f4b0aa; }
   .warning-box strong { color: var(--danger); }
   .info-box { background: rgba(43,196,109,0.08); border: 1px solid rgba(43,196,109,0.24); border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.6; color: #aee0bd; }
+  .info-box strong { color: #6fe39a; }
   .qr-block { display: flex; gap: 20px; align-items: flex-start; }
   .qr-wrap { background: #fff; padding: 8px; border-radius: 10px; flex-shrink: 0; }
   .qr-wrap img { display: block; width: 140px; height: 140px; }
@@ -2070,8 +2142,8 @@ function setupPageHTML(): string {
   </div>
   <div class="card-body">
     <div class="section" id="bootstrap-capture-banner" style="display:none;">
-      <div class="warning-box" id="bootstrap-capture-copy">
-        Capture is already running in the background. Passwords, the 24-word recovery phrase, and recovery codes will only be shown on this desktop during final setup. Do not relay or screenshot recovery material through chat apps.
+      <div class="info-box" id="bootstrap-capture-copy">
+        Capture is active. DataMoat is collecting supported local records on this machine. Finish password and recovery setup on this desktop; do not share recovery material in chat.
       </div>
     </div>
     <div class="steps">
@@ -2317,8 +2389,8 @@ async function init() {
     const remoteNoScreen = d.bootstrapCapture.requestedBy === 'remote-no-screen';
     banner.style.display = '';
     copy.innerHTML = remoteNoScreen
-      ? '<strong>Remote no-screen capture already started.</strong> DataMoat is already collecting supported local records on this machine. Passwords, the 24-word recovery phrase, and recovery codes will only be shown on this desktop during final setup and should never be relayed through Telegram, WhatsApp, OpenClaw, screenshots, or any remote chat channel.'
-      : '<strong>Background capture already started.</strong> DataMoat is already collecting supported local records on this machine. Passwords, the 24-word recovery phrase, and recovery codes will only be shown on this desktop during final setup and should never be relayed through Telegram, WhatsApp, OpenClaw, screenshots, or any remote chat channel.';
+      ? '<strong>Remote no-screen capture is active.</strong> DataMoat is collecting supported local records on this machine. Finish password and recovery setup on this desktop; do not share recovery material in chat.'
+      : '<strong>Background capture is active.</strong> DataMoat is collecting supported local records on this machine. Finish password and recovery setup on this desktop; do not share recovery material in chat.';
   }
   setTouchIdAvailability(_touchIdSupportedPlatform && !!d.touchIdAvailable, typeof d.touchIdReason === 'string' ? d.touchIdReason : '', true);
   renderMethodCards();
@@ -2670,9 +2742,9 @@ async function activate() {
   const progressSteps = [
     { pct: 32, delay: 800, duration: 700, text: 'Preparing encrypted vault…' },
     { pct: 48, delay: 1800, duration: 1200, text: 'Importing existing conversations…' },
-    { pct: 66, delay: 4200, duration: 2600, text: 'Scanning local history. This can take a few minutes on large vaults…' },
+    { pct: 66, delay: 4200, duration: 2600, text: 'Securing existing conversations. This only happens once…' },
     { pct: 84, delay: 9000, duration: 7000, text: 'Finishing initial session index…' },
-    { pct: 92, delay: 18000, duration: 15000, text: 'Still importing. DataMoat will open only after the scan is complete…' },
+    { pct: 92, delay: 18000, duration: 15000, text: 'Still importing. DataMoat will open when setup is complete…' },
   ];
   const progressTimers = progressSteps.map(step => setTimeout(() => {
     fill.style.transitionDuration = step.duration + 'ms';
@@ -2680,6 +2752,25 @@ async function activate() {
     label.textContent = step.text;
   }, step.delay));
   const clearProgressTimers = () => progressTimers.forEach(timer => clearTimeout(timer));
+  let importProgressSeen = false;
+  const progressPollTimer = setInterval(async () => {
+    try {
+      const r = await apiFetch('/api/setup/progress');
+      if (!r.ok) return;
+      const p = await r.json();
+      const total = Number(p.totalFiles || 0);
+      const imported = Number(p.importedFiles || 0);
+      if (total <= 0) return;
+      if (!importProgressSeen) {
+        importProgressSeen = true;
+        clearProgressTimers();
+      }
+      const pct = Math.max(48, Math.min(92, 48 + (imported / total) * 44));
+      fill.style.transitionDuration = '450ms';
+      fill.style.width = pct + '%';
+      label.textContent = 'Imported ' + imported + ' / ' + total + ' conversation files';
+    } catch {}
+  }, 1000);
   const rememberCaptureWarning = (payload) => {
     if (payload && typeof payload.captureWarning === 'string' && payload.captureWarning.trim()) {
       try { sessionStorage.setItem('dm_notice', payload.captureWarning.trim()); } catch {}
@@ -2694,6 +2785,7 @@ async function activate() {
     let d = null;
     try { d = await r.json(); } catch {}
     clearProgressTimers();
+    clearInterval(progressPollTimer);
     if (!r.ok || d?.error) {
       if (d?.error === 'already setup') {
         _setupCommitted = true;
@@ -2712,6 +2804,7 @@ async function activate() {
     rememberCaptureWarning(d);
   } catch {
     clearProgressTimers();
+    clearInterval(progressPollTimer);
     overlay.classList.remove('show');
     fill.style.width = '0%';
     err.textContent = 'Could not activate vault. Try again.';

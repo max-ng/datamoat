@@ -6,7 +6,12 @@ import { updateHealth, writeLog } from '../logging'
 
 export const PACKAGED_TRAY_LAUNCH_AGENT_LABEL = 'com.datamoat.app.tray'
 
+type PackagedLaunchAgentOptions = {
+  remoteNoScreen?: boolean
+}
+
 const HOME = os.homedir()
+const LAUNCH_AGENT_ENV_KEY = 'DATAMOAT_MAC_LAUNCH_AGENT'
 const LAUNCH_AGENTS_DIR = path.join(HOME, 'Library', 'LaunchAgents')
 const PACKAGED_TRAY_LAUNCH_AGENT_PATH = path.join(
   LAUNCH_AGENTS_DIR,
@@ -59,8 +64,25 @@ function currentAppPathFromExecutable(executable: string): string | null {
   return executable.slice(0, index + 4)
 }
 
-function launchAgentPlist(executable: string): string {
+function launchAgentPlist(executable: string, options: PackagedLaunchAgentOptions = {}): string {
   const escapedExecutable = xmlEscape(executable)
+  const mode = options.remoteNoScreen ? 'remote-no-screen' : 'tray'
+  const args = [
+    `    <string>${escapedExecutable}</string>`,
+    ...(options.remoteNoScreen ? ['    <string>--datamoat-remote-no-screen</string>'] : []),
+  ].join('\n')
+  const environment = options.remoteNoScreen
+    ? `  <key>EnvironmentVariables</key>
+  <dict>
+    <key>${LAUNCH_AGENT_ENV_KEY}</key><string>remote-no-screen</string>
+  </dict>
+`
+    : `  <key>EnvironmentVariables</key>
+  <dict>
+    <key>${LAUNCH_AGENT_ENV_KEY}</key><string>tray</string>
+    <key>DATAMOAT_TRAY_ONLY</key><string>1</string>
+  </dict>
+`
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -68,14 +90,10 @@ function launchAgentPlist(executable: string): string {
   <key>Label</key><string>${PACKAGED_TRAY_LAUNCH_AGENT_LABEL}</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${escapedExecutable}</string>
+${args}
   </array>
   <key>RunAtLoad</key><true/>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>DATAMOAT_TRAY_ONLY</key><string>1</string>
-  </dict>
-  <key>StandardOutPath</key><string>/dev/null</string>
+${environment}  <key>StandardOutPath</key><string>/dev/null</string>
   <key>StandardErrorPath</key><string>/dev/null</string>
 </dict>
 </plist>
@@ -102,16 +120,17 @@ export function removePackagedTrayLaunchAgent(): boolean {
   return changed
 }
 
-export function ensurePackagedTrayLaunchAgent(executable = process.execPath): void {
+export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOptions = {}, executable = process.execPath): void {
   if (process.platform !== 'darwin') return
   const appPath = currentAppPathFromExecutable(executable)
   if (!appPath || !fs.existsSync(executable)) return
 
-  const plist = launchAgentPlist(executable)
+  const plist = launchAgentPlist(executable, options)
   const previous = fs.existsSync(PACKAGED_TRAY_LAUNCH_AGENT_PATH)
     ? fs.readFileSync(PACKAGED_TRAY_LAUNCH_AGENT_PATH, 'utf8')
     : null
   const changed = previous !== plist
+  const launcherMode = options.remoteNoScreen ? 'remote-no-screen' : 'tray'
 
   try {
     fs.mkdirSync(LAUNCH_AGENTS_DIR, { recursive: true })
@@ -131,12 +150,16 @@ export function ensurePackagedTrayLaunchAgent(executable = process.execPath): vo
       launchAgentLabel: PACKAGED_TRAY_LAUNCH_AGENT_LABEL,
       launchAgentPath: PACKAGED_TRAY_LAUNCH_AGENT_PATH,
       launchAgentAppPath: appPath,
+      launchAgentMode: launcherMode,
+      remoteNoScreen: options.remoteNoScreen === true,
       launchAgentUpdatedAt: changed ? new Date().toISOString() : undefined,
     })
     writeLog('info', 'electron', 'packaged_tray_launch_agent_ready', {
       label: PACKAGED_TRAY_LAUNCH_AGENT_LABEL,
       path: PACKAGED_TRAY_LAUNCH_AGENT_PATH,
       executable,
+      launcherMode,
+      remoteNoScreen: options.remoteNoScreen === true,
       changed,
     })
   } catch (error) {
@@ -148,4 +171,8 @@ export function ensurePackagedTrayLaunchAgent(executable = process.execPath): vo
     })
     writeLog('warn', 'electron', 'packaged_tray_launch_agent_failed', { error })
   }
+}
+
+export function ensureMacRemoteNoScreenLaunchAgent(executable = process.execPath): void {
+  ensurePackagedTrayLaunchAgent({ remoteNoScreen: true }, executable)
 }

@@ -1,6 +1,6 @@
 # DataMoat
 
-[![Version](https://img.shields.io/badge/version-0.1.12-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-0.1.13-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -19,8 +19,6 @@
 **The people and companies that own their AI data will win the future.**
 
 DataMoat is an encrypted local vault for Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records. It preserves searchable transcripts, prompts, tool output, locally available reasoning content, metadata, and attachments on the same machine, so your full AI work history stays reviewable, protected, and easier to hand off later.
-
-![DataMoat conversation search and session detail UI](.github/assets/screenshot.png)
 
 **Supported sources today:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local OpenClaw session records, and supported local Cursor agent transcripts.
 **More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
@@ -53,7 +51,7 @@ DataMoat is an encrypted local vault for Claude CLI, Claude Desktop, Codex CLI, 
 |---|---|---|
 | **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.12-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
+| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.13-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Unsigned manual packages for Windows 11 x64 and Windows 11 on Arm; x64 has passed GitHub Actions packaged runtime smoke, ARM64 has passed real VM UI/background capture smoke; signed installer still in progress |
 
 ### Sources
@@ -113,25 +111,25 @@ flowchart TD
 
 ## Install
 
-Source install on macOS and Linux is available now. A signed / notarized Apple Silicon macOS DMG is available from [GitHub Releases](https://github.com/max-ng/datamoat/releases) and includes Secure Enclave + Touch ID unlock on supported Macs, menu-bar auto-start at login, and packaged auto-update through GitHub Releases. Windows x64 and ARM64 are available as unsigned ZIP + `DataMoat.exe` packages while the signed installer is completed.
+The signed / notarized macOS DMG is the recommended install path for Mac users. Source install remains available for Linux, development, and fallback cases. The macOS DMG is available from [GitHub Releases](https://github.com/max-ng/datamoat/releases) and includes Secure Enclave + Touch ID unlock on supported Macs, menu-bar auto-start at login, and packaged auto-update through GitHub Releases. Windows x64 and ARM64 are available as unsigned ZIP + `DataMoat.exe` packages while the signed installer is completed.
 
 Windows ZIP + `DataMoat.exe` downloads:
 
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.12-win32-x64.zip)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.12-win32-arm64.zip)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.13-win32-x64.zip)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.13-win32-arm64.zip)
 
 Each Windows ZIP includes `DataMoat.exe` plus the required app files. Unzip the Windows package and run `DataMoat.exe` from inside the extracted folder. Keep the folder contents together; this is not a standalone single-file `.exe` installer yet.
 
 ### AI-Assisted Install
 
-For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.12-macos-arm64.dmg).
+For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.13-macos-arm64.dmg). Do not start with `git clone` on macOS unless the user explicitly wants source install or the packaged release is unavailable.
 
-You can ask Claude or Codex to install DataMoat from this repository for you when you are looking at the target desktop.
+You can ask Claude CLI, Codex CLI, or OpenClaw to install DataMoat when you are looking at the target desktop.
 
 Typical prompt:
 
 ```text
-Install DataMoat from this GitHub repository. Clone it, run install.sh, launch datamoat, and tell me when the local setup UI appears so I can complete the password, authenticator, and recovery steps myself on the protected desktop.
+Install DataMoat on this Mac using the latest signed macOS DMG from GitHub Releases. Copy DataMoat.app to Applications, launch it, and tell me when the local setup UI appears so I can complete the password, authenticator, Touch ID, and recovery steps myself on the protected desktop.
 ```
 
 Important:
@@ -142,17 +140,74 @@ Important:
 
 ### Remote No-Screen Install
 
-If the install is being started through OpenClaw or any remote chat relay while you cannot see the protected desktop, use the special no-screen install flag:
+If the install is being started through OpenClaw, Codex, or any remote chat relay while you cannot see the protected desktop, use the packaged macOS DMG or Windows ZIP first and launch the installed app with the single no-screen flag.
+
+macOS remote prompt:
+
+```text
+Install DataMoat on this Mac using the latest signed and notarized macOS DMG.
+
+Do not use git clone or source install unless the DMG install fails.
+
+Steps:
+1. Download the latest macOS DMG:
+   https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.13-macos-arm64.dmg
+2. Mount the DMG.
+3. Copy DataMoat.app to ~/Applications.
+4. Launch exactly:
+   ~/Applications/DataMoat.app/Contents/MacOS/DataMoat --datamoat-remote-no-screen
+
+Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
+Do not set DATAMOAT_HOME, DATAMOAT_TRAY_ONLY, or other test-only environment variables.
+Do not use --datamoat-capture-before-setup.
+Do not complete password, authenticator, Touch ID, recovery phrase, or recovery-code setup in this chat.
+
+After launch, tell me:
+DataMoat was installed from the DMG and remote no-screen capture was started. I must finish setup later on the protected desktop GUI.
+```
+
+Windows remote prompt:
+
+```text
+Install DataMoat on this Windows machine using the latest Windows ZIP and DataMoat.exe.
+
+Do not use git clone or source install.
+
+Steps:
+1. Download the correct latest Windows ZIP from GitHub Releases:
+   x64: https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.13-win32-x64.zip
+   ARM64: https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.13-win32-arm64.zip
+2. Extract the ZIP into Downloads.
+3. Launch exactly:
+   %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen
+
+Use DataMoat-win32-x64 for x64 or DataMoat-win32-arm64 for ARM64.
+Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
+Do not set DATAMOAT_HOME, DATAMOAT_CLAUDE_CLI_ROOTS, DATAMOAT_TRAY_ONLY, or other test-only environment variables.
+Do not use --datamoat-capture-before-setup.
+Do not complete password, authenticator, recovery phrase, or recovery-code setup in this chat.
+
+After launch, tell me:
+DataMoat was installed from the Windows ZIP and remote no-screen capture was started. I must finish setup later on the protected desktop GUI.
+```
+
+Manual macOS launch command after installing the DMG:
+
+```bash
+"$HOME/Applications/DataMoat.app/Contents/MacOS/DataMoat" --datamoat-remote-no-screen
+```
+
+Use this mode to prevent the password, authenticator enrollment secret, Touch ID prompt, 24-word recovery phrase, and recovery codes from ever appearing in Telegram, WhatsApp, OpenClaw chat, screenshots, or any other remote relay. DataMoat starts collecting supported local records immediately with pre-setup encrypted capture, but the full unlock setup must still be completed later on the protected desktop.
+
+After the remote install finishes, the agent should report that DataMoat was installed successfully and is already capturing supported local records. When you return to the protected desktop, open DataMoat there and complete setup locally. Do not complete password, authenticator, Touch ID, or recovery setup inside the bot conversation.
+
+Linux fallback when no DMG exists:
 
 ```bash
 git clone <repository-url> datamoat
 cd datamoat
 bash install.sh --remote-no-screen
 ```
-
-Use this mode to prevent the password, 24-word recovery phrase, and recovery codes from ever appearing in Telegram, WhatsApp, OpenClaw chat, screenshots, or any other remote relay. DataMoat starts collecting supported local records immediately with pre-setup encrypted capture, but the full unlock setup must still be completed later on the protected desktop.
-
-After the remote install finishes, the installer should report that capture has already started. When you return to the protected desktop, keep going on the local setup page if it is already open, or run `datamoat` there to reopen it and complete setup locally.
 
 ### Manual Install
 

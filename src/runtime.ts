@@ -26,7 +26,7 @@ export function launcherBinaryForScripts(): string {
   const macLauncher = macScriptLauncherBinary()
   if (macLauncher) return macLauncher
 
-  if (!process.versions.electron) return process.execPath
+  if (process.versions.electron) return process.execPath
 
   return nodeBinaryForBuildTasks()
 }

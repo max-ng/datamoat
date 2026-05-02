@@ -17,7 +17,7 @@ BOOTSTRAP_REQUESTED_BY=""
 
 for arg in "$@"; do
   case "$arg" in
-    --capture-before-setup|--openclaw-remote|--remote-no-screen)
+    --datamoat-remote-no-screen|--datamoat-capture-before-setup|--capture-before-setup|--openclaw-remote|--remote-no-screen)
       BOOTSTRAP_CAPTURE=1
       BOOTSTRAP_REQUESTED_BY="remote-no-screen"
       ;;
@@ -148,6 +148,49 @@ chmod +x "$HOME/.local/bin/datamoat"
 echo -e "  ${GREEN}✓${RESET} installed to ~/.datamoat/app"
 echo -e "  ${GREEN}✓${RESET} binary at ~/.local/bin/datamoat"
 
+verify_remote_no_screen_capture() {
+  if [ "$BOOTSTRAP_CAPTURE" -ne 1 ]; then
+    return 0
+  fi
+
+  for _ in $(seq 1 80); do
+    if "$NODE_BIN" <<'NODE'
+const fs = require('fs')
+const path = require('path')
+const home = process.env.HOME || ''
+const bootstrapPath = path.join(home, '.datamoat', 'state', 'bootstrap-capture.json')
+const healthPath = path.join(home, '.datamoat', 'state', 'health.json')
+try {
+  const bootstrap = JSON.parse(fs.readFileSync(bootstrapPath, 'utf8'))
+  const health = fs.existsSync(healthPath)
+    ? JSON.parse(fs.readFileSync(healthPath, 'utf8'))
+    : null
+  const daemon = health && health.components && health.components.daemon
+  if (
+    bootstrap.enabled === true &&
+    bootstrap.requestedBy === 'remote-no-screen' &&
+    daemon &&
+    daemon.running === true &&
+    daemon.bootstrapCapture === true
+  ) {
+    process.exit(0)
+  }
+} catch {}
+process.exit(1)
+NODE
+    then
+      return 0
+    fi
+    sleep 0.25
+  done
+
+  echo ""
+  echo "  x remote no-screen capture did not become active"
+  echo "    expected ~/.datamoat/state/bootstrap-capture.json requestedBy=remote-no-screen"
+  echo "    and ~/.datamoat/state/health.json components.daemon.bootstrapCapture=true"
+  exit 1
+}
+
 # LaunchAgent (macOS auto-start on login)
 if [[ "$(uname)" == "Darwin" ]]; then
   PLIST="$HOME/Library/LaunchAgents/com.datamoat.daemon.plist"
@@ -245,6 +288,7 @@ After=default.target
 
 [Service]
 Type=simple
+Environment=HOME=${HOME}
 Environment=DATAMOAT_DAEMON=1
 ExecStart=${NODE_BIN} ${HOME}/.datamoat/app/dist/daemon.js
 WorkingDirectory=${HOME}/.datamoat/app
@@ -256,14 +300,42 @@ WantedBy=default.target
 SERVICE
 
   if command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/null 2>&1; then
-    systemctl --user enable --now datamoat-daemon.service >/dev/null 2>&1 || true
-    echo -e "  ${GREEN}✓${RESET} systemd --user service installed (auto-starts on login)"
+    if [ "$BOOTSTRAP_CAPTURE" -eq 1 ]; then
+      systemctl --user enable datamoat-daemon.service >/dev/null 2>&1 || true
+      echo -e "  ${GREEN}✓${RESET} systemd --user service installed (auto-starts after setup)"
+    elif systemctl --user enable --now datamoat-daemon.service >/dev/null 2>&1; then
+      echo -e "  ${GREEN}✓${RESET} systemd --user service installed (auto-starts on login)"
+    else
+      HOME="$HOME" DATAMOAT_DAEMON=1 nohup "${NODE_BIN}" "$HOME/.datamoat/app/dist/daemon.js" >/dev/null 2>&1 &
+      echo "  ! systemd --user unavailable; started DataMoat for this session only"
+    fi
   else
-    DATAMOAT_DAEMON=1 nohup "${NODE_BIN}" "$HOME/.datamoat/app/dist/daemon.js" >/dev/null 2>&1 &
-    echo "  ! systemd --user unavailable; started DataMoat for this session only"
+    if [ "$BOOTSTRAP_CAPTURE" -eq 1 ]; then
+      echo "  ! systemd --user unavailable; starting remote no-screen capture directly"
+    else
+      HOME="$HOME" DATAMOAT_DAEMON=1 nohup "${NODE_BIN}" "$HOME/.datamoat/app/dist/daemon.js" >/dev/null 2>&1 &
+      echo "  ! systemd --user unavailable; started DataMoat for this session only"
+    fi
   fi
   mkdir -p "$AUTOSTART_DIR"
-  cat > "$AUTOSTART_FILE" << DESKTOP
+  if [ "$BOOTSTRAP_CAPTURE" -eq 1 ]; then
+    cat > "$AUTOSTART_DIR/datamoat-remote-no-screen.desktop" << DESKTOP
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=DataMoat Remote No-Screen Capture
+Comment=Start DataMoat pre-setup capture
+Exec=${HOME}/.local/bin/datamoat --datamoat-remote-no-screen
+Terminal=false
+X-GNOME-Autostart-enabled=true
+Categories=Utility;Security;
+DESKTOP
+    chmod 644 "$AUTOSTART_DIR/datamoat-remote-no-screen.desktop"
+    echo -e "  ${GREEN}✓${RESET} Remote no-screen autostart installed for graphical logins"
+    "$HOME/.local/bin/datamoat" --datamoat-remote-no-screen
+    verify_remote_no_screen_capture
+  else
+    cat > "$AUTOSTART_FILE" << DESKTOP
 [Desktop Entry]
 Type=Application
 Version=1.0
@@ -274,8 +346,9 @@ Terminal=false
 X-GNOME-Autostart-enabled=true
 Categories=Utility;Security;
 DESKTOP
-  chmod 644 "$AUTOSTART_FILE"
-  echo -e "  ${GREEN}✓${RESET} Tray autostart installed for graphical logins"
+    chmod 644 "$AUTOSTART_FILE"
+    echo -e "  ${GREEN}✓${RESET} Tray autostart installed for graphical logins"
+  fi
   if [ -n "$LINUX_SANDBOX_HELPER" ]; then
     echo -e "  ${GREEN}✓${RESET} Linux Electron sandbox helper installed"
   else

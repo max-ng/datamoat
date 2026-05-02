@@ -1,6 +1,7 @@
 import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as path from 'path'
+import * as readline from 'readline'
 import { OffsetState, Source } from './types'
 import {
   BOOTSTRAP_CAPTURE_DIR,
@@ -25,6 +26,8 @@ import {
 const BOOTSTRAP_CAPTURE_SCHEMA_VERSION = 1
 const BOOTSTRAP_CAPTURE_MODE = 'capture_only'
 const BOOTSTRAP_INDEX_PREFIX = 'dmbootstrap1:'
+const BOOTSTRAP_DECRYPT_BATCH_LINES = 4096
+const BOOTSTRAP_DECRYPT_BATCH_BYTES = 64 * 1024 * 1024
 
 export type BootstrapCaptureState = {
   schemaVersion: number
@@ -41,12 +44,22 @@ type BootstrapCaptureEntry = {
   offset: number
   lastMod: number
   sessionId?: string
+  importLine?: number
+  importSpoolCursor?: number
 }
 
 type BootstrapCaptureIndex = {
   schemaVersion: number
   updatedAt: string
   entries: Record<string, BootstrapCaptureEntry>
+}
+
+export type BootstrapCaptureLineBatch = {
+  lines: string[]
+  startLine: number
+  nextLine: number
+  startSpoolCursor: number
+  nextSpoolCursor: number
 }
 
 let bootstrapSessionId: string | null = null
@@ -298,10 +311,86 @@ export async function appendBootstrapCapture(params: {
 }
 
 export async function readBootstrapCaptureLines(filePath: string): Promise<string[]> {
+  const decryptedLines: string[] = []
+  await forEachBootstrapCaptureLineBatch(filePath, async batch => {
+    decryptedLines.push(...batch.lines)
+  })
+  return decryptedLines
+}
+
+export async function forEachBootstrapCaptureLineBatch(
+  filePath: string,
+  onBatch: (batch: BootstrapCaptureLineBatch) => Promise<void>,
+  options: { startLine?: number; startSpoolCursor?: number } = {},
+): Promise<void> {
   const sessionId = await ensureBootstrapCaptureSession()
-  const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(line => line.trim())
-  if (lines.length === 0) return []
-  return await decryptLinesForSession(sessionId, lines)
+  let encryptedBatch: string[] = []
+  let encryptedBatchBytes = 0
+  let encryptedLine = 0
+  let batchStartLine = options.startLine ?? 0
+  let spoolCursor = options.startSpoolCursor ?? 0
+
+  const flushBatch = async (): Promise<void> => {
+    if (encryptedBatch.length === 0) return
+    const batch = encryptedBatch
+    const startLine = batchStartLine
+    const startSpoolCursor = spoolCursor
+    encryptedBatch = []
+    encryptedBatchBytes = 0
+    const lines = await decryptLinesForSession(sessionId, batch)
+    for (const line of lines) {
+      spoolCursor += Buffer.byteLength(line, 'utf8') + 1
+    }
+    await onBatch({
+      lines,
+      startLine,
+      nextLine: encryptedLine,
+      startSpoolCursor,
+      nextSpoolCursor: spoolCursor,
+    })
+  }
+
+  const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
+  try {
+    for await (const rawLine of rl) {
+      const line = rawLine.trim()
+      if (!line) continue
+      if (encryptedLine < (options.startLine ?? 0)) {
+        encryptedLine += 1
+        continue
+      }
+      if (encryptedBatch.length === 0) batchStartLine = encryptedLine
+      encryptedBatch.push(line)
+      encryptedBatchBytes += Buffer.byteLength(line, 'utf8')
+      encryptedLine += 1
+      if (
+        encryptedBatch.length >= BOOTSTRAP_DECRYPT_BATCH_LINES
+        || encryptedBatchBytes >= BOOTSTRAP_DECRYPT_BATCH_BYTES
+      ) {
+        await flushBatch()
+      }
+    }
+    await flushBatch()
+  } finally {
+    rl.close()
+  }
+}
+
+export async function updateBootstrapEntryImportCursor(
+  originalPath: string,
+  importLine: number,
+  importSpoolCursor: number,
+): Promise<void> {
+  const idx = await loadIndexRaw()
+  const entry = idx.entries[originalPath]
+  if (!entry) return
+  idx.entries[originalPath] = {
+    ...entry,
+    importLine,
+    importSpoolCursor,
+  }
+  await saveIndex(idx.entries)
 }
 
 export async function markBootstrapEntryImported(originalPath: string): Promise<void> {

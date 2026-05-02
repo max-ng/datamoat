@@ -3,11 +3,14 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { execFile, execFileSync } from 'child_process'
 import { detectInstallContext } from './install-context'
+import { STATE_DIR } from './config'
 
 const SERVICE = process.env.DATAMOAT_KEYCHAIN_SERVICE?.trim() || 'DataMoat'
 const VAULT_KEY_ACCOUNT = 'vaultKey'
 const BACKGROUND_CAPTURE_SECRET_ACCOUNT = 'backgroundCaptureSecret'
 const BOOTSTRAP_CAPTURE_SECRET_ACCOUNT = 'bootstrapCaptureSecret'
+const LINUX_BACKGROUND_SECRET_DIR = path.join(STATE_DIR, 'background-capture-secrets')
+const LINUX_BOOTSTRAP_SECRET_FILE = path.join(STATE_DIR, 'bootstrap-capture-secret')
 
 export const IS_MAC = platform() === 'darwin'
 const TOUCHID_HELPER_BUNDLE_EXECUTABLE = path.join('DataMoatTouchID.app', 'Contents', 'MacOS', 'DataMoatTouchID')
@@ -43,6 +46,48 @@ async function secretDelete(account: string): Promise<void> {
   } catch { /* ignore */ }
 }
 
+function linuxShouldUseBootstrapFileSecret(): boolean {
+  return platform() === 'linux' && !process.env.DBUS_SESSION_BUS_ADDRESS?.trim()
+}
+
+function linuxSecretFileForAccount(account: string): string {
+  return path.join(
+    LINUX_BACKGROUND_SECRET_DIR,
+    Buffer.from(account, 'utf8').toString('base64url'),
+  )
+}
+
+function linuxStoreBackgroundFileSecret(account: string, secret: string): void {
+  fs.mkdirSync(LINUX_BACKGROUND_SECRET_DIR, { recursive: true, mode: 0o700 })
+  try { fs.chmodSync(LINUX_BACKGROUND_SECRET_DIR, 0o700) } catch { /* non-fatal */ }
+  fs.writeFileSync(linuxSecretFileForAccount(account), secret, { encoding: 'utf8', mode: 0o600 })
+}
+
+function linuxLoadBackgroundFileSecret(account: string): string | null {
+  try {
+    return fs.readFileSync(linuxSecretFileForAccount(account), 'utf8').trim() || null
+  } catch {
+    return null
+  }
+}
+
+function linuxDeleteBackgroundFileSecret(account: string): void {
+  try { fs.rmSync(linuxSecretFileForAccount(account), { force: true }) } catch { /* ignore */ }
+}
+
+function linuxStoreBootstrapFileSecret(secret: string): void {
+  fs.mkdirSync(path.dirname(LINUX_BOOTSTRAP_SECRET_FILE), { recursive: true })
+  fs.writeFileSync(LINUX_BOOTSTRAP_SECRET_FILE, secret, { encoding: 'utf8', mode: 0o600 })
+}
+
+function linuxLoadBootstrapFileSecret(): string | null {
+  try {
+    return fs.readFileSync(LINUX_BOOTSTRAP_SECRET_FILE, 'utf8').trim() || null
+  } catch {
+    return null
+  }
+}
+
 function assertDefaultKeychainAvailable(): void {
   if (!IS_MAC) return
 
@@ -76,27 +121,54 @@ export async function keychainDelete(): Promise<void> {
 }
 
 export async function backgroundCaptureSecretStore(secret: string, account = BACKGROUND_CAPTURE_SECRET_ACCOUNT): Promise<void> {
-  await secretStore(account, secret)
+  try {
+    await secretStore(account, secret)
+  } catch (error) {
+    if (platform() !== 'linux') throw error
+    linuxStoreBackgroundFileSecret(account, secret)
+  }
 }
 
 export async function backgroundCaptureSecretLoad(account = BACKGROUND_CAPTURE_SECRET_ACCOUNT): Promise<string | null> {
-  return await secretLoad(account)
+  const stored = await secretLoad(account)
+  if (stored) return stored
+  if (platform() !== 'linux') return null
+  return linuxLoadBackgroundFileSecret(account)
 }
 
 export async function backgroundCaptureSecretDelete(account = BACKGROUND_CAPTURE_SECRET_ACCOUNT): Promise<void> {
   await secretDelete(account)
+  if (platform() === 'linux') linuxDeleteBackgroundFileSecret(account)
 }
 
 export async function bootstrapCaptureSecretStore(secret: string): Promise<void> {
-  await secretStore(BOOTSTRAP_CAPTURE_SECRET_ACCOUNT, secret)
+  if (linuxShouldUseBootstrapFileSecret()) {
+    linuxStoreBootstrapFileSecret(secret)
+    return
+  }
+
+  try {
+    await secretStore(BOOTSTRAP_CAPTURE_SECRET_ACCOUNT, secret)
+  } catch (error) {
+    if (platform() !== 'linux') throw error
+    linuxStoreBootstrapFileSecret(secret)
+  }
 }
 
 export async function bootstrapCaptureSecretLoad(): Promise<string | null> {
-  return await secretLoad(BOOTSTRAP_CAPTURE_SECRET_ACCOUNT)
+  if (linuxShouldUseBootstrapFileSecret()) return linuxLoadBootstrapFileSecret()
+
+  const stored = await secretLoad(BOOTSTRAP_CAPTURE_SECRET_ACCOUNT)
+  if (stored) return stored
+  if (platform() !== 'linux') return null
+  return linuxLoadBootstrapFileSecret()
 }
 
 export async function bootstrapCaptureSecretDelete(): Promise<void> {
   await secretDelete(BOOTSTRAP_CAPTURE_SECRET_ACCOUNT)
+  if (platform() === 'linux') {
+    try { fs.rmSync(LINUX_BOOTSTRAP_SECRET_FILE, { force: true }) } catch { /* ignore */ }
+  }
 }
 
 function execTouchId(args: string[]): Promise<string> {

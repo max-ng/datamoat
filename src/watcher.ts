@@ -9,10 +9,11 @@ import {
   appendBootstrapCapture,
   clearBootstrapCaptureData,
   disableBootstrapCapture,
+  forEachBootstrapCaptureLineBatch,
   listBootstrapEntries,
   loadBootstrapOffsetState,
   markBootstrapEntryImported,
-  readBootstrapCaptureLines,
+  updateBootstrapEntryImportCursor,
 } from './bootstrap-capture'
 import { extractClaudeLine, extractClaudeModel } from './extractors/claude'
 import { extractCodexLine, sessionIdFromPath as codexSessionIdFromPath } from './extractors/codex'
@@ -111,6 +112,14 @@ type DriftBuckets = {
   unknownTopLevelKeys: Record<string, number>
 }
 
+export type BootstrapImportProgress = {
+  importedFiles: number
+  importedMessages: number
+  totalFiles: number
+  remainingFiles: number
+  done: boolean
+}
+
 function observeDrift(source: Source, obj: unknown, buckets: DriftBuckets): void {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return
   const o = obj as Record<string, unknown>
@@ -187,6 +196,7 @@ const WATCHER_INITIAL_QUEUE_TIMEOUT_MS = nonNegativeTimeoutMs(process.env.DATAMO
 const WATCHER_YIELD_EVERY_LINES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_YIELD_EVERY_LINES, 100)
 const WATCHER_MAX_BATCH_BYTES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_MAX_BATCH_BYTES, 512 * 1024)
 const WATCHER_MAX_RECORD_BYTES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_MAX_RECORD_BYTES, 32 * 1024 * 1024)
+const BOOTSTRAP_IMPORT_FLUSH_LINES = positiveTimeoutMs(process.env.DATAMOAT_BOOTSTRAP_IMPORT_FLUSH_LINES, 500)
 const WATCHER_POLL_INTERVAL_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_POLL_INTERVAL_MS, 2_000)
 const WATCHER_BINARY_POLL_INTERVAL_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_BINARY_POLL_INTERVAL_MS, 5_000)
 const WATCHER_USE_POLLING = watcherUsePollingDefault()
@@ -348,12 +358,13 @@ async function continueFileIfPending(
   filePath: string,
   source: Source,
   offsets: OffsetState,
+  mode: WatcherMode,
   processedOffset: number,
   fileSize: number,
 ): Promise<void> {
   if (processedOffset >= fileSize) return
   await yieldToEventLoop()
-  await processFile(filePath, source, offsets)
+  await processFile(filePath, source, offsets, mode)
 }
 
 function defaultState(source: Source): FileState {
@@ -546,11 +557,14 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
 export async function stopWatchers(): Promise<void> {
   if (!watchersStarted && activeWatchers.length === 0) return
   watchersStarted = false
+  const watchers = activeWatchers.splice(0)
+  await Promise.allSettled(watchers.map(watcher => watcher.close()))
+  await processQueue.catch(err => {
+    writeLog('error', 'watcher', 'process_queue_drain_failed', { error: safeError(err) })
+  })
   watcherMode = 'vault'
   fileStates.clear()
   offsetsPromise = null
-  const watchers = activeWatchers.splice(0)
-  await Promise.allSettled(watchers.map(watcher => watcher.close()))
   log('stopped')
   for (const source of ALL_SOURCES) {
     updateHealth(`watcher:${source}`, { watching: false, stoppedAt: new Date().toISOString() })
@@ -558,6 +572,8 @@ export async function stopWatchers(): Promise<void> {
 }
 
 function queueProcessFile(filePath: string, source: Source, event: 'add' | 'change'): void {
+  const modeAtEnqueue = watcherMode
+  const offsetsAtEnqueue = offsetsPromise
   updateHealth(`watcher:${source}`, {
     lastEventAt: new Date().toISOString(),
     lastEvent: event,
@@ -567,8 +583,8 @@ function queueProcessFile(filePath: string, source: Source, event: 'add' | 'chan
   processQueue = processQueue
     .then(async () => {
       await yieldToEventLoop()
-      const offsets = offsetsPromise ? await offsetsPromise : await loadOffsets()
-      await processFile(filePath, source, offsets)
+      const offsets = offsetsAtEnqueue ? await offsetsAtEnqueue : await loadWatcherOffsets(modeAtEnqueue)
+      await processFile(filePath, source, offsets, modeAtEnqueue)
       await yieldToEventLoop()
     })
     .catch(err => {
@@ -580,7 +596,7 @@ function queueProcessFile(filePath: string, source: Source, event: 'add' | 'chan
     })
 }
 
-async function processFile(filePath: string, source: Source, offsets: Awaited<ReturnType<typeof loadOffsets>>): Promise<void> {
+async function processFile(filePath: string, source: Source, offsets: Awaited<ReturnType<typeof loadOffsets>>, mode: WatcherMode): Promise<void> {
   try {
     const stat = fs.statSync(filePath)
     const offsetKey = filePath
@@ -625,7 +641,7 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
         file: path.basename(filePath),
         bytes: batch.endOffset - savedOffset,
       })
-      await continueFileIfPending(filePath, source, offsets, batch.endOffset, fileSize)
+      await continueFileIfPending(filePath, source, offsets, mode, batch.endOffset, fileSize)
       return
     }
 
@@ -645,7 +661,7 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
     const lines = lineMetas.map(m => m.line)
 
     if (lines.length === 0) {
-      await continueFileIfPending(filePath, source, offsets, batch.endOffset, fileSize)
+      await continueFileIfPending(filePath, source, offsets, mode, batch.endOffset, fileSize)
       return
     }
 
@@ -687,7 +703,7 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
       }
 
       try {
-        await processLine(lineMetas[index].line, filePath, source, state, newMessages, watcherMode !== 'bootstrap')
+        await processLine(lineMetas[index].line, filePath, source, state, newMessages, mode !== 'bootstrap')
       } catch (err) {
         skippedLines += 1
         writeLog('warn', 'watcher', 'line_skipped', {
@@ -700,7 +716,7 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
       if ((index + 1) % WATCHER_YIELD_EVERY_LINES === 0) await yieldToEventLoop()
     }
 
-    if (watcherMode === 'bootstrap') {
+    if (mode === 'bootstrap') {
       await appendBootstrapCapture({
         source,
         originalPath: filePath,
@@ -741,7 +757,7 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
           lastSkippedLines: skippedLines,
         })
       }
-      await continueFileIfPending(filePath, source, offsets, batch.endOffset, fileSize)
+      await continueFileIfPending(filePath, source, offsets, mode, batch.endOffset, fileSize)
       return
     }
 
@@ -829,7 +845,7 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
     }
     await saveOffsets(offsets)
     fileStates.set(filePath, state)
-    await continueFileIfPending(filePath, source, offsets, batch.endOffset, fileSize)
+    await continueFileIfPending(filePath, source, offsets, mode, batch.endOffset, fileSize)
   } catch (err) {
     if (isTransientFileError(err)) {
       writeLog('warn', 'watcher', 'process_file_skipped', {
@@ -1079,20 +1095,54 @@ function updateStateFromMessage(state: FileState, msg: Message): void {
   if (msg.hasThinking) state.hasThinking = true
 }
 
-export async function importBootstrapCaptureIntoVault(): Promise<{ importedFiles: number; importedMessages: number; remainingFiles: number }> {
+export async function importBootstrapCaptureIntoVault(
+  onProgress?: (progress: BootstrapImportProgress) => void,
+): Promise<{ importedFiles: number; importedMessages: number; remainingFiles: number }> {
   const entries = await listBootstrapEntries()
   if (entries.length === 0) {
     await clearBootstrapCaptureData()
     disableBootstrapCapture()
+    onProgress?.({
+      importedFiles: 0,
+      importedMessages: 0,
+      totalFiles: 0,
+      remainingFiles: 0,
+      done: true,
+    })
     return { importedFiles: 0, importedMessages: 0, remainingFiles: 0 }
   }
 
   const offsets = await loadOffsets()
+  const totalFiles = entries.length
   let importedFiles = 0
   let importedMessages = 0
+  const emitProgress = (remainingFiles = Math.max(totalFiles - importedFiles, 0), done = false): void => {
+    onProgress?.({
+      importedFiles,
+      importedMessages,
+      totalFiles,
+      remainingFiles,
+      done,
+    })
+  }
+  emitProgress()
 
   for (const entry of entries) {
     try {
+      const savedOffset = offsets[entry.originalPath]?.offset ?? 0
+      if (savedOffset >= entry.offset) {
+        await markBootstrapEntryImported(entry.originalPath)
+        importedFiles += 1
+        updateHealth(`watcher:${entry.source}`, {
+          lastBootstrapImportAt: new Date().toISOString(),
+          lastBootstrapImportSkippedReason: 'source_already_imported',
+          lastErrorAt: null,
+          lastError: null,
+        })
+        emitProgress()
+        continue
+      }
+
       if (!fs.existsSync(entry.spoolFile)) {
         offsets[entry.originalPath] = {
           offset: entry.offset,
@@ -1103,92 +1153,151 @@ export async function importBootstrapCaptureIntoVault(): Promise<{ importedFiles
         await saveOffsets(offsets)
         await markBootstrapEntryImported(entry.originalPath)
         importedFiles += 1
+        updateHealth(`watcher:${entry.source}`, {
+          lastBootstrapImportAt: new Date().toISOString(),
+          lastBootstrapImportSkippedReason: 'missing_spool_file',
+          lastErrorAt: null,
+          lastError: null,
+        })
+        emitProgress()
         continue
       }
 
-      const lines = await readBootstrapCaptureLines(entry.spoolFile)
-      const state = fileStates.get(entry.originalPath) ?? await hydrateState(entry.originalPath, entry.source, offsets)
-      const newMessages: Message[] = []
-      const rawRecords: RawRecord[] = []
+      // Bootstrap watcher state may already include pre-setup scan counters.
+      // Importing the encrypted spool must rebuild the vault session metadata
+      // from the spool lines themselves, otherwise a daemon restart before
+      // setup can double-count messages while only writing each message once.
+      const state = await hydrateState(entry.originalPath, entry.source, offsets)
+      if (!state.sessionId && entry.sessionId) state.sessionId = entry.sessionId
+      let newMessages: Message[] = []
+      let rawRecords: RawRecord[] = []
       const drift: DriftBuckets = { unknownEventTypes: {}, unknownTopLevelKeys: {} }
       let skippedLines = 0
       const capturedAt = new Date().toISOString()
-      // Bootstrap spool does not preserve per-line byte offsets; use a running
-      // counter inside the spool so raw records still carry a stable ordering.
-      let spoolCursor = 0
+      let entryImportedMessages = 0
 
-      for (let index = 0; index < lines.length; index += 1) {
-        const lineText = lines[index]
-        let parsed: unknown = null
-        let parseError: string | undefined
-        try {
-          parsed = JSON.parse(lineText)
-        } catch (err) {
-          parseError = err instanceof Error ? err.message : String(err)
-        }
-        if (parseError === undefined) observeDrift(entry.source, parsed, drift)
-        rawRecords.push({
-          v: 1,
+      const flushBuffers = async (nextLine: number, nextSpoolCursor: number): Promise<void> => {
+        if (rawRecords.length === 0 && newMessages.length === 0) return
+
+        const bufferedRawRecords = rawRecords
+        const bufferedMessages = newMessages
+        rawRecords = []
+        newMessages = []
+
+        const rawSessionId = state.sessionId || entry.sessionId || fallbackRawSessionId(entry.source, entry.originalPath)
+        const usedFallbackRawSession = !state.sessionId && !entry.sessionId
+        const rawSessionUid = buildSessionUid({
           source: entry.source,
-          sourcePath: entry.originalPath,
-          sourceByteOffset: spoolCursor,
-          capturedAt,
-          rawHash: sha256Hex(lineText),
-          raw: parseError === undefined ? stripBase64Payloads(parsed) : lineText,
-          ...(parseError !== undefined ? { parseError } : {}),
+          sourceAccount: sourceAccountFromPath(entry.source, entry.originalPath),
+          sessionId: rawSessionId,
+          originalPath: entry.originalPath,
         })
-        spoolCursor += Buffer.byteLength(lineText, 'utf8') + 1
-        if (!state.sessionId && parseError === undefined) {
-          const peek = peekSessionId(entry.source, parsed)
-          if (peek) state.sessionId = peek
-        }
 
         try {
-          await processLine(lineText, entry.originalPath, entry.source, state, newMessages, true)
+          await appendRawRecords(entry.source, rawSessionUid, bufferedRawRecords)
+          updateHealth(`watcher:${entry.source}`, {
+            lastRawWriteAt: new Date().toISOString(),
+            lastRawWriteCount: bufferedRawRecords.length,
+            lastRawWriteUsedFallbackSession: usedFallbackRawSession,
+          })
         } catch (err) {
-          skippedLines += 1
-          writeLog('warn', 'watcher', 'bootstrap_line_skipped', {
+          writeLog('error', 'watcher', 'bootstrap_raw_append_failed', {
             source: entry.source,
             file: path.basename(entry.originalPath),
-            line: index + 1,
             error: safeError(err),
           })
+          updateHealth(`watcher:${entry.source}`, {
+            lastErrorAt: new Date().toISOString(),
+            lastError: safeError(err),
+          })
+          throw err
         }
+
+        const wroteToVault = await persistMessages(entry.originalPath, entry.source, state, bufferedMessages, skippedLines)
+        if (bufferedMessages.length > 0 && !wroteToVault) {
+          writeLog('warn', 'watcher', 'bootstrap_messages_missing_session', {
+            source: entry.source,
+            file: path.basename(entry.originalPath),
+          })
+        }
+
+        entryImportedMessages += bufferedMessages.length
+        importedMessages += bufferedMessages.length
+        await updateBootstrapEntryImportCursor(entry.originalPath, nextLine, nextSpoolCursor)
+        updateHealth(`watcher:${entry.source}`, {
+          lastBootstrapImportAt: new Date().toISOString(),
+          lastBootstrapImportLine: nextLine,
+          lastBootstrapImportedMessages: entryImportedMessages,
+          lastErrorAt: null,
+          lastError: null,
+        })
+        emitProgress()
+        await yieldToEventLoop()
       }
 
-      const rawSessionId = state.sessionId || entry.sessionId || fallbackRawSessionId(entry.source, entry.originalPath)
-      const usedFallbackRawSession = !state.sessionId && !entry.sessionId
-      const rawSessionUid = buildSessionUid({
-        source: entry.source,
-        sourceAccount: sourceAccountFromPath(entry.source, entry.originalPath),
-        sessionId: rawSessionId,
-        originalPath: entry.originalPath,
-      })
-      try {
-        await appendRawRecords(entry.source, rawSessionUid, rawRecords)
-        updateHealth(`watcher:${entry.source}`, {
-          lastRawWriteAt: new Date().toISOString(),
-          lastRawWriteCount: rawRecords.length,
-          lastRawWriteUsedFallbackSession: usedFallbackRawSession,
-        })
-      } catch (err) {
-        writeLog('error', 'watcher', 'bootstrap_raw_append_failed', {
-          source: entry.source,
-          file: path.basename(entry.originalPath),
-          error: safeError(err),
-        })
-      }
+      await forEachBootstrapCaptureLineBatch(
+        entry.spoolFile,
+        async batch => {
+          let spoolCursor = batch.startSpoolCursor
+          for (let index = 0; index < batch.lines.length; index += 1) {
+            const lineText = batch.lines[index]
+            const sourceByteOffset = spoolCursor
+            spoolCursor += Buffer.byteLength(lineText, 'utf8') + 1
+
+            let parsed: unknown = null
+            let parseError: string | undefined
+            try {
+              parsed = JSON.parse(lineText)
+            } catch (err) {
+              parseError = err instanceof Error ? err.message : String(err)
+            }
+            if (parseError === undefined) observeDrift(entry.source, parsed, drift)
+            rawRecords.push({
+              v: 1,
+              source: entry.source,
+              sourcePath: entry.originalPath,
+              sourceByteOffset,
+              capturedAt,
+              rawHash: sha256Hex(lineText),
+              raw: parseError === undefined ? stripBase64Payloads(parsed) : lineText,
+              ...(parseError !== undefined ? { parseError } : {}),
+            })
+            if (!state.sessionId && parseError === undefined) {
+              const peek = peekSessionId(entry.source, parsed)
+              if (peek) state.sessionId = peek
+            }
+
+            try {
+              await processLine(lineText, entry.originalPath, entry.source, state, newMessages, true)
+            } catch (err) {
+              skippedLines += 1
+              writeLog('warn', 'watcher', 'bootstrap_line_skipped', {
+                source: entry.source,
+                file: path.basename(entry.originalPath),
+                line: batch.startLine + index + 1,
+                error: safeError(err),
+              })
+            }
+
+            if (
+              rawRecords.length >= BOOTSTRAP_IMPORT_FLUSH_LINES
+              || newMessages.length >= BOOTSTRAP_IMPORT_FLUSH_LINES
+            ) {
+              await flushBuffers(batch.startLine + index + 1, spoolCursor)
+            }
+            if ((index + 1) % WATCHER_YIELD_EVERY_LINES === 0) await yieldToEventLoop()
+          }
+          await flushBuffers(batch.nextLine, batch.nextSpoolCursor)
+        },
+        {
+          startLine: entry.importLine ?? 0,
+          startSpoolCursor: entry.importSpoolCursor ?? 0,
+        },
+      )
+
       const hasDrift = Object.keys(drift.unknownEventTypes).length > 0
                     || Object.keys(drift.unknownTopLevelKeys).length > 0
       if (hasDrift) updateHealthDrift(entry.source, drift)
-
-      const wroteToVault = await persistMessages(entry.originalPath, entry.source, state, newMessages, skippedLines)
-      if (newMessages.length > 0 && !wroteToVault) {
-        writeLog('warn', 'watcher', 'bootstrap_messages_missing_session', {
-          source: entry.source,
-          file: path.basename(entry.originalPath),
-        })
-      }
 
       offsets[entry.originalPath] = {
         offset: entry.offset,
@@ -1200,7 +1309,13 @@ export async function importBootstrapCaptureIntoVault(): Promise<{ importedFiles
       fileStates.set(entry.originalPath, state)
       await markBootstrapEntryImported(entry.originalPath)
       importedFiles += 1
-      importedMessages += newMessages.length
+      updateHealth(`watcher:${entry.source}`, {
+        lastBootstrapImportAt: new Date().toISOString(),
+        lastBootstrapImportedMessages: entryImportedMessages,
+        lastErrorAt: null,
+        lastError: null,
+      })
+      emitProgress()
     } catch (err) {
       writeLog('error', 'watcher', 'bootstrap_import_failed', {
         source: entry.source,
@@ -1219,6 +1334,7 @@ export async function importBootstrapCaptureIntoVault(): Promise<{ importedFiles
     await clearBootstrapCaptureData()
     disableBootstrapCapture()
   }
+  emitProgress(remainingFiles, true)
   writeAuditEvent('watcher', 'bootstrap_import_completed', {
     importedFiles,
     importedMessages,

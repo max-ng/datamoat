@@ -24,9 +24,12 @@ function ensureHelper(): ChildProcessWithoutNullStreams {
 
   const swiftHelperBin = resolveSwiftHelperPath()
   const useSwiftHelper = process.platform === 'darwin' && !!swiftHelperBin
+  const jsHelperEnv = process.versions.electron
+    ? { ...process.env, ELECTRON_RUN_AS_NODE: '1' }
+    : process.env
   helper = useSwiftHelper
     ? spawn(swiftHelperBin!, ['--serve'], { stdio: ['pipe', 'pipe', 'pipe'] })
-    : spawn(process.execPath, [JS_HELPER_BIN], { stdio: ['pipe', 'pipe', 'pipe'] })
+    : spawn(process.execPath, [JS_HELPER_BIN], { stdio: ['pipe', 'pipe', 'pipe'], env: jsHelperEnv })
   helperReady = false
   stderrTail = ''
 

@@ -9,6 +9,8 @@ import { findDaemonPids, isDaemonRunning } from './runtime'
 import { startAutoUpdateLoop } from './auto-update'
 import { startBackgroundCapture, stopBackgroundCapture } from './background-capture'
 import { ALL_SOURCES } from './config'
+import { bootstrapCaptureSummary } from './bootstrap-capture'
+import { importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from './watcher'
 
 async function main() {
   ensureDirs()
@@ -53,7 +55,8 @@ async function main() {
   fs.writeFileSync(path.join(STATE_DIR, 'port'), String(port))
   updateHealth('daemon', { running: true, pid: process.pid, port, url })
   writeLog('info', 'daemon', 'ui_ready', { port })
-  await startBackgroundCapture()
+  const captureStarted = await startBackgroundCapture()
+  await retryBootstrapImportAfterStartup(captureStarted)
   startAutoUpdateLoop(hasAuthenticatedUiSession)
 
   // Clean up PID on exit
@@ -81,4 +84,21 @@ function findOtherDaemonPid(): number | null {
   if (pidFilePid && pidFilePid !== process.pid) return pidFilePid
   const other = findDaemonPids().find(pid => pid !== process.pid)
   return other ?? null
+}
+
+async function retryBootstrapImportAfterStartup(captureStarted: boolean): Promise<void> {
+  if (!captureStarted) return
+  const bootstrap = bootstrapCaptureSummary()
+  if (!bootstrap.enabled && bootstrap.entries === 0) return
+
+  writeLog('info', 'daemon', 'bootstrap_retry_start', bootstrap)
+  await stopWatchers()
+  const result = await importBootstrapCaptureIntoVault()
+  updateHealth('daemon', {
+    bootstrapImportedFiles: result.importedFiles,
+    bootstrapImportedMessages: result.importedMessages,
+    bootstrapRemainingFiles: result.remainingFiles,
+  })
+  writeLog('info', 'daemon', 'bootstrap_retry_done', result)
+  await startWatchers('vault')
 }

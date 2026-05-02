@@ -8,7 +8,21 @@ import { ensureDirs, readPublicStatus } from './store'
 import { verifyAuditChain } from './logging'
 import { ensureDaemonRunning, findDaemonPids, isDaemonRunning, stopDaemonPids } from './runtime'
 import { applyUpdate, checkForUpdate } from './update'
-import { loadAuthConfig } from './auth'
+import { isSetupDone, loadAuthConfig } from './auth'
+import { disableBootstrapCapture, enableBootstrapCapture, preflightBootstrapCapture } from './bootstrap-capture'
+import { ensureLinuxRemoteNoScreenAutostart } from './linux-autostart'
+
+const REMOTE_NO_SCREEN_FLAGS = new Set([
+  '--datamoat-remote-no-screen',
+  '--datamoat-capture-before-setup',
+  '--remote-no-screen',
+  '--capture-before-setup',
+  '--openclaw-remote',
+])
+
+function argvRequestsRemoteNoScreen(argv = process.argv.slice(2)): boolean {
+  return argv.some(arg => REMOTE_NO_SCREEN_FLAGS.has(arg))
+}
 
 function packageVersion(): string {
   try {
@@ -185,6 +199,41 @@ function hasBackgroundCaptureConfigured(): boolean {
   return !!config?.backgroundWrappedVaultKey && !!config?.backgroundWrapSalt
 }
 
+async function startRemoteNoScreenCapture(): Promise<void> {
+  ensureDirs()
+  if (isSetupDone()) {
+    const runtime = await ensureDaemonRunning()
+    console.log('DataMoat is already set up. Remote no-screen bootstrap capture was not re-enabled.')
+    console.log(`daemon: ${runtime.pid ? `running (pid ${runtime.pid})` : 'running'}`)
+    return
+  }
+
+  const state = enableBootstrapCapture('remote-no-screen')
+  if (!await preflightBootstrapCapture()) {
+    disableBootstrapCapture()
+    console.error('DataMoat remote no-screen capture could not start securely.')
+    console.error('A working local OS keychain / secret service is required before pre-setup capture can begin.')
+    process.exit(1)
+  }
+
+  if (process.platform === 'linux') ensureLinuxRemoteNoScreenAutostart()
+
+  if (!isSetupDone()) {
+    stopLinuxUserServiceIfPresent()
+    const pids = Array.from(new Set(findDaemonPids()))
+    if (pids.length > 0) {
+      stopDaemonPids(pids)
+      await new Promise(resolve => setTimeout(resolve, 800))
+    }
+  }
+
+  const runtime = await ensureDaemonRunning()
+  console.log('DataMoat remote no-screen capture is enabled.')
+  console.log(`requestedBy: ${state.requestedBy}`)
+  console.log(`daemon: ${runtime.pid ? `running (pid ${runtime.pid})` : 'running'}`)
+  console.log('Complete password, authenticator, and recovery setup later on the protected desktop GUI, not in this chat.')
+}
+
 program
   .name('datamoat')
   .description('Automatically backs up Claude, Codex, OpenClaw, and Cursor conversations')
@@ -310,7 +359,16 @@ audit
     if (result.lastHash) console.log(`last hash: ${result.lastHash}`)
   })
 
-void program.parseAsync().catch(error => {
-  console.error(error instanceof Error ? error.message : String(error))
-  process.exit(1)
-})
+if (argvRequestsRemoteNoScreen()) {
+  void startRemoteNoScreenCapture()
+    .then(() => process.exit(0))
+    .catch(error => {
+      console.error(error instanceof Error ? error.message : String(error))
+      process.exit(1)
+    })
+} else {
+  void program.parseAsync().catch(error => {
+    console.error(error instanceof Error ? error.message : String(error))
+    process.exit(1)
+  })
+}

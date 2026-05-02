@@ -29,7 +29,6 @@ function commonIgnorePatterns() {
     /^\/artifacts($|\/)/,
     /^\/release($|\/)/,
     /^\/\.git($|\/)/,
-    /^\/\.github($|\/)/,
     /^\/\.gitignore$/,
     /^\/src($|\/)/,
     /^\/scripts($|\/)/,
@@ -845,6 +844,10 @@ async function main() {
     await packageWindows()
     return
   }
+  if (targetPlatform === 'linux') {
+    console.log('Electron packaging is not configured for linux; skipping packaged app build')
+    return
+  }
   throw new Error(`Electron packaging is not configured for ${targetPlatform}`)
 }
 
@@ -852,3 +855,4 @@ void main().catch(error => {
   console.error(error instanceof Error ? error.message : String(error))
   process.exit(1)
 })
+

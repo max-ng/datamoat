@@ -1,6 +1,6 @@
 {
   "name": "datamoat",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Automatically backs up Claude, Codex, OpenClaw, and Cursor conversations",
   "license": "BUSL-1.1",
   "bin": {
@@ -12,13 +12,7 @@
     "dev": "ts-node src/cli.ts",
     "dev:electron": "npm run build && electron dist/electron/main.js",
     "daemon": "ts-node src/daemon.ts",
-    "watch": "tsc --watch",
-    "smoke:windows-sources": "node scripts/windows-source-smoke.js",
-    "smoke:windows-background": "node scripts/windows-background-smoke.js",
-    "smoke:windows-auth": "node scripts/windows-auth-smoke.js",
-    "smoke:windows-electron": "node scripts/windows-electron-smoke.js",
-    "smoke:windows-reboot-capture": "node scripts/windows-reboot-capture-smoke.js",
-    "windows:ensure-autostart": "node scripts/windows-ensure-autostart.js"
+    "watch": "tsc --watch"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
