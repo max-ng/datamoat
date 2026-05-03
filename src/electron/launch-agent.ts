@@ -2,6 +2,7 @@ import * as child_process from 'child_process'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import { STATE_DIR } from '../config'
 import { updateHealth, writeLog } from '../logging'
 
 export const PACKAGED_TRAY_LAUNCH_AGENT_LABEL = 'com.datamoat.app.tray'
@@ -17,6 +18,8 @@ const PACKAGED_TRAY_LAUNCH_AGENT_PATH = path.join(
   LAUNCH_AGENTS_DIR,
   `${PACKAGED_TRAY_LAUNCH_AGENT_LABEL}.plist`,
 )
+const PACKAGED_TRAY_STDOUT_LOG = path.join(STATE_DIR, 'tray-launch-agent.out.log')
+const PACKAGED_TRAY_STDERR_LOG = path.join(STATE_DIR, 'tray-launch-agent.err.log')
 
 function xmlEscape(value: string): string {
   return value
@@ -66,6 +69,8 @@ function currentAppPathFromExecutable(executable: string): string | null {
 
 function launchAgentPlist(executable: string, options: PackagedLaunchAgentOptions = {}): string {
   const escapedExecutable = xmlEscape(executable)
+  const escapedStdoutLog = xmlEscape(PACKAGED_TRAY_STDOUT_LOG)
+  const escapedStderrLog = xmlEscape(PACKAGED_TRAY_STDERR_LOG)
   const mode = options.remoteNoScreen ? 'remote-no-screen' : 'tray'
   const args = [
     `    <string>${escapedExecutable}</string>`,
@@ -93,8 +98,13 @@ function launchAgentPlist(executable: string, options: PackagedLaunchAgentOption
 ${args}
   </array>
   <key>RunAtLoad</key><true/>
-${environment}  <key>StandardOutPath</key><string>/dev/null</string>
-  <key>StandardErrorPath</key><string>/dev/null</string>
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key><false/>
+  </dict>
+  <key>ThrottleInterval</key><integer>10</integer>
+${environment}  <key>StandardOutPath</key><string>${escapedStdoutLog}</string>
+  <key>StandardErrorPath</key><string>${escapedStderrLog}</string>
 </dict>
 </plist>
 `
@@ -134,6 +144,7 @@ export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOption
 
   try {
     fs.mkdirSync(LAUNCH_AGENTS_DIR, { recursive: true })
+    fs.mkdirSync(STATE_DIR, { recursive: true })
     if (changed) {
       fs.writeFileSync(PACKAGED_TRAY_LAUNCH_AGENT_PATH, plist, { mode: 0o644 })
       try {
