@@ -1,12 +1,15 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import * as child_process from 'child_process'
 import { DATAMOAT_ROOT, STATE_DIR } from './config'
 import { updateHealth, writeLog } from './logging'
 import { launcherBinaryForScripts, launcherEnvForScripts } from './runtime'
 
 const STARTUP_SCRIPT = 'DataMoat Background.vbs'
 const STARTUP_CMD = 'start-datamoat-background.cmd'
+const STARTUP_PS1 = 'start-datamoat-background.ps1'
+const SCHEDULED_TASK_NAME = 'DataMoat Background Capture'
 type LauncherMode = 'tray' | 'daemon' | 'remote-no-screen'
 
 type WindowsAutostartOptions = {
@@ -27,8 +30,16 @@ function vbsString(value: string): string {
   return `"${value.replace(/"/g, '""')}"`
 }
 
+function psString(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
 function launcherCmdPath(): string {
   return path.join(STATE_DIR, STARTUP_CMD)
+}
+
+function launcherPs1Path(): string {
+  return path.join(STATE_DIR, STARTUP_PS1)
 }
 
 function startupScriptPath(): string {
@@ -56,7 +67,15 @@ function packagedElectronPath(): string | null {
   return null
 }
 
-function writeLauncherCmd(cmdPath: string, options: WindowsAutostartOptions = {}): LauncherMode {
+function resolveLauncherMode(options: WindowsAutostartOptions = {}): {
+  mode: LauncherMode
+  packagedExe: string | null
+  nodeBin: string
+  launcherEnv: NodeJS.ProcessEnv
+  daemonScript: string
+  appRoot: string
+  logPath: string
+} {
   const packagedExe = packagedElectronPath()
   const nodeBin = launcherBinaryForScripts()
   const launcherEnv = launcherEnvForScripts()
@@ -66,6 +85,11 @@ function writeLauncherCmd(cmdPath: string, options: WindowsAutostartOptions = {}
   const mode: LauncherMode = options.remoteNoScreen && packagedExe
     ? 'remote-no-screen'
     : packagedExe ? 'tray' : 'daemon'
+  return { mode, packagedExe, nodeBin, launcherEnv, daemonScript, appRoot, logPath }
+}
+
+function writeLauncherCmd(cmdPath: string, options: WindowsAutostartOptions = {}): LauncherMode {
+  const { mode, packagedExe, nodeBin, launcherEnv, daemonScript, appRoot, logPath } = resolveLauncherMode(options)
 
   const content = mode === 'remote-no-screen' && packagedExe
     ? [
@@ -98,6 +122,47 @@ function writeLauncherCmd(cmdPath: string, options: WindowsAutostartOptions = {}
   return mode
 }
 
+function writeLauncherPs1(ps1Path: string, options: WindowsAutostartOptions = {}): LauncherMode {
+  const { mode, packagedExe, nodeBin, launcherEnv, daemonScript, appRoot, logPath } = resolveLauncherMode(options)
+  const common = [
+    '$ErrorActionPreference = "Continue"',
+    `$logPath = ${psString(logPath)}`,
+  ]
+
+  const content = mode === 'remote-no-screen' && packagedExe
+    ? [
+      ...common,
+      `Set-Location -LiteralPath ${psString(path.dirname(packagedExe))}`,
+      `& ${psString(packagedExe)} --datamoat-remote-no-screen *>> $logPath`,
+      'exit $LASTEXITCODE',
+      '',
+    ].join('\r\n')
+    : packagedExe
+    ? [
+      ...common,
+      `$env:DATAMOAT_HOME = ${psString(DATAMOAT_ROOT)}`,
+      '$env:DATAMOAT_TRAY_ONLY = "1"',
+      `Set-Location -LiteralPath ${psString(path.dirname(packagedExe))}`,
+      `& ${psString(packagedExe)} --datamoat-tray-only *>> $logPath`,
+      'exit $LASTEXITCODE',
+      '',
+    ].join('\r\n')
+    : [
+      ...common,
+      `$env:DATAMOAT_HOME = ${psString(DATAMOAT_ROOT)}`,
+      '$env:DATAMOAT_DAEMON = "1"',
+      ...(launcherEnv.ELECTRON_RUN_AS_NODE ? ['$env:ELECTRON_RUN_AS_NODE = "1"'] : []),
+      `Set-Location -LiteralPath ${psString(appRoot)}`,
+      `& ${psString(nodeBin)} ${psString(daemonScript)} ${psString(`--datamoat-root=${DATAMOAT_ROOT}`)} *>> $logPath`,
+      'exit $LASTEXITCODE',
+      '',
+    ].join('\r\n')
+
+  fs.mkdirSync(path.dirname(ps1Path), { recursive: true })
+  fs.writeFileSync(ps1Path, content, { encoding: 'utf8', mode: 0o600 })
+  return mode
+}
+
 function writeStartupVbs(scriptPath: string, cmdPath: string): void {
   const content = [
     'Set shell = CreateObject("WScript.Shell")',
@@ -109,8 +174,64 @@ function writeStartupVbs(scriptPath: string, cmdPath: string): void {
   fs.writeFileSync(scriptPath, content, { encoding: 'utf8', mode: 0o600 })
 }
 
+function registerScheduledTask(ps1Path: string): void {
+  const actionArgs = `-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${ps1Path}"`
+  const script = [
+    '$ErrorActionPreference = "Stop"',
+    `$taskName = ${psString(SCHEDULED_TASK_NAME)}`,
+    `$action = New-ScheduledTaskAction -Execute ${psString('powershell.exe')} -Argument ${psString(actionArgs)}`,
+    '$trigger = New-ScheduledTaskTrigger -AtLogOn',
+    '$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -RestartCount 999 -RestartInterval (New-TimeSpan -Seconds 10) -MultipleInstances IgnoreNew',
+    'Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "DataMoat background capture and tray" -Force | Out-Null',
+    'Start-ScheduledTask -TaskName $taskName | Out-Null',
+  ].join('\n')
+
+  child_process.execFileSync('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    script,
+  ], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  })
+}
+
 function ensureWindowsAutostartWithOptions(options: WindowsAutostartOptions = {}): boolean {
   if (process.platform !== 'win32') return false
+
+  let scheduledTaskError: unknown = null
+  try {
+    const ps1Path = launcherPs1Path()
+    const launcherMode = writeLauncherPs1(ps1Path, options)
+    registerScheduledTask(ps1Path)
+    try { fs.rmSync(startupScriptPath(), { force: true }) } catch { /* ignore */ }
+    updateHealth('autostart', {
+      enabled: true,
+      backend: 'scheduled-task',
+      launcherMode,
+      remoteNoScreen: options.remoteNoScreen === true,
+      restartOnFailure: true,
+      taskName: SCHEDULED_TASK_NAME,
+      launcher: ps1Path,
+      updatedAt: new Date().toISOString(),
+    })
+    writeLog('info', 'autostart', 'windows_autostart_ready', {
+      backend: 'scheduled-task',
+      launcherMode,
+      remoteNoScreen: options.remoteNoScreen === true,
+      restartOnFailure: true,
+      taskName: SCHEDULED_TASK_NAME,
+      launcher: ps1Path,
+    })
+    return true
+  } catch (error) {
+    scheduledTaskError = error
+    writeLog('warn', 'autostart', 'windows_scheduled_task_failed', { error })
+  }
 
   try {
     const cmdPath = launcherCmdPath()
@@ -122,6 +243,8 @@ function ensureWindowsAutostartWithOptions(options: WindowsAutostartOptions = {}
       backend: 'startup-folder',
       launcherMode,
       remoteNoScreen: options.remoteNoScreen === true,
+      restartOnFailure: false,
+      scheduledTaskError: scheduledTaskError instanceof Error ? scheduledTaskError.message : scheduledTaskError ? String(scheduledTaskError) : null,
       startupScript: scriptPath,
       launcher: cmdPath,
       updatedAt: new Date().toISOString(),
@@ -130,8 +253,10 @@ function ensureWindowsAutostartWithOptions(options: WindowsAutostartOptions = {}
       backend: 'startup-folder',
       launcherMode,
       remoteNoScreen: options.remoteNoScreen === true,
+      restartOnFailure: false,
       startupScript: scriptPath,
       launcher: cmdPath,
+      scheduledTaskError,
     })
     return true
   } catch (error) {

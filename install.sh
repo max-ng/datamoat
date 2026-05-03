@@ -280,6 +280,7 @@ elif [[ "$(uname)" == "Linux" ]]; then
   SERVICE_FILE="$SYSTEMD_USER_DIR/datamoat-daemon.service"
   AUTOSTART_DIR="$HOME/.config/autostart"
   AUTOSTART_FILE="$AUTOSTART_DIR/datamoat-tray.desktop"
+  LINUX_SYSTEMD_DAEMON_ACTIVE=0
   mkdir -p "$SYSTEMD_USER_DIR"
   cat > "$SERVICE_FILE" << SERVICE
 [Unit]
@@ -301,9 +302,15 @@ SERVICE
 
   if command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/null 2>&1; then
     if [ "$BOOTSTRAP_CAPTURE" -eq 1 ]; then
-      systemctl --user enable datamoat-daemon.service >/dev/null 2>&1 || true
-      echo -e "  ${GREEN}✓${RESET} systemd --user service installed (auto-starts after setup)"
+      if systemctl --user enable --now datamoat-daemon.service >/dev/null 2>&1; then
+        LINUX_SYSTEMD_DAEMON_ACTIVE=1
+        echo -e "  ${GREEN}✓${RESET} systemd --user service installed (remote no-screen capture restarts on failure)"
+      else
+        HOME="$HOME" DATAMOAT_DAEMON=1 nohup "${NODE_BIN}" "$HOME/.datamoat/app/dist/daemon.js" >/dev/null 2>&1 &
+        echo "  ! systemd --user unavailable; started remote no-screen capture for this session only"
+      fi
     elif systemctl --user enable --now datamoat-daemon.service >/dev/null 2>&1; then
+      LINUX_SYSTEMD_DAEMON_ACTIVE=1
       echo -e "  ${GREEN}✓${RESET} systemd --user service installed (auto-starts on login)"
     else
       HOME="$HOME" DATAMOAT_DAEMON=1 nohup "${NODE_BIN}" "$HOME/.datamoat/app/dist/daemon.js" >/dev/null 2>&1 &
@@ -319,7 +326,10 @@ SERVICE
   fi
   mkdir -p "$AUTOSTART_DIR"
   if [ "$BOOTSTRAP_CAPTURE" -eq 1 ]; then
-    cat > "$AUTOSTART_DIR/datamoat-remote-no-screen.desktop" << DESKTOP
+    if [ "$LINUX_SYSTEMD_DAEMON_ACTIVE" -eq 1 ]; then
+      rm -f "$AUTOSTART_DIR/datamoat-remote-no-screen.desktop"
+    else
+      cat > "$AUTOSTART_DIR/datamoat-remote-no-screen.desktop" << DESKTOP
 [Desktop Entry]
 Type=Application
 Version=1.0
@@ -330,9 +340,10 @@ Terminal=false
 X-GNOME-Autostart-enabled=true
 Categories=Utility;Security;
 DESKTOP
-    chmod 644 "$AUTOSTART_DIR/datamoat-remote-no-screen.desktop"
-    echo -e "  ${GREEN}✓${RESET} Remote no-screen autostart installed for graphical logins"
-    "$HOME/.local/bin/datamoat" --datamoat-remote-no-screen
+      chmod 644 "$AUTOSTART_DIR/datamoat-remote-no-screen.desktop"
+      echo -e "  ${GREEN}✓${RESET} Remote no-screen autostart installed for graphical logins"
+      "$HOME/.local/bin/datamoat" --datamoat-remote-no-screen
+    fi
     verify_remote_no_screen_capture
   else
     cat > "$AUTOSTART_FILE" << DESKTOP

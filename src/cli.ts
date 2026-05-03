@@ -216,8 +216,6 @@ async function startRemoteNoScreenCapture(): Promise<void> {
     process.exit(1)
   }
 
-  if (process.platform === 'linux') ensureLinuxRemoteNoScreenAutostart()
-
   if (!isSetupDone()) {
     stopLinuxUserServiceIfPresent()
     const pids = Array.from(new Set(findDaemonPids()))
@@ -226,6 +224,8 @@ async function startRemoteNoScreenCapture(): Promise<void> {
       await new Promise(resolve => setTimeout(resolve, 800))
     }
   }
+
+  if (process.platform === 'linux') ensureLinuxRemoteNoScreenAutostart()
 
   const runtime = await ensureDaemonRunning()
   console.log('DataMoat remote no-screen capture is enabled.')
