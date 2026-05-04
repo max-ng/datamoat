@@ -13,12 +13,19 @@
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
 
-> **Automatically captures Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records into an encrypted local vault.**
-> Search past prompts, tool output, and locally available reasoning content while keeping your full record protected on your own machine. Back up your AI workflows before they disappear.
+> **Preserve, encrypt, search, reuse, and hand off the complete work process people create with Claude, Codex, Cursor, and OpenClaw.**
+> DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
 
 **The people and companies that own their AI data will win the future.**
 
-DataMoat is an encrypted local vault for Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records. It preserves searchable transcripts, prompts, tool output, locally available reasoning content, metadata, and attachments on the same machine, so your full AI work history stays reviewable, protected, and easier to hand off later.
+DataMoat is an encrypted AI work history vault for people and teams working across Claude CLI, Claude Desktop, Codex CLI, Codex app, Cursor, OpenClaw, and other AI tools. It preserves the full working record: locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
+
+## How DataMoat Stores Your Work
+
+DataMoat keeps two layers:
+
+- **Raw archive:** original JSONL, SQLite records, logs, attachments, metadata, and any locally stored thinking tokens or reasoning blocks are preserved as close to the source format as possible.
+- **Normalized index:** records from different tools are converted into a common schema so you can search, review, export, analyze, reuse, and hand off work across tools.
 
 **Supported sources today:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local OpenClaw session records, and supported local Cursor agent transcripts.
 **More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
@@ -26,8 +33,8 @@ DataMoat is an encrypted local vault for Claude CLI, Claude Desktop, Codex CLI, 
 ## Why Install DataMoat
 
 - **Keep your full AI work history recoverable.** Local records can become harder to revisit after compaction, cleanup, retention changes, account downgrades, device replacement, or environment loss.
-- **Preserve the fullest local version while it is still available.** DataMoat saves the locally written transcript, including visible reasoning content when the source stores it on disk.
-- **Search past prompts, solutions, tool output, and reasoning-visible work.** Find previous fixes, workflows, timestamps, and attachments without depending on a live service view.
+- **Preserve the fullest local version while it is still available.** DataMoat saves the locally written transcript, including locally stored thinking tokens and reasoning blocks when the source stores them on disk.
+- **Search past prompts, solutions, tool output, and thinking-token context.** Find previous fixes, workflows, timestamps, and attachments without depending on a live service view.
 - **Protect continuity for individuals and teams.** Each protected machine can keep its own encrypted local archive for later review, handoff, and audit.
 - **Keep records encrypted and under local control.** Other software or services cannot read the vault directly; only approved unlock and recovery paths can decrypt it.
 
