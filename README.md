@@ -312,7 +312,7 @@ It does not grant additional rights to content or source services. You remain re
 
 ## Enterprise
 
-For team or enterprise deployment questions, contact `maxnghello at gmail.com`.
+Enterprise deployment and management features are on the roadmap. More enterprise-focused capabilities are coming; star and watch this repository to follow updates.
 
 **The people and companies that own their AI data will win the future.**
 
