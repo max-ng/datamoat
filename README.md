@@ -94,7 +94,7 @@ DataMoat keeps two layers:
 - **Strong local auth** with password, optional TOTP, a 24-word recovery phrase, and 8 one-time recovery codes.
 - **Secure Enclave-backed unlock path on supported Macs** for hardware-assisted daily unlock. See Apple's overview of the [Secure Enclave](https://support.apple.com/guide/security/secure-enclave-sec59b0b31ff/web). Touch ID is part of the packaged macOS app path.
 - **Helper-owned key custody** so the main UI process does not keep the active vault key.
-- **Tamper-evident local audit chain** with `datamoat audit verify`.
+- **Tamper-evident local audit chain**: current local audit entries are hash-chained and verifiable with `datamoat audit verify`.
 - **Versioned local state** so protected storage can migrate safely over time.
 - **Electron shell by default** to reduce general-purpose browser and browser-extension exposure, with local-only UI binding to `127.0.0.1`.
 - **No third-party font or CDN dependency** in the UI.
@@ -137,7 +137,7 @@ DataMoat keeps two layers:
 - **Trusted source updates only**: in-place git updates are allowed only for allow-listed remotes / branches on a clean working tree.
 - **Redacted diagnostics**: health, crash, log, and audit artifacts scrub secrets before they are written.
 - **Key isolation**: the Electron renderer or browser fallback does not receive the raw vault key.
-- **Auditability**: security-relevant local events are written to a hash-chained audit log verifiable with `datamoat audit verify`.
+- **Auditability**: security-relevant local events are written to a hash-chained audit log. `datamoat audit verify` detects changed or broken entries in the current local log; it is not a remote notarization service or deletion-proof ledger.
 - **Backup integrity**: the viewer reads the sealed vault copy as the source of truth, not a mutable live source transcript.
 
 ### Why 24 Words Instead of 12?
@@ -299,6 +299,8 @@ datamoat scan
 datamoat audit verify
 datamoat update check
 ```
+
+Audit verification checks the integrity of the audit log that is present on disk. Without an external checkpoint, it cannot by itself prove that a local audit file was never deleted, truncated, or fully rewritten by someone with write access.
 
 Live git source installs support in-place source updates. Packaged macOS installs use GitHub Releases as the packaged update source: the DMG is for first install, and later packaged updates download a signed ZIP payload and apply it through the macOS app updater instead of asking users to mount a new DMG for every release.
 
