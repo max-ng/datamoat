@@ -13,7 +13,7 @@
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
 
-> **Turn every supported local Claude, Codex, Cursor, OpenClaw, and agent session into encrypted training-data assets for future AI employees.**
+> **Turn every supported local Claude, Codex, Cursor, OpenClaw, and agent session into encrypted data assets for future AI employees.**
 >
 > DataMoat is a local encrypted vault for AI-assisted work. It captures supported local AI session records before they disappear, seals transcripts and attachments, normalizes sessions for review and search, and keeps your AI work traces under your control.
 >
@@ -40,7 +40,7 @@ People now ask Claude, Codex, Cursor, OpenClaw, and other agents to investigate 
 - what eventually worked
 - what should be remembered next time
 
-Those traces are private training-data assets for future AI employees. They can be protected and searched today before they disappear, then later become private memory, evaluation sets, handoff packs, workflow analytics, or company-specific model-improvement data when the right permissions, policies, cleaning, labeling, and export paths are in place.
+Those traces are private data assets for future AI employees. They can be protected and searched today before they disappear, then later become private memory, evaluation sets, handoff packs, workflow analytics, or company-specific model-improvement data when the right permissions, policies, cleaning, labeling, and export paths are in place.
 
 DataMoat starts with the most important step: **capture and protect the private AI work data asset while it still exists on your machine.**
 
@@ -63,7 +63,7 @@ DataMoat is on-device by design. Your AI work vault lives on your machine, encry
 
 The local app can only read protected content after you unlock your vault. Your AI work data is captured for you, not for DataMoat.
 
-DataMoat protects the training-data asset first. You decide how your protected work traces are later used.
+DataMoat protects the data asset first. You decide how your protected work traces are later used.
 
 
 
@@ -78,7 +78,7 @@ DataMoat keeps two layers:
 
 ## Why Install DataMoat
 
-- **Create encrypted training-data assets from real AI work.** Future AI employees will need the prompts, context, tool calls, outputs, corrections, and decisions that show how work actually gets done.
+- **Create encrypted data assets from real AI work.** Future AI employees will need the prompts, context, tool calls, outputs, corrections, and decisions that show how work actually gets done.
 - **Keep your full AI work history recoverable.** Local records can become harder to revisit after compaction, cleanup, retention changes, account downgrades, device replacement, or environment loss.
 - **Preserve the fullest local version while it is still available.** DataMoat saves the locally written transcript, including locally stored thinking tokens and reasoning blocks when the source stores them on disk.
 - **Search past prompts, solutions, tool output, and thinking-token context.** Find previous fixes, workflows, timestamps, and attachments without depending on a live service view.
