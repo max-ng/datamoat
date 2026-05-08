@@ -11,6 +11,7 @@ const BACKGROUND_CAPTURE_SECRET_ACCOUNT = 'backgroundCaptureSecret'
 const BOOTSTRAP_CAPTURE_SECRET_ACCOUNT = 'bootstrapCaptureSecret'
 const LINUX_BACKGROUND_SECRET_DIR = path.join(STATE_DIR, 'background-capture-secrets')
 const LINUX_BOOTSTRAP_SECRET_FILE = path.join(STATE_DIR, 'bootstrap-capture-secret')
+const WINDOWS_SECRET_DIR = path.join(STATE_DIR, 'windows-secrets')
 
 export const IS_MAC = platform() === 'darwin'
 const TOUCHID_HELPER_BUNDLE_EXECUTABLE = path.join('DataMoatTouchID.app', 'Contents', 'MacOS', 'DataMoatTouchID')
@@ -23,12 +24,17 @@ export type SecureEnclaveStatus = {
 }
 
 async function secretStore(account: string, value: string): Promise<void> {
+  if (platform() === 'win32') {
+    windowsStoreSecret(account, value)
+    return
+  }
   assertDefaultKeychainAvailable()
   const keytar = await import('keytar')
   await keytar.setPassword(SERVICE, account, value)
 }
 
 async function secretLoad(account: string): Promise<string | null> {
+  if (platform() === 'win32') return windowsLoadSecret(account)
   try {
     assertDefaultKeychainAvailable()
     const keytar = await import('keytar')
@@ -39,11 +45,75 @@ async function secretLoad(account: string): Promise<string | null> {
 }
 
 async function secretDelete(account: string): Promise<void> {
+  if (platform() === 'win32') {
+    windowsDeleteSecret(account)
+    return
+  }
   try {
     assertDefaultKeychainAvailable()
     const keytar = await import('keytar')
     await keytar.deletePassword(SERVICE, account)
   } catch { /* ignore */ }
+}
+
+function secretFileName(account: string): string {
+  return Buffer.from(account, 'utf8').toString('base64url')
+}
+
+function windowsSecretFileForAccount(account: string): string {
+  return path.join(WINDOWS_SECRET_DIR, `${secretFileName(account)}.dpapi`)
+}
+
+function runWindowsDpapi(script: string, input = ''): string {
+  return execFileSync('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    script,
+  ], {
+    input,
+    encoding: 'utf8',
+    stdio: ['pipe', 'pipe', 'pipe'],
+    windowsHide: true,
+  }).trim()
+}
+
+function windowsStoreSecret(account: string, secret: string): void {
+  fs.mkdirSync(WINDOWS_SECRET_DIR, { recursive: true })
+  const protectedText = runWindowsDpapi([
+    '$ErrorActionPreference = "Stop"',
+    'Add-Type -AssemblyName System.Security',
+    '$plain = [Console]::In.ReadToEnd()',
+    '$bytes = [Text.Encoding]::UTF8.GetBytes($plain)',
+    '$scope = [Security.Cryptography.DataProtectionScope]::CurrentUser',
+    '$protected = [Security.Cryptography.ProtectedData]::Protect($bytes, $null, $scope)',
+    '[Convert]::ToBase64String($protected)',
+  ].join('; '), secret)
+  fs.writeFileSync(windowsSecretFileForAccount(account), protectedText, { encoding: 'utf8', mode: 0o600 })
+}
+
+function windowsLoadSecret(account: string): string | null {
+  try {
+    const protectedText = fs.readFileSync(windowsSecretFileForAccount(account), 'utf8').trim()
+    if (!protectedText) return null
+    return runWindowsDpapi([
+      '$ErrorActionPreference = "Stop"',
+      'Add-Type -AssemblyName System.Security',
+      '$raw = [Console]::In.ReadToEnd().Trim()',
+      '$bytes = [Convert]::FromBase64String($raw)',
+      '$scope = [Security.Cryptography.DataProtectionScope]::CurrentUser',
+      '$plainBytes = [Security.Cryptography.ProtectedData]::Unprotect($bytes, $null, $scope)',
+      '[Text.Encoding]::UTF8.GetString($plainBytes)',
+    ].join('; '), protectedText)
+  } catch {
+    return null
+  }
+}
+
+function windowsDeleteSecret(account: string): void {
+  try { fs.rmSync(windowsSecretFileForAccount(account), { force: true }) } catch { /* ignore */ }
 }
 
 function linuxShouldUseBootstrapFileSecret(): boolean {

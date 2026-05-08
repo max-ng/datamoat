@@ -62,6 +62,12 @@ import { extractOpenclawLine } from '../extractors/openclaw'
 import { extractCursorLine } from '../extractors/cursor'
 import { detectInstallContext } from '../install-context'
 import { updateReleasesUrl } from '../update-channel'
+import {
+  readSkillFileForUI,
+  readSkillManifestForUI,
+  readSkillsBackupIndexForUI,
+  scanAndBackupSkills,
+} from '../skills-backup'
 
 type SessionFlow =
   | 'touchid'
@@ -87,8 +93,13 @@ type PendingSetupState = {
 
 type SetupActivationProgress = {
   running: boolean
+  phase: string
+  label: string
+  detail: string
+  percent: number | null
   importedFiles: number
   totalFiles: number
+  importedMessages: number
   done: boolean
   updatedAt: string | null
 }
@@ -117,6 +128,7 @@ const AUTH_BACKOFF_MAX_MS = 5 * 60 * 1000
 const AUTH_RESET_AFTER_MS = 15 * 60 * 1000
 const SESSION_DETAIL_PAGE_LIMIT = 500
 const SEARCH_MESSAGE_PAGE_LIMIT = 250
+const BACKGROUND_CAPTURE_RETRY_THROTTLE_MS = 30000
 const CSRF_COOKIE = 'dm_csrf'
 const CSRF_HEADER = 'x-dm-csrf'
 const authAttempts = new Map<AuthMethod, AuthAttemptState>()
@@ -124,10 +136,17 @@ let activeSession: { token: string; flow: SessionFlow; idleMs: number; expiresAt
 let pendingAuth: { token: string; flow: SessionFlow; helperSessionId: string; expiresAt: number } | null = null
 let pendingSetup: PendingSetupState | null = null
 let pendingSetupInit: Promise<SetupInitPayload> | null = null
+let backgroundCaptureRetryInFlight = false
+let lastBackgroundCaptureRetryAt = 0
 let setupActivationProgress: SetupActivationProgress = {
   running: false,
+  phase: 'idle',
+  label: 'Waiting to activate setup',
+  detail: '',
+  percent: null,
   importedFiles: 0,
   totalFiles: 0,
+  importedMessages: 0,
   done: false,
   updatedAt: null,
 }
@@ -515,13 +534,24 @@ async function activateVault(
     skipWatcherStart?: boolean
     suppressCaptureWarning?: boolean
     bootstrapImportProgress?: (progress: BootstrapImportProgress) => void
+    setupProgress?: (progress: Partial<SetupActivationProgress>) => void
   } = {},
 ): Promise<{ backgroundConfigured: boolean; backgroundStarted: boolean; captureWarning: string | null }> {
+  const report = (progress: Partial<SetupActivationProgress>): void => {
+    options.setupProgress?.(progress)
+  }
   writeLog('info', 'auth', 'activate_vault_started', {
     skipBackgroundCaptureSetup: !!options.skipBackgroundCaptureSetup,
     skipBackgroundCaptureStart: !!options.skipBackgroundCaptureStart,
     skipWatcherStart: !!options.skipWatcherStart,
     suppressCaptureWarning: !!options.suppressCaptureWarning,
+  })
+  report({
+    running: true,
+    phase: 'sealing',
+    label: 'Creating encrypted vault',
+    detail: 'Setting up local-only encrypted storage on this Mac.',
+    percent: 8,
   })
   setVaultSession(helperSessionId)
   writeLog('info', 'auth', 'activate_vault_step', { step: 'auth_config_migration_start' })
@@ -529,6 +559,12 @@ async function activateVault(
   writeLog('info', 'auth', 'activate_vault_step', { step: 'auth_config_migration_done' })
   let backgroundConfigured = false
   if (!options.skipBackgroundCaptureSetup) {
+    report({
+      phase: 'background',
+      label: 'Preparing locked background capture',
+      detail: 'Saving a local OS-protected capture key so DataMoat can keep working while locked.',
+      percent: 18,
+    })
     try {
       backgroundConfigured = await ensureBackgroundCaptureConfigured(helperSessionId)
     } catch (error) {
@@ -546,6 +582,12 @@ async function activateVault(
       reason: 'recovery_unlock',
     })
   }
+  report({
+    phase: 'sealing',
+    label: 'Sealing existing encrypted files',
+    detail: 'Migrating any previous vault, attachment, and state files into the current encrypted format.',
+    percent: 28,
+  })
   writeLog('info', 'auth', 'activate_vault_step', { step: 'encrypt_vault_files_start' })
   await encryptVaultFiles()
   writeLog('info', 'auth', 'activate_vault_step', { step: 'encrypt_vault_files_done' })
@@ -561,9 +603,24 @@ async function activateVault(
     await stopWatchers()
     writeLog('info', 'auth', 'activate_vault_step', { step: 'bootstrap_watchers_stop_done' })
   }
+  report({
+    phase: 'importing',
+    label: bootstrapBeforeImport.entries > 0 ? 'Importing protected pre-setup capture' : 'Checking pre-setup capture',
+    detail: bootstrapBeforeImport.entries > 0
+      ? 'Moving records captured before setup into the encrypted vault.'
+      : 'No pre-setup capture backlog found.',
+    percent: 42,
+    totalFiles: bootstrapBeforeImport.entries,
+  })
   writeLog('info', 'auth', 'activate_vault_step', { step: 'bootstrap_import_start' })
   const bootstrapImport = await importBootstrapCaptureIntoVault(options.bootstrapImportProgress)
   writeLog('info', 'auth', 'activate_vault_step', { step: 'bootstrap_import_done', ...bootstrapImport })
+  report({
+    phase: 'indexing',
+    label: 'Building session index',
+    detail: 'Preparing the session list before the app opens.',
+    percent: 58,
+  })
   writeLog('info', 'auth', 'activate_vault_step', { step: 'state_migration_start' })
   const stateMigration = await migrateStateStorage()
   writeLog('info', 'auth', 'activate_vault_step', { step: 'state_migration_done', ...stateMigration })
@@ -582,16 +639,41 @@ async function activateVault(
     })
   } else {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'background_start_start' })
+    report({
+      phase: 'scanning',
+      label: 'Scanning supported AI work records',
+      detail: 'Checking local AI work records and skills for this vault.',
+      percent: 70,
+    })
     backgroundStarted = await startBackgroundCapture()
     writeLog('info', 'auth', 'activate_vault_step', { step: 'background_start_done', backgroundStarted })
   }
   if (!backgroundStarted && !options.skipWatcherStart) {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_start' })
+    report({
+      phase: 'scanning',
+      label: 'Scanning supported AI work records',
+      detail: 'This one-time first scan can take a few minutes on large local histories.',
+      percent: 76,
+    })
     await startWatchers('vault')
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_done' })
   } else if (!backgroundStarted && options.skipWatcherStart) {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_deferred' })
   }
+  writeLog('info', 'auth', 'activate_vault_step', { step: 'skills_backup_scan_start' })
+  report({
+    phase: 'skills',
+    label: 'Backing up skills folders',
+    detail: 'Saving full supported skills folder contents into the encrypted vault.',
+    percent: 88,
+  })
+  const skillsBackup = await scanAndBackupSkills('vault_activated')
+  writeLog('info', 'auth', 'activate_vault_step', {
+    step: 'skills_backup_scan_done',
+    skillsBackedUp: skillsBackup?.skillsBackedUp ?? 0,
+    filesBackedUp: skillsBackup?.filesBackedUp ?? 0,
+  })
   updateHealth('daemon', {
     locked: false,
     unlockedAt: new Date().toISOString(),
@@ -603,6 +685,13 @@ async function activateVault(
   updateHealth('capture', {
     configured: backgroundConfigured,
     running: backgroundStarted,
+  })
+  report({
+    phase: 'done',
+    label: 'Setup complete',
+    detail: 'Opening DataMoat now.',
+    percent: 100,
+    done: true,
   })
   writeAuditEvent('vault', 'vault_activated', {
     ...stateMigration,
@@ -697,11 +786,61 @@ function activationResponse(
 async function activateVaultForSetup(
   helperSessionId: string,
   bootstrapImportProgress?: (progress: BootstrapImportProgress) => void,
+  setupProgress?: (progress: Partial<SetupActivationProgress>) => void,
 ): Promise<Awaited<ReturnType<typeof activateVault>>> {
   return activateVault(helperSessionId, {
     suppressCaptureWarning: true,
     bootstrapImportProgress,
+    setupProgress,
   })
+}
+
+async function retryBackgroundCaptureForActiveVault(reason: string): Promise<void> {
+  const helperSessionId = getVaultSessionId()
+  if (!helperSessionId || getCaptureSessionId()) return
+
+  const now = Date.now()
+  if (backgroundCaptureRetryInFlight || now - lastBackgroundCaptureRetryAt < BACKGROUND_CAPTURE_RETRY_THROTTLE_MS) {
+    return
+  }
+
+  backgroundCaptureRetryInFlight = true
+  lastBackgroundCaptureRetryAt = now
+  try {
+    writeLog('info', 'capture', 'background_capture_auto_retry_started', { reason })
+    const backgroundConfigured = await ensureBackgroundCaptureConfigured(helperSessionId, {
+      forceReconfigure: true,
+      reason,
+    })
+    const backgroundStarted = await startBackgroundCapture()
+    updateHealth('capture', {
+      configured: backgroundConfigured,
+      running: backgroundStarted,
+      lastAutoRetryAt: new Date().toISOString(),
+      lastErrorAt: backgroundStarted ? null : new Date().toISOString(),
+      lastError: backgroundStarted ? null : 'background capture auto retry did not start',
+    })
+    updateHealth('daemon', {
+      captureRunning: backgroundStarted,
+    })
+    writeAuditEvent('capture', 'background_capture_auto_retry_completed', {
+      reason,
+      backgroundConfigured,
+      backgroundStarted,
+    })
+  } catch (error) {
+    writeLog('warn', 'capture', 'background_capture_auto_retry_failed', { reason, error })
+    updateHealth('capture', {
+      configured: false,
+      running: false,
+      lastAutoRetryAt: new Date().toISOString(),
+      lastErrorAt: new Date().toISOString(),
+      lastError: error instanceof Error ? error.message : String(error),
+    })
+    writeAuditEvent('capture', 'background_capture_auto_retry_failed', { reason })
+  } finally {
+    backgroundCaptureRetryInFlight = false
+  }
 }
 
 async function sendJson(res: Response, status: number, payload: unknown): Promise<void> {
@@ -895,8 +1034,13 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     if (isSetupDone()) return res.json({ error: 'already setup' })
     updateSetupActivationProgress({
       running: false,
+      phase: 'idle',
+      label: 'Waiting to activate setup',
+      detail: '',
+      percent: null,
       importedFiles: 0,
       totalFiles: 0,
+      importedMessages: 0,
       done: false,
     })
     res.json(await setupInitPayload())
@@ -910,8 +1054,13 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     pendingSetup = null
     updateSetupActivationProgress({
       running: false,
+      phase: 'idle',
+      label: 'Waiting to activate setup',
+      detail: '',
+      percent: null,
       importedFiles: 0,
       totalFiles: 0,
+      importedMessages: 0,
       done: false,
     })
     writeAuditEvent('setup', 'setup_reset')
@@ -1025,20 +1174,44 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       saveAuthConfig(authRecord)
       updateSetupActivationProgress({
         running: true,
+        phase: 'starting',
+        label: 'Starting first-run setup',
+        detail: 'DataMoat is preparing local encrypted storage.',
+        percent: 4,
         importedFiles: 0,
         totalFiles: bootstrapCaptureSummary().entries,
+        importedMessages: 0,
         done: false,
       })
       const activation = await activateVaultForSetup(helperSessionId, progress => {
+        const total = progress.totalFiles
+        const imported = progress.importedFiles
+        const pct = total > 0
+          ? Math.max(42, Math.min(58, 42 + (imported / total) * 16))
+          : 48
         updateSetupActivationProgress({
           running: !progress.done,
+          phase: 'importing',
+          label: total > 0 ? 'Importing protected pre-setup capture' : 'Checking pre-setup capture',
+          detail: total > 0
+            ? `Imported ${imported} of ${total} files and ${progress.importedMessages} messages.`
+            : 'No pre-setup capture backlog found.',
+          percent: pct,
           importedFiles: progress.importedFiles,
           totalFiles: progress.totalFiles,
+          importedMessages: progress.importedMessages,
           done: progress.done,
         })
-      })
+      }, updateSetupActivationProgress)
       updateSetupActivationProgress({
         running: false,
+        phase: 'done',
+        label: 'Setup complete',
+        detail: 'Opening DataMoat now.',
+        percent: 100,
+        importedFiles: setupActivationProgress.importedFiles,
+        totalFiles: setupActivationProgress.totalFiles,
+        importedMessages: setupActivationProgress.importedMessages,
         done: true,
       })
       saveAuthConfig({
@@ -1057,6 +1230,10 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     } catch (error) {
       updateSetupActivationProgress({
         running: false,
+        phase: 'error',
+        label: 'Setup failed',
+        detail: error instanceof Error ? error.message : String(error),
+        percent: null,
         done: false,
       })
       writeLog('error', 'setup', 'setup_activate_failed', { error })
@@ -1415,8 +1592,29 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   // ── Protected API ──────────────────────────────────────────────────────────
 
   app.get('/api/sessions', requireAuth, async (_req, res) => {
+    await retryBackgroundCaptureForActiveVault('sessions_auto_retry')
     const sessions = await loadSessions()
     res.json(await normalizeSessionsForUI(sessions))
+  })
+
+  app.get('/api/skills-backup', requireAuth, async (_req, res) => {
+    res.json(await readSkillsBackupIndexForUI())
+  })
+
+  app.get('/api/skills-backup/manifest/:snapshotId', requireAuth, async (req, res) => {
+    const manifest = await readSkillManifestForUI(req.params.snapshotId)
+    if (!manifest) return res.status(404).json({ error: 'skill snapshot not found' })
+    res.json(manifest)
+  })
+
+  app.get('/api/skills-backup/file/:snapshotId', requireAuth, async (req, res) => {
+    const rawPath = Array.isArray(req.query.path) ? req.query.path[0] : req.query.path
+    if (typeof rawPath !== 'string' || !rawPath.trim()) {
+      return res.status(400).json({ error: 'path required' })
+    }
+    const file = await readSkillFileForUI(req.params.snapshotId, rawPath)
+    if (!file) return res.status(404).json({ error: 'skill file not found' })
+    res.json(file)
   })
 
   app.get('/api/session/:id', requireAuth, async (req, res) => {
@@ -1481,12 +1679,32 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   })
 
   app.get('/api/status', requireAuth, async (_req, res) => {
+    await retryBackgroundCaptureForActiveVault('status_auto_retry')
     const sessions = await loadSessions()
     const bySource = sessions.reduce<Record<string, number>>((acc, s) => {
       acc[s.source] = (acc[s.source] || 0) + 1
       return acc
     }, {})
     res.json({ totalSessions: sessions.length, bySource, lastUpdate: sessions[0]?.lastTimestamp ?? null })
+  })
+
+  app.get('/api/analytics/weekly', requireAuth, async (req, res) => {
+    const requestedDays = positiveIntQuery(req.query.days)
+    const days = requestedDays > 0 ? Math.min(requestedDays, 30) : 7
+    const endedAt = new Date()
+    const startedAt = new Date(endedAt.getTime() - days * 24 * 60 * 60 * 1000)
+    const sessions = await loadSessions()
+    try {
+      res.json(await buildWeeklyAnalytics(sessions, startedAt, endedAt, days))
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      writeLog('warn', 'analytics', 'weekly_analytics_fallback', { error: message })
+      updateHealth('analytics', {
+        lastFallbackAt: new Date().toISOString(),
+        lastError: message,
+      })
+      res.json(buildWeeklyAnalyticsIndexFallback(sessions, startedAt, endedAt, days, message))
+    }
   })
 
   app.get('/api/update/settings', requireAuth, (_req, res) => {
@@ -1765,8 +1983,278 @@ function positiveIntQuery(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
 }
 
+type WeeklyAnalyticsBucket = { key: string; count: number }
+type WeeklyAnalytics = {
+  computedFrom: 'message-scan' | 'index-fallback'
+  error?: string
+  range: {
+    days: number
+    startedAt: string
+    endedAt: string
+  }
+  summary: {
+    conversations: number
+    newConversations: number
+    continuedConversations: number
+    messages: number
+    activeConversationMessages: number
+    visibleTextChars: number
+    estimatedTranscriptTokens: number
+    estimatedInputLikeTokens: number
+    estimatedAssistantTokens: number
+    toolOutputs: number
+    largestWorkstreamMessages: number
+  }
+  roles: Record<string, number>
+  bySource: Record<string, number>
+  topProjects: WeeklyAnalyticsBucket[]
+  topModels: WeeklyAnalyticsBucket[]
+  tokenUsage: {
+    exactInputTokens: number
+    exactOutputTokens: number
+    exactCacheReadTokens: number
+    exactCacheWriteTokens: number
+    exactTotalTokens: number
+    exactCost: number
+    messagesWithExactUsage: number
+    messagesWithoutExactUsage: number
+  }
+  timingsMs: {
+    total: number
+  }
+}
+
+const ANALYTICS_MESSAGE_PAGE_LIMIT = 1000
+
+async function buildWeeklyAnalytics(
+  sessions: Session[],
+  rangeStart: Date,
+  rangeEnd: Date,
+  days: number,
+): Promise<WeeklyAnalytics> {
+  const startedAtMs = Date.now()
+  const rangeStartMs = rangeStart.getTime()
+  const rangeEndMs = rangeEnd.getTime()
+  const activeSessions = sessions.filter(session => sessionOverlapsRange(session, rangeStartMs, rangeEndMs))
+  const roles: Record<string, number> = {}
+  const bySource: Record<string, number> = {}
+  const projectMessages: Record<string, number> = {}
+  const modelMessages: Record<string, number> = {}
+  const tokenUsage: WeeklyAnalytics['tokenUsage'] = {
+    exactInputTokens: 0,
+    exactOutputTokens: 0,
+    exactCacheReadTokens: 0,
+    exactCacheWriteTokens: 0,
+    exactTotalTokens: 0,
+    exactCost: 0,
+    messagesWithExactUsage: 0,
+    messagesWithoutExactUsage: 0,
+  }
+  let messages = 0
+  let visibleTextChars = 0
+  let estimatedInputLikeTokens = 0
+  let estimatedAssistantTokens = 0
+  let toolOutputs = 0
+  let largestWorkstreamMessages = 0
+
+  for (const session of activeSessions) {
+    bySource[session.source] = (bySource[session.source] || 0) + 1
+    largestWorkstreamMessages = Math.max(largestWorkstreamMessages, session.messageCount || 0)
+
+    const messageCount = session.messageCount || 0
+    for (let offset = 0; offset < Math.max(messageCount, 1); offset += ANALYTICS_MESSAGE_PAGE_LIMIT) {
+      const page = await readSessionMessagesPage(session, offset, ANALYTICS_MESSAGE_PAGE_LIMIT)
+      if (page.length === 0) break
+
+      for (const message of page) {
+        const timestampMs = timestampValue(message.timestamp)
+        if (timestampMs < rangeStartMs || timestampMs > rangeEndMs) continue
+
+        messages += 1
+        const role = message.role || 'unknown'
+        roles[role] = (roles[role] || 0) + 1
+        if (role === 'tool') toolOutputs += 1
+        const project = session.cwd || '(unknown project)'
+        projectMessages[project] = (projectMessages[project] || 0) + 1
+        const model = message.model || session.model || 'unknown'
+        modelMessages[model] = (modelMessages[model] || 0) + 1
+
+        const charCount = visibleMessageText(message).length
+        visibleTextChars += charCount
+        const estimatedTokens = estimateTokensFromChars(charCount)
+        if (role === 'assistant') estimatedAssistantTokens += estimatedTokens
+        else estimatedInputLikeTokens += estimatedTokens
+
+        if (messageHasUsage(message)) {
+          tokenUsage.messagesWithExactUsage += 1
+          tokenUsage.exactInputTokens += message.usage?.inputTokens || 0
+          tokenUsage.exactOutputTokens += message.usage?.outputTokens || 0
+          tokenUsage.exactCacheReadTokens += message.usage?.cacheReadTokens || 0
+          tokenUsage.exactCacheWriteTokens += message.usage?.cacheWriteTokens || 0
+          tokenUsage.exactTotalTokens += message.usage?.totalTokens || 0
+          tokenUsage.exactCost += message.usage?.cost || message.cost || 0
+        } else {
+          tokenUsage.messagesWithoutExactUsage += 1
+        }
+      }
+
+      if (page.length < ANALYTICS_MESSAGE_PAGE_LIMIT) break
+    }
+  }
+
+  const newConversations = activeSessions.filter(session => {
+    const first = timestampValue(session.firstTimestamp)
+    return first >= rangeStartMs && first <= rangeEndMs
+  }).length
+
+  return {
+    computedFrom: 'message-scan',
+    range: {
+      days,
+      startedAt: rangeStart.toISOString(),
+      endedAt: rangeEnd.toISOString(),
+    },
+    summary: {
+      conversations: activeSessions.length,
+      newConversations,
+      continuedConversations: Math.max(0, activeSessions.length - newConversations),
+      messages,
+      activeConversationMessages: activeSessions.reduce((sum, session) => sum + (session.messageCount || 0), 0),
+      visibleTextChars,
+      estimatedTranscriptTokens: estimatedInputLikeTokens + estimatedAssistantTokens,
+      estimatedInputLikeTokens,
+      estimatedAssistantTokens,
+      toolOutputs,
+      largestWorkstreamMessages,
+    },
+    roles,
+    bySource,
+    topProjects: topBuckets(projectMessages, 6),
+    topModels: topBuckets(modelMessages, 6),
+    tokenUsage,
+    timingsMs: {
+      total: Date.now() - startedAtMs,
+    },
+  }
+}
+
+function buildWeeklyAnalyticsIndexFallback(
+  sessions: Session[],
+  rangeStart: Date,
+  rangeEnd: Date,
+  days: number,
+  error?: string,
+): WeeklyAnalytics {
+  const startedAtMs = Date.now()
+  const rangeStartMs = rangeStart.getTime()
+  const rangeEndMs = rangeEnd.getTime()
+  const activeSessions = sessions.filter(session => sessionOverlapsRange(session, rangeStartMs, rangeEndMs))
+  const bySource: Record<string, number> = {}
+  const projectConversations: Record<string, number> = {}
+  const modelConversations: Record<string, number> = {}
+  let activeConversationMessages = 0
+  let largestWorkstreamMessages = 0
+
+  for (const session of activeSessions) {
+    bySource[session.source] = (bySource[session.source] || 0) + 1
+    projectConversations[session.cwd || '(unknown project)'] = (projectConversations[session.cwd || '(unknown project)'] || 0) + 1
+    modelConversations[session.model || 'unknown'] = (modelConversations[session.model || 'unknown'] || 0) + 1
+    activeConversationMessages += session.messageCount || 0
+    largestWorkstreamMessages = Math.max(largestWorkstreamMessages, session.messageCount || 0)
+  }
+
+  const newConversations = activeSessions.filter(session => {
+    const first = timestampValue(session.firstTimestamp)
+    return first >= rangeStartMs && first <= rangeEndMs
+  }).length
+
+  return {
+    computedFrom: 'index-fallback',
+    ...(error ? { error } : {}),
+    range: {
+      days,
+      startedAt: rangeStart.toISOString(),
+      endedAt: rangeEnd.toISOString(),
+    },
+    summary: {
+      conversations: activeSessions.length,
+      newConversations,
+      continuedConversations: Math.max(0, activeSessions.length - newConversations),
+      messages: 0,
+      activeConversationMessages,
+      visibleTextChars: 0,
+      estimatedTranscriptTokens: 0,
+      estimatedInputLikeTokens: 0,
+      estimatedAssistantTokens: 0,
+      toolOutputs: 0,
+      largestWorkstreamMessages,
+    },
+    roles: {},
+    bySource,
+    topProjects: topBuckets(projectConversations, 6),
+    topModels: topBuckets(modelConversations, 6),
+    tokenUsage: {
+      exactInputTokens: 0,
+      exactOutputTokens: 0,
+      exactCacheReadTokens: 0,
+      exactCacheWriteTokens: 0,
+      exactTotalTokens: 0,
+      exactCost: 0,
+      messagesWithExactUsage: 0,
+      messagesWithoutExactUsage: 0,
+    },
+    timingsMs: {
+      total: Date.now() - startedAtMs,
+    },
+  }
+}
+
+function sessionOverlapsRange(session: Session, rangeStartMs: number, rangeEndMs: number): boolean {
+  const first = timestampValue(session.firstTimestamp)
+  const last = timestampValue(session.lastTimestamp)
+  return first <= rangeEndMs && last >= rangeStartMs
+}
+
+function timestampValue(value: string | null | undefined): number {
+  if (!value) return -1
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : -1
+}
+
+function topBuckets(values: Record<string, number>, limit: number): WeeklyAnalyticsBucket[] {
+  return Object.entries(values)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([key, count]) => ({ key, count }))
+}
+
+function estimateTokensFromChars(chars: number): number {
+  return Math.ceil(Math.max(0, chars) / 4)
+}
+
+function messageHasUsage(message: Message): boolean {
+  const usage = message.usage
+  return !!usage && Object.values(usage).some(value => typeof value === 'number' && Number.isFinite(value))
+}
+
+function visibleMessageText(message: Message): string {
+  const content = Array.isArray(message.content) ? message.content : []
+  return content.map(block => {
+    if (!block || typeof block !== 'object') return ''
+    const parts = [
+      block.text,
+      block.thinking,
+      block.name,
+      typeof block.input === 'string' ? block.input : safeJson(block.input),
+      typeof block.content === 'string' ? block.content : safeJson(block.content),
+      block.attachmentName,
+    ].filter(Boolean)
+    return parts.join('\n')
+  }).filter(Boolean).join('\n')
+}
+
 function messageHasThinkingBlock(message: Message): boolean {
-  return message.content.some(block => block.type === 'thinking')
+  return Array.isArray(message.content) && message.content.some(block => block.type === 'thinking')
 }
 
 async function backfillThinkingMessagesForUI(session: Session, messages: Message[]): Promise<Message[]> {
@@ -1994,12 +2482,13 @@ function setupPageHTML(): string {
   .pw-strength { height: 3px; border-radius: 2px; margin-top: 6px; transition: width 0.3s, background 0.3s; background: var(--border); }
   .pw-hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
   /* Activation overlay */
-  .activate-overlay { display: none; position: fixed; inset: 0; z-index: 999; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 32px; }
+  .activate-overlay { display: none; position: fixed; inset: 0; z-index: 999; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
   .activate-overlay.show { display: flex; }
   .activate-logo { font-size: 13px; letter-spacing: 4px; color: var(--muted); text-transform: uppercase; }
   .activate-logo span { color: var(--accent); }
-  .activate-label { font-size: 11px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; min-height: 18px; transition: color 0.5s; }
+  .activate-label { max-width: 640px; padding: 0 24px; text-align: center; font-size: 11px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; min-height: 18px; transition: color 0.5s; }
   .activate-label.bright { color: var(--accent2); }
+  .activate-detail { max-width: 640px; min-height: 42px; padding: 0 24px; text-align: center; font-size: 12px; line-height: 1.55; color: #aab5c3; }
   .progress-track { width: 480px; max-width: 90vw; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; width: 0%; background: var(--accent2); border-radius: 2px; transition: width linear; box-shadow: 0 0 10px var(--accent2); }
   .activate-done { font-size: 22px; color: var(--accent2); opacity: 0; transition: opacity 0.6s; }
@@ -2313,6 +2802,7 @@ function setupPageHTML(): string {
   <div class="activate-logo">data<span>moat</span></div>
   <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
   <div class="activate-label" id="activate-label">Initialising vault…</div>
+  <div class="activate-detail" id="activate-detail">This first scan runs once and stays local.</div>
   <div class="activate-done" id="activate-done">✓</div>
 </div>
 
@@ -2728,6 +3218,7 @@ async function activate() {
   const overlay = document.getElementById('activate-overlay');
   const fill = document.getElementById('progress-fill');
   const label = document.getElementById('activate-label');
+  const detail = document.getElementById('activate-detail');
   const done = document.getElementById('activate-done');
   const err = document.getElementById('activate-error');
   err.style.display = 'none';
@@ -2738,21 +3229,23 @@ async function activate() {
   overlay.classList.add('show');
   fill.style.transitionDuration = '350ms';
   fill.style.width = '18%';
-  label.textContent = 'Sealing vault…';
+  label.textContent = 'Creating encrypted vault…';
+  detail.textContent = 'DataMoat is setting up local encrypted storage. This first scan stays on this Mac.';
   const progressSteps = [
-    { pct: 32, delay: 800, duration: 700, text: 'Preparing encrypted vault…' },
-    { pct: 48, delay: 1800, duration: 1200, text: 'Importing existing conversations…' },
-    { pct: 66, delay: 4200, duration: 2600, text: 'Securing existing conversations. This only happens once…' },
-    { pct: 84, delay: 9000, duration: 7000, text: 'Finishing initial session index…' },
-    { pct: 92, delay: 18000, duration: 15000, text: 'Still importing. DataMoat will open when setup is complete…' },
+    { pct: 32, delay: 800, duration: 700, text: 'Preparing encrypted vault…', detail: 'No cloud upload. Data is sealed into the local vault on this machine.' },
+    { pct: 48, delay: 1800, duration: 1200, text: 'Checking supported AI tool folders…', detail: 'Looking for Claude, Codex, Cursor, and OpenClaw records in their normal app folders.' },
+    { pct: 66, delay: 4200, duration: 2600, text: 'Scanning existing conversations…', detail: 'Large histories can take a few minutes. DataMoat will open as soon as the first scan is complete.' },
+    { pct: 84, delay: 9000, duration: 7000, text: 'Building session index…', detail: 'This one-time setup makes the session list fast after the app opens.' },
+    { pct: 92, delay: 18000, duration: 15000, text: 'Finishing local setup…', detail: 'DataMoat will open automatically when setup is ready.' },
   ];
   const progressTimers = progressSteps.map(step => setTimeout(() => {
     fill.style.transitionDuration = step.duration + 'ms';
     fill.style.width = step.pct + '%';
     label.textContent = step.text;
+    detail.textContent = step.detail;
   }, step.delay));
   const clearProgressTimers = () => progressTimers.forEach(timer => clearTimeout(timer));
-  let importProgressSeen = false;
+  let serverProgressSeen = false;
   const progressPollTimer = setInterval(async () => {
     try {
       const r = await apiFetch('/api/setup/progress');
@@ -2760,15 +3253,21 @@ async function activate() {
       const p = await r.json();
       const total = Number(p.totalFiles || 0);
       const imported = Number(p.importedFiles || 0);
-      if (total <= 0) return;
-      if (!importProgressSeen) {
-        importProgressSeen = true;
+      const pctFromServer = Number(p.percent || 0);
+      const labelFromServer = typeof p.label === 'string' ? p.label.trim() : '';
+      const detailFromServer = typeof p.detail === 'string' ? p.detail.trim() : '';
+      if (pctFromServer <= 0 && !labelFromServer && !detailFromServer && total <= 0) return;
+      if (!serverProgressSeen) {
+        serverProgressSeen = true;
         clearProgressTimers();
       }
-      const pct = Math.max(48, Math.min(92, 48 + (imported / total) * 44));
+      const pct = pctFromServer > 0
+        ? Math.max(4, Math.min(100, pctFromServer))
+        : Math.max(48, Math.min(92, 48 + (imported / total) * 44));
       fill.style.transitionDuration = '450ms';
       fill.style.width = pct + '%';
-      label.textContent = 'Imported ' + imported + ' / ' + total + ' conversation files';
+      label.textContent = labelFromServer || ('Imported ' + imported + ' / ' + total + ' conversation files');
+      detail.textContent = detailFromServer || 'Importing protected records into the encrypted vault.';
     } catch {}
   }, 1000);
   const rememberCaptureWarning = (payload) => {
@@ -2794,6 +3293,7 @@ async function activate() {
       }
       overlay.classList.remove('show');
       fill.style.width = '0%';
+      detail.textContent = '';
       err.textContent = (d && typeof d.error === 'string' && d.error.trim())
         ? d.error
         : 'Could not activate vault. Try again.';
@@ -2807,19 +3307,21 @@ async function activate() {
     clearInterval(progressPollTimer);
     overlay.classList.remove('show');
     fill.style.width = '0%';
+    detail.textContent = '';
     err.textContent = 'Could not activate vault. Try again.';
     err.style.display = '';
     return;
   }
   const steps = [
-    { pct: 55, ms: 420, text: 'Writing session index…' },
-    { pct: 82, ms: 360, text: 'Activating watcher…' },
-    { pct: 100, ms: 320, text: 'Done.' },
+    { pct: 94, ms: 260, text: 'Finalising session index…', detail: 'Almost there.' },
+    { pct: 98, ms: 260, text: 'Starting background capture…', detail: 'Future records will continue to be captured while DataMoat is locked.' },
+    { pct: 100, ms: 320, text: 'Done.', detail: 'Opening DataMoat now.' },
   ];
   for (const step of steps) {
     fill.style.transitionDuration = step.ms + 'ms';
     fill.style.width = step.pct + '%';
     label.textContent = step.text;
+    detail.textContent = step.detail;
     await new Promise(r => setTimeout(r, step.ms + 80));
   }
   label.classList.add('bright');

@@ -11,11 +11,34 @@ function linuxUserServiceFile(): string {
   return path.join(process.env.HOME || '', '.config', 'systemd', 'user', 'datamoat-daemon.service')
 }
 
+function linuxUserSystemctlEnv(): NodeJS.ProcessEnv {
+  if (process.platform !== 'linux') return process.env
+
+  const uid = typeof process.getuid === 'function' ? process.getuid() : null
+  if (uid === null) return process.env
+
+  const uidRuntimeDir = `/run/user/${uid}`
+  const runtimeDir = fs.existsSync(path.join(uidRuntimeDir, 'bus'))
+    ? uidRuntimeDir
+    : process.env.XDG_RUNTIME_DIR || uidRuntimeDir
+  const busPath = path.join(runtimeDir, 'bus')
+  if (!fs.existsSync(busPath)) return process.env
+
+  return {
+    ...process.env,
+    XDG_RUNTIME_DIR: runtimeDir,
+    DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS || `unix:path=${busPath}`,
+  }
+}
+
 function canUseLinuxUserService(): boolean {
   if (process.platform !== 'linux') return false
   if (!fs.existsSync(linuxUserServiceFile())) return false
   try {
-    child_process.execFileSync('systemctl', ['--user', 'show-environment'], { stdio: 'ignore' })
+    child_process.execFileSync('systemctl', ['--user', 'show-environment'], {
+      stdio: 'ignore',
+      env: linuxUserSystemctlEnv(),
+    })
     return true
   } catch {
     return false
@@ -399,7 +422,10 @@ export async function ensureDaemonRunning(): Promise<{ pid: number | null; port:
     try { fs.unlinkSync(path.join(STATE_DIR, 'port')) } catch { /* ignore */ }
     if (canUseLinuxUserService()) {
       try {
-        child_process.execFileSync('systemctl', ['--user', 'start', 'datamoat-daemon.service'], { stdio: 'ignore' })
+        child_process.execFileSync('systemctl', ['--user', 'start', 'datamoat-daemon.service'], {
+          stdio: 'ignore',
+          env: linuxUserSystemctlEnv(),
+        })
       } catch {
         // fall back to detached spawn below
       }

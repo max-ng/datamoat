@@ -156,6 +156,8 @@ export async function ensureBackgroundCaptureSession(): Promise<string | null> {
       running: false,
       lastSkippedAt: new Date().toISOString(),
       lastSkippedReason: 'background_capture_not_configured',
+      lastErrorAt: null,
+      lastError: null,
     })
     return null
   }

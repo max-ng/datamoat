@@ -43,7 +43,9 @@ const MAX_LOCAL_IMAGE_BYTES = 50 * 1024 * 1024
 const MAX_LOCAL_IMAGE_SCAN_CHARS = 64 * 1024
 const MAX_LOCAL_IMAGE_CANDIDATE_CHARS = 4096
 const MAX_LOCAL_IMAGE_CANDIDATES = 10
-const CAPTURE_LOCAL_FILE_ATTACHMENTS = process.env.DATAMOAT_CAPTURE_LOCAL_FILE_ATTACHMENTS === '1'
+const CAPTURE_LOCAL_FILE_ATTACHMENTS =
+  process.env.DATAMOAT_CAPTURE_LOCAL_FILE_ATTACHMENTS === '1'
+  && process.env.DATAMOAT_ALLOW_EARLY_LOCAL_FILE_ATTACHMENTS === '1'
 
 export function extractCursorLine(raw: string, filePath?: string): {
   sessionId?: string
@@ -385,18 +387,19 @@ function parseInlineImageData(value: unknown): { mediaType: string; base64Data: 
 }
 
 function localImagesFromText(text: string, filePath?: string): RawImageData[] {
+  // Local path attachments are deferred to an explicit future settings action.
+  // Reading paths under Downloads/Desktop/Documents during setup can trigger
+  // macOS privacy prompts before the user understands why DataMoat is asking.
+  if (!CAPTURE_LOCAL_FILE_ATTACHMENTS) return []
   if (!text) return []
   if (text.length > MAX_LOCAL_IMAGE_SCAN_CHARS * 2) return []
   const out: RawImageData[] = []
   const seen = new Set<string>()
-  const cursorAssetsDir = filePath ? cursorAssetsDirFromPath(filePath) : undefined
 
   for (const candidate of localImagePathCandidates(scanWindowForLocalImages(text))) {
     if (seen.size >= MAX_LOCAL_IMAGE_CANDIDATES) break
     const imagePath = normalizeLocalImagePath(candidate)
     if (!imagePath || seen.has(imagePath)) continue
-    const cursorOwnedAsset = cursorAssetsDir ? isInsideDir(imagePath, cursorAssetsDir) : false
-    if (!cursorOwnedAsset && !CAPTURE_LOCAL_FILE_ATTACHMENTS) continue
     seen.add(imagePath)
 
     const ext = path.extname(imagePath).toLowerCase()

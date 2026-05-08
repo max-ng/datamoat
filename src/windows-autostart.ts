@@ -14,6 +14,7 @@ type LauncherMode = 'tray' | 'daemon' | 'remote-no-screen'
 
 type WindowsAutostartOptions = {
   remoteNoScreen?: boolean
+  startNow?: boolean
 }
 
 function startupDir(): string {
@@ -174,16 +175,16 @@ function writeStartupVbs(scriptPath: string, cmdPath: string): void {
   fs.writeFileSync(scriptPath, content, { encoding: 'utf8', mode: 0o600 })
 }
 
-function registerScheduledTask(ps1Path: string): void {
+function registerScheduledTask(ps1Path: string, options: WindowsAutostartOptions = {}): void {
   const actionArgs = `-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "${ps1Path}"`
   const script = [
     '$ErrorActionPreference = "Stop"',
     `$taskName = ${psString(SCHEDULED_TASK_NAME)}`,
     `$action = New-ScheduledTaskAction -Execute ${psString('powershell.exe')} -Argument ${psString(actionArgs)}`,
     '$trigger = New-ScheduledTaskTrigger -AtLogOn',
-    '$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -RestartCount 999 -RestartInterval (New-TimeSpan -Seconds 10) -MultipleInstances IgnoreNew',
+    '$settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Seconds 0) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew',
     'Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Description "DataMoat background capture and tray" -Force | Out-Null',
-    'Start-ScheduledTask -TaskName $taskName | Out-Null',
+    ...(options.startNow === false ? [] : ['Start-ScheduledTask -TaskName $taskName | Out-Null']),
   ].join('\n')
 
   child_process.execFileSync('powershell.exe', [
@@ -207,7 +208,7 @@ function ensureWindowsAutostartWithOptions(options: WindowsAutostartOptions = {}
   try {
     const ps1Path = launcherPs1Path()
     const launcherMode = writeLauncherPs1(ps1Path, options)
-    registerScheduledTask(ps1Path)
+    registerScheduledTask(ps1Path, options)
     try { fs.rmSync(startupScriptPath(), { force: true }) } catch { /* ignore */ }
     updateHealth('autostart', {
       enabled: true,
@@ -273,6 +274,10 @@ function ensureWindowsAutostartWithOptions(options: WindowsAutostartOptions = {}
 
 export function ensureWindowsAutostart(): boolean {
   return ensureWindowsAutostartWithOptions()
+}
+
+export function ensureWindowsPackagedAutostart(): boolean {
+  return ensureWindowsAutostartWithOptions({ startNow: false })
 }
 
 export function ensureWindowsRemoteNoScreenAutostart(): boolean {

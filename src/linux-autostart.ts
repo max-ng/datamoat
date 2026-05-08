@@ -6,6 +6,7 @@ import { updateHealth, writeLog } from './logging'
 import { launcherBinaryForScripts, launcherEnvForScripts } from './runtime'
 
 const REMOTE_AUTOSTART_FILE = 'datamoat-remote-no-screen.desktop'
+const TRAY_AUTOSTART_FILE = 'datamoat-tray.desktop'
 const DAEMON_SERVICE_FILE = 'datamoat-daemon.service'
 
 function autostartDir(): string {
@@ -33,6 +34,15 @@ function systemdQuote(value: string): string {
 }
 
 function remoteNoScreenCliLauncher(): string | null {
+  const cliPath = path.join(os.homedir(), '.local', 'bin', 'datamoat')
+  if (fs.existsSync(cliPath)) return cliPath
+
+  if (process.versions.electron && fs.existsSync(process.execPath)) return process.execPath
+
+  return null
+}
+
+function trayCliLauncher(): string | null {
   const cliPath = path.join(os.homedir(), '.local', 'bin', 'datamoat')
   if (fs.existsSync(cliPath)) return cliPath
 
@@ -164,5 +174,82 @@ export function ensureLinuxRemoteNoScreenAutostart(): boolean {
     })
     writeLog('warn', 'autostart', 'linux_remote_no_screen_autostart_failed', { error })
     return false
+  }
+}
+
+export function ensureLinuxAutostart(): boolean {
+  if (process.platform !== 'linux') return false
+
+  let systemdReady = false
+  try {
+    ensureLinuxSystemdDaemon()
+    systemdReady = true
+  } catch (error) {
+    writeLog('warn', 'autostart', 'linux_systemd_autostart_failed', { error })
+  }
+
+  const launcher = trayCliLauncher()
+  if (!launcher) {
+    updateHealth('autostart', {
+      enabled: systemdReady,
+      backend: systemdReady ? 'linux-systemd-user' : 'linux-desktop-autostart',
+      launcherMode: systemdReady ? 'daemon' : 'tray',
+      remoteNoScreen: false,
+      restartOnFailure: systemdReady,
+      service: systemdReady ? DAEMON_SERVICE_FILE : null,
+      startupScript: systemdReady ? daemonServicePath() : null,
+      launcher: systemdReady ? launcherBinaryForScripts() : null,
+      lastErrorAt: systemdReady ? null : new Date().toISOString(),
+      lastError: systemdReady ? null : 'no DataMoat launcher found for tray autostart',
+      updatedAt: new Date().toISOString(),
+    })
+    return systemdReady
+  }
+
+  const desktopPath = path.join(autostartDir(), TRAY_AUTOSTART_FILE)
+  const content = [
+    '[Desktop Entry]',
+    'Type=Application',
+    'Version=1.0',
+    'Name=DataMoat Tray',
+    'Comment=DataMoat background status indicator',
+    `Exec=env DATAMOAT_TRAY_ONLY=1 ${desktopExecQuote(launcher)}`,
+    'Terminal=false',
+    'X-GNOME-Autostart-enabled=true',
+    'Categories=Utility;Security;',
+    '',
+  ].join('\n')
+
+  try {
+    fs.mkdirSync(path.dirname(desktopPath), { recursive: true })
+    fs.writeFileSync(desktopPath, content, { encoding: 'utf8', mode: 0o644 })
+    updateHealth('autostart', {
+      enabled: true,
+      backend: systemdReady ? 'linux-systemd-user+desktop-autostart' : 'linux-desktop-autostart',
+      launcherMode: systemdReady ? 'daemon+tray' : 'tray',
+      remoteNoScreen: false,
+      restartOnFailure: systemdReady,
+      service: systemdReady ? DAEMON_SERVICE_FILE : null,
+      startupScript: desktopPath,
+      launcher,
+      updatedAt: new Date().toISOString(),
+    })
+    writeLog('info', 'autostart', 'linux_autostart_ready', {
+      backend: systemdReady ? 'linux-systemd-user+desktop-autostart' : 'linux-desktop-autostart',
+      service: systemdReady ? DAEMON_SERVICE_FILE : null,
+      startupScript: desktopPath,
+      launcher,
+      restartOnFailure: systemdReady,
+    })
+    return true
+  } catch (error) {
+    updateHealth('autostart', {
+      enabled: systemdReady,
+      backend: 'linux-desktop-autostart',
+      lastErrorAt: new Date().toISOString(),
+      lastError: error instanceof Error ? error.message : String(error),
+    })
+    writeLog('warn', 'autostart', 'linux_autostart_failed', { error })
+    return systemdReady
   }
 }

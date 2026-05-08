@@ -219,6 +219,118 @@
   .notice-dismiss:hover {
     background: rgba(255, 207, 102, 0.08);
   }
+  .weekly-strip {
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--border);
+    background: #090d12;
+    padding: 10px 24px 12px;
+  }
+  .weekly-strip-inner {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 14px 18px;
+    align-items: start;
+  }
+  .weekly-period {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding-top: 4px;
+    white-space: nowrap;
+  }
+  .weekly-metrics {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 0;
+    min-width: 0;
+  }
+  .weekly-metric {
+    min-width: 0;
+    padding: 0 13px;
+    border-left: 1px solid var(--border);
+  }
+  .weekly-metric:first-child {
+    border-left: 0;
+    padding-left: 0;
+  }
+  .weekly-metric.primary .weekly-value {
+    color: var(--accent);
+  }
+  .weekly-metric.loading .weekly-value {
+    color: var(--muted);
+    font-size: 15px;
+    padding-top: 3px;
+  }
+  .weekly-value {
+    font-family: var(--font-mono);
+    font-size: 22px;
+    line-height: 1.08;
+    color: var(--text);
+    letter-spacing: 0;
+    white-space: nowrap;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .weekly-label {
+    margin-top: 4px;
+    font-family: var(--font-mono);
+    font-size: 9px;
+    line-height: 1.35;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .weekly-sub {
+    margin-top: 3px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    line-height: 1.4;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .weekly-detail-row {
+    grid-column: 2;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  .weekly-pill {
+    min-height: 27px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: #0b1015;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    max-width: 320px;
+  }
+  .weekly-pill strong {
+    color: var(--text);
+    font-weight: 600;
+    white-space: nowrap;
+  }
+  .weekly-pill span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .weekly-pill.warning strong {
+    color: var(--warn);
+  }
   .recovery-reset-backdrop {
     position: fixed;
     inset: 0;
@@ -499,6 +611,138 @@
   .badge.claude-app  { color: var(--app); border-color: var(--app); background: #08180820; }
   .badge.openclaw    { color: var(--openclaw); border-color: var(--openclaw); background: #18082820; }
   .badge.cursor      { color: var(--cursor); border-color: var(--cursor); background: #28240820; }
+  .session-skills {
+    margin-top: 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #0a1016;
+    overflow: hidden;
+    font-family: var(--font-mono);
+  }
+  .session-skills > summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    padding: 8px 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .session-skills > summary::-webkit-details-marker { display: none; }
+  .session-skills > summary::before {
+    content: '▶';
+    font-size: 8px;
+    transition: transform 0.15s;
+    display: inline-block;
+  }
+  .session-skills[open] > summary::before { transform: rotate(90deg); }
+  .session-skills > summary:hover { background: #11161f; }
+  .session-skills-title {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .session-skills-count {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .session-skills-body {
+    border-top: 1px solid var(--border);
+    padding: 8px 10px 10px;
+    display: grid;
+    gap: 8px;
+  }
+  .skill-tree {
+    display: grid;
+    gap: 8px;
+  }
+  .skill-tree-group {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.018);
+    overflow: hidden;
+  }
+  .skill-tree-group summary {
+    min-height: 42px;
+    padding: 8px 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    cursor: pointer;
+    list-style: none;
+    color: var(--text);
+    font-size: 11px;
+  }
+  .skill-tree-group summary::-webkit-details-marker { display: none; }
+  .skill-tree-group summary:hover { background: rgba(255,255,255,0.025); }
+  .skill-tree-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .skill-tree-title::before {
+    content: '▶';
+    color: var(--muted);
+    font-size: 8px;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .skill-tree-group[open] > summary .skill-tree-title::before {
+    transform: rotate(90deg);
+  }
+  .skill-tree-meta {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.45;
+    word-break: break-word;
+  }
+  .skill-tree-count {
+    color: var(--muted);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .skill-tree-body {
+    border-top: 1px solid rgba(255,255,255,0.06);
+    padding: 8px;
+    display: grid;
+    gap: 8px;
+  }
+  .session-skill-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 7px 8px;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 5px;
+    background: rgba(255,255,255,0.02);
+  }
+  .session-skill-name {
+    color: var(--text);
+    font-size: 11px;
+    word-break: break-word;
+  }
+  .session-skill-meta {
+    color: var(--muted);
+    font-size: 10px;
+    margin-top: 2px;
+    word-break: break-word;
+  }
+  .session-skill-state {
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    padding: 2px 6px;
+    color: var(--muted);
+    font-size: 10px;
+    white-space: nowrap;
+  }
   /* ── Messages ── */
   .message { margin-bottom: 20px; }
   .message.tool,
@@ -1111,6 +1355,98 @@
     line-height: 1.6;
     word-break: break-all;
   }
+  .skill-folder-summary {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+  }
+  .skill-folder-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    line-height: 1.5;
+    word-break: break-word;
+  }
+  .skill-folder-path,
+  .skill-file-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.5;
+    word-break: break-all;
+  }
+  .skill-folder-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .skill-mini-btn {
+    border: 1px solid var(--border2);
+    background: #0c1219;
+    color: var(--text);
+    border-radius: 4px;
+    padding: 4px 7px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    cursor: pointer;
+  }
+  .skill-mini-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: #0d1926;
+  }
+  .skill-mini-btn:disabled {
+    color: var(--muted);
+    cursor: default;
+    opacity: 0.7;
+  }
+  .skill-folder-actions .skill-mini-btn {
+    border-color: rgba(77, 154, 255, 0.45);
+    color: var(--accent);
+  }
+  .skill-files {
+    display: grid;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .skill-file-row {
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px;
+    background: rgba(0,0,0,0.18);
+    padding: 7px 8px;
+  }
+  .skill-file-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .skill-file-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    word-break: break-all;
+  }
+  .skill-file-content {
+    margin-top: 8px;
+  }
+  .skill-file-content pre {
+    margin: 0;
+    max-height: 360px;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #05080c;
+    padding: 10px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.6;
+  }
 
   @media (max-width: 1120px) {
     header {
@@ -1129,6 +1465,23 @@
     }
     .header-actions {
       margin-left: auto;
+    }
+    .weekly-strip {
+      padding: 10px 16px 12px;
+    }
+    .weekly-strip-inner {
+      grid-template-columns: 1fr;
+    }
+    .weekly-detail-row {
+      grid-column: auto;
+    }
+    .weekly-metrics {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      row-gap: 10px;
+    }
+    .weekly-metric:nth-child(4) {
+      border-left: 0;
+      padding-left: 0;
     }
   }
 </style>
@@ -1162,6 +1515,26 @@
     <a href="/about" class="header-link">about</a>
   </div>
 </header>
+
+<div id="weekly-strip" class="weekly-strip" aria-label="Weekly work summary">
+  <div class="weekly-strip-inner">
+    <div class="weekly-period">last 7 days</div>
+    <div class="weekly-metrics">
+      <div class="weekly-metric primary loading">
+        <div class="weekly-value">calculating…</div>
+        <div class="weekly-label">conversations</div>
+      </div>
+      <div class="weekly-metric loading">
+        <div class="weekly-value">calculating…</div>
+        <div class="weekly-label">messages</div>
+      </div>
+      <div class="weekly-metric loading">
+        <div class="weekly-value">calculating…</div>
+        <div class="weekly-label">est. tokens</div>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div id="notice-banner" class="notice-banner" role="status" aria-live="polite">
   <div id="notice-banner-text" class="notice-copy"></div>
@@ -1286,6 +1659,7 @@
         <div class="settings-value" style="margin-bottom:10px;">Only sources with captured conversations appear here.</div>
         <div id="backup-paths-list" class="backup-paths"></div>
       </div>
+
     </div>
   </div>
 </div>
@@ -1326,6 +1700,14 @@ let activeSessionData = null
 let activeMessages = []
 let activePageInfo = null
 let loadingMoreMessages = false
+let weeklyAnalytics = null
+let weeklyAnalyticsLoading = false
+let weeklyAnalyticsError = ''
+let skillsBackupStatus = null
+let skillsBackupError = ''
+let skillManifestCache = {}
+let skillFileCache = {}
+let skillDetailOpenState = {}
 
 const SOURCE_LABELS = {
   'claude-cli': 'Claude CLI',
@@ -1652,8 +2034,12 @@ async function sendActivityPing(force = false) {
 async function loadSessions() {
   await relockOnReload()
   sessions = await fetchSessionsSnapshot()
+  await loadSkillsBackupStatus()
   renderList()
+  renderOverview()
+  void loadWeeklyAnalytics()
   renderBackupPathsPanel()
+  renderSkillsBackupPanel()
   await refreshUpdatePanel()
   void checkTouchIdUpgradeOffer()
   void refreshActiveSessionIfChanged()
@@ -1662,6 +2048,32 @@ async function loadSessions() {
 async function fetchSessionsSnapshot() {
   const res = await apiFetch('/api/sessions')
   return await res.json()
+}
+
+async function loadSkillsBackupStatus() {
+  skillsBackupError = ''
+  try {
+    skillsBackupStatus = await jsonOrThrow(await apiFetch('/api/skills-backup'))
+  } catch (error) {
+    skillsBackupStatus = null
+    skillsBackupError = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function loadWeeklyAnalytics() {
+  if (weeklyAnalyticsLoading) return
+  weeklyAnalyticsLoading = true
+  weeklyAnalyticsError = ''
+  renderOverview()
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/analytics/weekly?days=7'))
+    weeklyAnalytics = data
+  } catch (error) {
+    weeklyAnalyticsError = error instanceof Error ? error.message : String(error)
+  } finally {
+    weeklyAnalyticsLoading = false
+    renderOverview()
+  }
 }
 
 async function enableTouchIdUpgrade() {
@@ -1777,6 +2189,171 @@ function renderList() {
   list.scrollTop = preservedScrollTop
 }
 
+function renderOverview() {
+  const strip = document.getElementById('weekly-strip')
+  if (!strip) return
+  const data = weeklyAnalytics || buildWeeklyFallback()
+  const summary = data.summary
+  const exactReady = !!weeklyAnalytics && weeklyAnalytics.computedFrom !== 'index-fallback'
+  const latestSession = latestSessionForOverview()
+  const useLatestPills = summary.conversations === 0 && !!latestSession
+  const tokenNote = exactReady && summary.estimatedTranscriptTokens > 0
+    ? `${fmtCompact(summary.estimatedInputLikeTokens)} input-like · ${fmtCompact(summary.estimatedAssistantTokens)} assistant`
+    : 'calculating visible transcript estimate…'
+  const scanningValue = 'calculating…'
+  const scanningClass = exactReady ? '' : 'loading'
+  const messagesValue = exactReady
+    ? fmtNumber(summary.messages)
+    : (summary.activeConversationMessages > 0 ? fmtNumber(summary.activeConversationMessages) : scanningValue)
+  const messagesNote = exactReady ? 'exact in range' : 'active workstreams · scanning range'
+  const transcriptValue = exactReady ? fmtCompact(summary.estimatedTranscriptTokens) : scanningValue
+  const toolOutputsValue = exactReady ? fmtNumber(summary.toolOutputs) : scanningValue
+  const visibleWorkValue = exactReady ? fmtCompact(summary.visibleTextChars) : scanningValue
+  const topProject = data.topProjects?.[0]
+  const topModel = data.topModels?.[0]
+  const topRole = exactReady ? bucketsFromRecord(data.roles)?.[0] : null
+  const emptyPill = exactReady
+    ? (sessions.length > 0 ? 'no recent data' : 'no sessions')
+    : (sessions.length > 0 ? 'no recent data' : scanningValue)
+  const topProjectValue = topProject
+    ? `${shortPath(topProject.key)} · ${fmtNumber(topProject.count)}`
+    : useLatestPills
+      ? `${shortPath(latestSession.cwd || latestSession.id || 'latest session')} · latest`
+      : emptyPill
+  const topModelValue = topModel
+    ? `${topModel.key} · ${fmtNumber(topModel.count)}`
+    : useLatestPills
+      ? `${latestSession.model || 'unknown'} · latest`
+      : emptyPill
+  strip.innerHTML = `
+    <div class="weekly-strip-inner">
+      <div class="weekly-period">last 7 days</div>
+      <div class="weekly-metrics">
+        ${weeklyMetric('Conversations', fmtNumber(summary.conversations), `${fmtNumber(summary.newConversations)} new · ${fmtNumber(summary.continuedConversations)} continued`, true)}
+        ${weeklyMetric('Messages exchanged', messagesValue, messagesNote)}
+        ${weeklyMetric('Est. transcript tokens', transcriptValue, tokenNote, false, scanningClass)}
+        ${weeklyMetric('Tool outputs', toolOutputsValue, exactReady ? 'captured from work' : 'scanning tool activity', false, scanningClass)}
+        ${weeklyMetric('Visible work', visibleWorkValue, exactReady ? 'chars archived' : 'scanning visible text', false, scanningClass)}
+        ${weeklyMetric('Largest workstream', fmtNumber(summary.largestWorkstreamMessages), 'messages')}
+      </div>
+      <div class="weekly-detail-row">
+        ${weeklyPill('Top project', topProjectValue)}
+        ${weeklyPill('Model', topModelValue)}
+        ${weeklyPill('Role mix', topRole ? `${topRole.key} · ${fmtNumber(topRole.count)}` : (exactReady ? 'no recent role data' : emptyPill))}
+        ${weeklyPill('Skills backup', skillsBackupSummaryText())}
+      </div>
+    </div>
+  `
+}
+
+function skillsBackupSummaryText() {
+  if (skillsBackupStatus?.skillsBackedUp) {
+    return `${fmtNumber(skillsBackupStatus.skillsBackedUp)} folders · ${fmtNumber(skillsBackupStatus.filesBackedUp)} files`
+  }
+  if (skillsBackupError) return 'unavailable'
+  return 'not scanned yet'
+}
+
+function weeklyMetric(label, value, note, primary = false, state = '') {
+  return `<div class="weekly-metric ${primary ? 'primary' : ''} ${state}">
+    <div class="weekly-value">${esc(value)}</div>
+    <div class="weekly-label">${esc(label)}</div>
+    <div class="weekly-sub">${esc(note)}</div>
+  </div>`
+}
+
+function weeklyPill(label, value) {
+  return `<div class="weekly-pill"><span>${esc(label)}</span><strong>${esc(value)}</strong></div>`
+}
+
+function latestSessionForOverview() {
+  return [...sessions].sort((a, b) => timeValue(b.lastTimestamp) - timeValue(a.lastTimestamp))[0] || null
+}
+
+function buildWeeklyFallback() {
+  const endedAt = Date.now()
+  const startedAt = endedAt - 7 * 24 * 60 * 60 * 1000
+  const active = sessions.filter(session => {
+    const first = timeValue(session.firstTimestamp)
+    const last = timeValue(session.lastTimestamp)
+    return first <= endedAt && last >= startedAt
+  })
+  const projectCounts = {}
+  const modelCounts = {}
+  const sourceCounts = {}
+  let activeConversationMessages = 0
+  let largestWorkstreamMessages = 0
+  for (const session of active) {
+    const messageCount = session.messageCount || 0
+    activeConversationMessages += messageCount
+    largestWorkstreamMessages = Math.max(largestWorkstreamMessages, messageCount)
+    projectCounts[session.cwd || '(unknown project)'] = (projectCounts[session.cwd || '(unknown project)'] || 0) + 1
+    modelCounts[session.model || 'unknown'] = (modelCounts[session.model || 'unknown'] || 0) + 1
+    sourceCounts[session.source || 'unknown'] = (sourceCounts[session.source || 'unknown'] || 0) + 1
+  }
+  const newConversations = active.filter(session => {
+    const first = timeValue(session.firstTimestamp)
+    return first >= startedAt && first <= endedAt
+  }).length
+  return {
+    summary: {
+      conversations: active.length,
+      newConversations,
+      continuedConversations: Math.max(0, active.length - newConversations),
+      messages: 0,
+      activeConversationMessages,
+      visibleTextChars: 0,
+      estimatedTranscriptTokens: 0,
+      estimatedInputLikeTokens: 0,
+      estimatedAssistantTokens: 0,
+      toolOutputs: 0,
+      largestWorkstreamMessages,
+    },
+    roles: {},
+    bySource: sourceCounts,
+    topProjects: topOverviewBuckets(projectCounts, 6),
+    topModels: topOverviewBuckets(modelCounts, 6),
+    tokenUsage: {
+      exactInputTokens: 0,
+      exactOutputTokens: 0,
+      exactCacheReadTokens: 0,
+      exactCacheWriteTokens: 0,
+      exactTotalTokens: 0,
+      exactCost: 0,
+      messagesWithExactUsage: 0,
+      messagesWithoutExactUsage: 0,
+    },
+  }
+}
+
+function topOverviewBuckets(values, limit) {
+  return Object.entries(values)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([key, count]) => ({ key, count }))
+}
+
+function bucketsFromRecord(values) {
+  return topOverviewBuckets(values || {}, 6)
+}
+
+function timeValue(ts) {
+  const parsed = Date.parse(ts || '')
+  return Number.isFinite(parsed) ? parsed : -1
+}
+
+function fmtNumber(value) {
+  return Math.round(Number(value) || 0).toLocaleString()
+}
+
+function fmtCompact(value) {
+  const n = Number(value) || 0
+  if (Math.abs(n) >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(1)}K`
+  return fmtNumber(n)
+}
+
 async function doContentSearch(q) {
   if (q.length < 2) {
     contentSearchPending = false
@@ -1876,6 +2453,7 @@ function renderConversation(session, messages, opts = {}) {
         <span class="badge">${fmtDate(session.firstTimestamp)}</span>
       </div>
     </div>
+    ${renderSessionSkillsPanel(session, messages)}
     ${messages.map(renderMessage).join('')}
   `
   if (resetScroll) {
@@ -2086,6 +2664,94 @@ function renderAttrStrip(msg) {
     ? `<details class="attr-details"><summary>attributes (${rows.length})</summary><div class="attr-body">${rows.join('')}</div></details>`
     : ''
   return stripHtml + detailsHtml
+}
+
+function valueLabel(value) {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (!value || typeof value !== 'object') return ''
+  return value.name || value.id || value.title || value.path || value.slug || ''
+}
+
+function collectNamedValues(value, bucket = []) {
+  if (value === undefined || value === null) return bucket
+  if (Array.isArray(value)) {
+    for (const item of value) collectNamedValues(item, bucket)
+    return bucket
+  }
+  const label = valueLabel(value)
+  if (label) {
+    bucket.push({
+      name: String(label),
+      detail: typeof value === 'object' ? value : null,
+    })
+    return bucket
+  }
+  if (typeof value === 'object') {
+    for (const [key, item] of Object.entries(value)) {
+      const nestedLabel = valueLabel(item)
+      bucket.push({
+        name: nestedLabel ? String(nestedLabel) : key,
+        detail: item && typeof item === 'object' ? item : null,
+      })
+    }
+  }
+  return bucket
+}
+
+function renderSessionSkillsPanel(session, messages) {
+  const seen = new Map()
+  for (const msg of messages || []) {
+    for (const entry of collectNamedValues(msg.activeSkills)) {
+      const key = entry.name.toLowerCase()
+      if (!seen.has(key)) seen.set(key, entry)
+    }
+  }
+  const skills = Array.from(seen.values()).sort((a, b) => a.name.localeCompare(b.name))
+  const hasFolderBackup = !!skillsBackupStatus?.skillsBackedUp
+  if (!skills.length && !hasFolderBackup) return ''
+
+  const folderRows = hasFolderBackup ? [
+    `<div class="session-skill-row">
+      <div>
+        <div class="session-skill-name">complete folder backup</div>
+        <div class="session-skill-meta">${fmtNumber(skillsBackupStatus.skillsBackedUp)} skill folders · ${fmtNumber(skillsBackupStatus.filesBackedUp)} files · ${fmtNumber(skillsBackupStatus.uniqueBlobs)} unique encrypted blobs</div>
+      </div>
+      <span class="session-skill-state">complete</span>
+    </div>`,
+    renderSkillTree(),
+  ] : []
+
+  const recordedRows = skills.map(skill => {
+    const meta = skill.detail
+      ? `<div class="session-skill-meta">${esc(pretty(skill.detail).slice(0, 180))}</div>`
+      : ''
+    return `<div class="session-skill-row">
+      <div>
+        <div class="session-skill-name">${esc(skill.name)}</div>
+        ${meta}
+      </div>
+      <span class="session-skill-state">recorded</span>
+    </div>`
+  })
+
+  const rows = [...folderRows, ...recordedRows].join('')
+  const summary = hasFolderBackup
+    ? `${fmtNumber(skillsBackupStatus.skillsBackedUp)} backed up`
+    : `${skills.length} recorded`
+  const subtitle = hasFolderBackup
+    ? 'folder contents for this vault'
+    : 'from this conversation'
+
+  const panelKey = 'session-skills'
+  return `<details class="session-skills" data-skill-detail-key="${panelKey}"${skillDetailOpenAttr(panelKey)}>
+    <summary>
+      <span class="session-skills-title">skills backup</span>
+      <span>${subtitle}</span>
+      <span class="session-skills-count">${summary}</span>
+    </summary>
+    <div class="session-skills-body">${rows}</div>
+  </details>`
 }
 
 function renderTurnSummary(msg) {
@@ -2548,6 +3214,7 @@ function renderUpdatePanel() {
   setUpdatePanelMessage(updatePanelMessage, updatePanelMessageIsError)
   if (showSourceControls) renderReinstallHelp()
   renderBackupPathsPanel()
+  renderSkillsBackupPanel()
 }
 
 function sourceRootFromOriginalPath(source, originalPath) {
@@ -2643,6 +3310,288 @@ function renderBackupPathsPanel() {
   list.innerHTML = html
   card.hidden = false
 }
+
+function groupedSkillsSnapshots() {
+  const groups = new Map()
+  for (const snapshot of skillsBackupStatus?.snapshots || []) {
+    const key = `${snapshot.scope}:${snapshot.tool}`
+    if (!groups.has(key)) {
+      groups.set(key, {
+        scope: snapshot.scope,
+        tool: snapshot.tool,
+        count: 0,
+        files: 0,
+        examples: [],
+      })
+    }
+    const group = groups.get(key)
+    group.count += 1
+    group.files += Number(snapshot.fileCount || 0)
+    if (group.examples.length < 4) group.examples.push(snapshot.skill)
+  }
+  return Array.from(groups.values())
+    .sort((a, b) => `${a.scope}:${a.tool}`.localeCompare(`${b.scope}:${b.tool}`))
+}
+
+function skillDetailOpenAttr(key) {
+  return skillDetailOpenState[key] ? ' open' : ''
+}
+
+function sortedSkillSnapshots() {
+  return [...(skillsBackupStatus?.snapshots || [])].sort((a, b) => {
+    const scopeA = a.scope === 'global' ? '0' : '1'
+    const scopeB = b.scope === 'global' ? '0' : '1'
+    const keyA = `${scopeA}:${a.tool}:${a.project || ''}:${a.skill}`
+    const keyB = `${scopeB}:${b.tool}:${b.project || ''}:${b.skill}`
+    return keyA.localeCompare(keyB)
+  })
+}
+
+function skillTreeGroups() {
+  const scopes = new Map()
+  for (const snapshot of sortedSkillSnapshots()) {
+    const scopeKey = snapshot.scope || 'unknown'
+    if (!scopes.has(scopeKey)) {
+      scopes.set(scopeKey, {
+        scope: scopeKey,
+        count: 0,
+        files: 0,
+        tools: new Map(),
+      })
+    }
+    const scopeGroup = scopes.get(scopeKey)
+    scopeGroup.count += 1
+    scopeGroup.files += Number(snapshot.fileCount || 0)
+
+    const toolKey = snapshot.tool || 'unknown'
+    if (!scopeGroup.tools.has(toolKey)) {
+      scopeGroup.tools.set(toolKey, {
+        scope: scopeKey,
+        tool: toolKey,
+        count: 0,
+        files: 0,
+        examples: [],
+        snapshots: [],
+      })
+    }
+    const toolGroup = scopeGroup.tools.get(toolKey)
+    toolGroup.count += 1
+    toolGroup.files += Number(snapshot.fileCount || 0)
+    if (toolGroup.examples.length < 3) toolGroup.examples.push(snapshot.skill)
+    toolGroup.snapshots.push(snapshot)
+  }
+
+  return Array.from(scopes.values())
+    .map(scopeGroup => ({
+      ...scopeGroup,
+      tools: Array.from(scopeGroup.tools.values())
+        .sort((a, b) => a.tool.localeCompare(b.tool)),
+    }))
+    .sort((a, b) => {
+      if (a.scope === b.scope) return 0
+      if (a.scope === 'global') return -1
+      if (b.scope === 'global') return 1
+      return a.scope.localeCompare(b.scope)
+    })
+}
+
+function renderSkillTree() {
+  const scopes = skillTreeGroups()
+  if (!scopes.length) return '<div class="skill-file-meta">No skill folders were found in the latest scan.</div>'
+  return `<div class="skill-tree">${scopes.map(scopeGroup => {
+    const scopeKey = `scope:${scopeGroup.scope}`
+    const toolNames = scopeGroup.tools.map(group => group.tool).join(', ')
+    return `<details class="skill-tree-group" data-skill-detail-key="${escAttr(scopeKey)}"${skillDetailOpenAttr(scopeKey)}>
+      <summary>
+        <div>
+          <div class="skill-tree-title">${esc(scopeGroup.scope)}</div>
+          <div class="skill-tree-meta">${esc(toolNames)}</div>
+        </div>
+        <span class="skill-tree-count">${fmtNumber(scopeGroup.count)} folders · ${fmtNumber(scopeGroup.files)} files</span>
+      </summary>
+      <div class="skill-tree-body">
+        ${scopeGroup.tools.map(toolGroup => {
+          const toolKey = `tool:${scopeGroup.scope}:${toolGroup.tool}`
+          return `<details class="skill-tree-group" data-skill-detail-key="${escAttr(toolKey)}"${skillDetailOpenAttr(toolKey)}>
+            <summary>
+              <div>
+                <div class="skill-tree-title"><span class="backup-path-dot ${skillToolClass(toolGroup.tool)}"></span>${esc(toolGroup.tool)}</div>
+                <div class="skill-tree-meta">examples: ${esc(toolGroup.examples.join(', '))}</div>
+              </div>
+              <span class="skill-tree-count">${fmtNumber(toolGroup.count)} folders · ${fmtNumber(toolGroup.files)} files</span>
+            </summary>
+            <div class="skill-tree-body">
+              <div class="backup-path-items">${toolGroup.snapshots.map(renderSkillSnapshot).join('')}</div>
+            </div>
+          </details>`
+        }).join('')}
+      </div>
+    </details>`
+  }).join('')}</div>`
+}
+
+function skillToolClass(tool) {
+  if (tool === 'codex') return 'codex-cli'
+  if (tool === 'claude') return 'claude-cli'
+  if (tool === 'agents') return 'cursor'
+  return 'openclaw'
+}
+
+function canPreviewSkillFile(file) {
+  const lower = String(file.path || '').toLowerCase()
+  if (file.size > 2 * 1024 * 1024) return false
+  return lower.endsWith('.md') ||
+    lower.endsWith('.txt') ||
+    lower.endsWith('.json') ||
+    lower.endsWith('.yaml') ||
+    lower.endsWith('.yml') ||
+    lower.endsWith('.toml') ||
+    lower.endsWith('.py') ||
+    lower.endsWith('.js') ||
+    lower.endsWith('.ts') ||
+    lower.endsWith('.sh') ||
+    lower.endsWith('.html') ||
+    lower.endsWith('.css') ||
+    lower.endsWith('skill.md')
+}
+
+function renderSkillSnapshot(snapshot) {
+  const id = escAttr(snapshot.snapshotId)
+  const loaded = skillManifestCache[snapshot.snapshotId]
+  const fileCount = loaded?.files?.length ?? snapshot.fileCount
+  return `<div class="backup-path-item skill-folder" data-snapshot-id="${id}">
+    <div class="skill-folder-summary">
+      <div>
+        <div class="skill-folder-name">${esc(snapshot.scope)} / ${esc(snapshot.tool)} / ${esc(snapshot.skill)}</div>
+        <div class="skill-folder-path">${esc(snapshot.root)}</div>
+        ${snapshot.project ? `<div class="skill-folder-path">project: ${esc(snapshot.project)}</div>` : ''}
+      </div>
+      <div class="skill-folder-actions">
+        <button class="skill-mini-btn" type="button" data-skill-action="manifest" data-snapshot-id="${id}">${loaded ? 'Reload' : 'Files'}</button>
+      </div>
+    </div>
+    <div class="skill-file-meta">${fmtNumber(fileCount)} files · snapshot ${esc(snapshot.snapshotId.slice(0, 8))}</div>
+    <div class="skill-files">${loaded ? renderSkillFiles(snapshot.snapshotId, loaded.files) : ''}</div>
+  </div>`
+}
+
+function renderSkillFiles(snapshotId, files = []) {
+  if (!files.length) return '<div class="skill-file-meta">No files recorded in this folder.</div>'
+  return files.map(file => {
+    const fileKey = `${snapshotId}\0${file.path}`
+    const loaded = skillFileCache[fileKey]
+    const canPreview = canPreviewSkillFile(file)
+    return `<div class="skill-file-row">
+      <div class="skill-file-head">
+        <div>
+          <div class="skill-file-name">${esc(file.path)}</div>
+          <div class="skill-file-meta">${fmtNumber(file.size)} bytes · ${esc(file.sha256.slice(0, 12))}</div>
+        </div>
+        <button class="skill-mini-btn" type="button" ${canPreview ? '' : 'disabled'} data-skill-action="file" data-snapshot-id="${escAttr(snapshotId)}" data-file-path="${escAttr(file.path)}">${loaded ? 'Hide' : canPreview ? 'View' : 'Binary'}</button>
+      </div>
+      <div class="skill-file-content">${loaded ? renderSkillFileContent(loaded) : ''}</div>
+    </div>`
+  }).join('')
+}
+
+function renderSkillFileContent(file) {
+  if (!file) return ''
+  if (file.binary) {
+    return `<div class="skill-file-meta">Binary file${file.truncated ? ' · preview omitted because it is large' : ''}</div>`
+  }
+  const truncated = file.truncated ? `<div class="skill-file-meta">Showing first 200 KB. Full file is preserved in the encrypted backup.</div>` : ''
+  return `${truncated}<pre>${esc(file.text || '')}</pre>`
+}
+
+function renderSkillsBackupPanel() {
+  const card = document.getElementById('skills-backup-card')
+  const summary = document.getElementById('skills-backup-summary')
+  const list = document.getElementById('skills-backup-list')
+  if (!card || !summary || !list) return
+
+  if (skillsBackupError) {
+    summary.textContent = `Could not read skills backup: ${skillsBackupError}`
+    list.innerHTML = ''
+    return
+  }
+  if (!skillsBackupStatus || !skillsBackupStatus.skillsBackedUp) {
+    summary.textContent = 'No complete skills folder snapshot has been written for this vault yet. It runs after unlock when the vault key is available.'
+    list.innerHTML = ''
+    return
+  }
+
+  summary.textContent = `${fmtNumber(skillsBackupStatus.skillsBackedUp)} skill folders, ${fmtNumber(skillsBackupStatus.filesBackedUp)} files, ${fmtNumber(skillsBackupStatus.uniqueBlobs)} unique encrypted blobs. Last scan: ${formatDateTime(skillsBackupStatus.updatedAt)}.`
+  list.innerHTML = groupedSkillsSnapshots().map(group => {
+    const snapshots = (skillsBackupStatus.snapshots || [])
+      .filter(snapshot => snapshot.scope === group.scope && snapshot.tool === group.tool)
+      .sort((a, b) => a.skill.localeCompare(b.skill))
+    return `
+    <div class="backup-path-group">
+      <div class="backup-path-head">
+        <span class="backup-path-dot ${skillToolClass(group.tool)}"></span>
+        <span>${esc(group.scope)} ${esc(group.tool)} · ${fmtNumber(group.count)} folders · ${fmtNumber(group.files)} files</span>
+      </div>
+      <div class="backup-path-items">
+        ${snapshots.map(renderSkillSnapshot).join('')}
+      </div>
+    </div>
+  `}).join('')
+}
+
+function renderSkillsSurfaces() {
+  renderSkillsBackupPanel()
+  if (activeSessionData && activeMessages) {
+    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+  }
+}
+
+async function loadSkillManifest(snapshotId) {
+  if (!snapshotId) return
+  const res = await apiFetch(`/api/skills-backup/manifest/${encodeURIComponent(snapshotId)}`)
+  skillManifestCache[snapshotId] = await jsonOrThrow(res)
+  renderSkillsSurfaces()
+}
+
+async function toggleSkillFile(snapshotId, filePath) {
+  const key = `${snapshotId}\0${filePath}`
+  if (skillFileCache[key]) {
+    delete skillFileCache[key]
+    renderSkillsSurfaces()
+    return
+  }
+  const res = await apiFetch(`/api/skills-backup/file/${encodeURIComponent(snapshotId)}?path=${encodeURIComponent(filePath)}`)
+  skillFileCache[key] = await jsonOrThrow(res)
+  renderSkillsSurfaces()
+}
+
+async function handleSkillActionClick(e) {
+  const target = e.target
+  const button = target ? target.closest('button[data-skill-action]') : null
+  if (!button) return
+  const action = button.dataset.skillAction
+  const snapshotId = button.dataset.snapshotId || ''
+  button.disabled = true
+  const oldText = button.textContent
+  button.textContent = action === 'file' ? 'Loading…' : 'Loading files…'
+  try {
+    if (action === 'manifest') await loadSkillManifest(snapshotId)
+    if (action === 'file') await toggleSkillFile(snapshotId, button.dataset.filePath || '')
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), { isError: true })
+    button.disabled = false
+    button.textContent = oldText
+  }
+}
+
+document.getElementById('skills-backup-list')?.addEventListener('click', handleSkillActionClick)
+document.getElementById('conversation')?.addEventListener('click', handleSkillActionClick)
+document.getElementById('conversation')?.addEventListener('toggle', e => {
+  const detail = e.target
+  if (!detail || detail.tagName !== 'DETAILS') return
+  const key = detail.dataset?.skillDetailKey
+  if (!key) return
+  skillDetailOpenState[key] = detail.open
+}, true)
 
 async function loadUpdatePanel() {
   updatePanelBusy = true

@@ -9,8 +9,8 @@ import { disableBootstrapCapture, enableBootstrapCapture, preflightBootstrapCapt
 import { detectInstallContext } from '../install-context'
 import { installCrashHandlers, updateHealth, writeLog } from '../logging'
 import { applyInstallPreference, clearInstallChoice, detectDualInstallState, saveInstallChoice, type DualInstallState, type InstallPreference } from '../packaged-handoff'
-import { ensureLinuxRemoteNoScreenAutostart } from '../linux-autostart'
-import { ensureWindowsRemoteNoScreenAutostart } from '../windows-autostart'
+import { ensureLinuxAutostart, ensureLinuxRemoteNoScreenAutostart } from '../linux-autostart'
+import { ensureWindowsPackagedAutostart, ensureWindowsRemoteNoScreenAutostart } from '../windows-autostart'
 import { ensureDirs } from '../store'
 import {
   applyPackagedUpdate,
@@ -299,6 +299,18 @@ function ensureRemoteNoScreenAutostart(): void {
     ensureMacRemoteNoScreenLaunchAgent()
   } else if (process.platform === 'linux') {
     ensureLinuxRemoteNoScreenAutostart()
+  }
+}
+
+function ensurePackagedAutostart(remoteNoScreen: boolean): void {
+  if (process.platform === 'darwin') {
+    ensurePackagedTrayLaunchAgent({ remoteNoScreen })
+  } else if (process.platform === 'win32') {
+    if (remoteNoScreen) ensureWindowsRemoteNoScreenAutostart()
+    else ensureWindowsPackagedAutostart()
+  } else if (process.platform === 'linux') {
+    if (remoteNoScreen) ensureLinuxRemoteNoScreenAutostart()
+    else ensureLinuxAutostart()
   }
 }
 
@@ -1366,7 +1378,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     try {
       if (detectInstallContext().mode === 'packaged') {
-        ensurePackagedTrayLaunchAgent({ remoteNoScreen: remoteNoScreenLaunch })
+        ensurePackagedAutostart(remoteNoScreenLaunch)
       }
     } catch (error) {
       writeLog('warn', 'electron', 'packaged_launch_agent_init_failed', { error })

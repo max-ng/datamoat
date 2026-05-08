@@ -111,6 +111,18 @@ func fetchPrivateKey() -> SecKey? {
     return (item as! SecKey)
 }
 
+func deletePrivateKey() throws {
+    let query: [String: Any] = [
+        kSecClass as String: kSecClassKey,
+        kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+        kSecAttrApplicationTag as String: keyTag
+    ]
+    let status = SecItemDelete(query as CFDictionary)
+    guard status == errSecSuccess || status == errSecItemNotFound else {
+        throw HelperError.message("secure enclave key delete failed: \(status)")
+    }
+}
+
 func loadOrCreatePrivateKey() throws -> SecKey {
     if let key = fetchPrivateKey() { return key }
 
@@ -563,6 +575,16 @@ if CommandLine.arguments.contains("--check") {
         exit(0)
     } catch {
         fail(stringError(error), code: 3)
+    }
+}
+
+if CommandLine.arguments.contains("--delete-key") {
+    do {
+        try deletePrivateKey()
+        print("ok", terminator: "")
+        exit(0)
+    } catch {
+        fail(stringError(error), code: 4)
     }
 }
 

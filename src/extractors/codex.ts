@@ -289,13 +289,15 @@ const MAX_LOCAL_IMAGE_BYTES = 50 * 1024 * 1024
 const MAX_LOCAL_IMAGE_SCAN_CHARS = 64 * 1024
 const MAX_LOCAL_IMAGE_CANDIDATE_CHARS = 4096
 const MAX_LOCAL_IMAGE_CANDIDATES = 10
-const CAPTURE_LOCAL_FILE_ATTACHMENTS = process.env.DATAMOAT_CAPTURE_LOCAL_FILE_ATTACHMENTS === '1'
+const CAPTURE_LOCAL_FILE_ATTACHMENTS =
+  process.env.DATAMOAT_CAPTURE_LOCAL_FILE_ATTACHMENTS === '1'
+  && process.env.DATAMOAT_ALLOW_EARLY_LOCAL_FILE_ATTACHMENTS === '1'
 
 function localImagesFromText(text: string, blockIndex: number, innerIndex?: number): RawImageData[] {
-  // Do not read arbitrary local paths mentioned inside transcripts by default.
-  // On macOS, reading Downloads/Desktop/Documents can trigger privacy prompts
-  // that make a signed app look unsafe. The transcript text is still captured;
-  // inline/base64 images are still captured by parseInlineImageData().
+  // Do not read arbitrary local paths mentioned inside transcripts during
+  // first-run capture. On macOS, reading Downloads/Desktop/Documents can show
+  // scary privacy prompts. The transcript text is still captured; inline/base64
+  // images are still captured by parseInlineImageData().
   if (!CAPTURE_LOCAL_FILE_ATTACHMENTS) return []
   if (!text) return []
   if (text.length > MAX_LOCAL_IMAGE_SCAN_CHARS) return []

@@ -1,18 +1,29 @@
 {
   "name": "datamoat",
-  "version": "0.1.14",
-  "description": "Automatically backs up Claude, Codex, OpenClaw, and Cursor conversations",
+  "version": "0.1.15",
+  "description": "DataMoat backs up Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records into an encrypted local vault.",
   "license": "BUSL-1.1",
+  "homepage": "https://datamoat.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/max-ng/datamoat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/max-ng/datamoat/issues"
+  },
   "bin": {
     "datamoat": "./dist/cli.js"
   },
   "main": "./dist/electron/main.js",
   "scripts": {
     "build": "tsc && node scripts/build-copy-assets.js && node scripts/build-helper.js && node scripts/build-electron-app.js",
+    "test:clean-local": "bash scripts/clean-local-test-state.sh --yes",
     "dev": "ts-node src/cli.ts",
     "dev:electron": "npm run build && electron dist/electron/main.js",
     "daemon": "ts-node src/daemon.ts",
-    "watch": "tsc --watch"
+    "watch": "tsc --watch",
+    "github:traffic": "node scripts/github-traffic-report.js",
+    "github:traffic:all": "node scripts/github-traffic-report.js"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

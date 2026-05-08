@@ -32,6 +32,8 @@ function commonIgnorePatterns() {
     /^\/\.gitignore$/,
     /^\/src($|\/)/,
     /^\/scripts($|\/)/,
+    /^\/dist\/helpers\/DataMoatTouchID\.app($|\/)/,
+    /^\/dist\/helpers\/touchid$/,
     /^\/verification($|\/)/,
     /^\/\.DS_Store$/,
     /^\/(?!README(?:\.public)?\.md$)[^/]+\.md$/,
@@ -828,10 +830,72 @@ async function packageWindows() {
     throw new Error(`packaged app missing at ${exePath}`)
   }
 
+  fs.rmSync(path.join(appRoot, 'resources', 'app', 'node_modules', 'keytar'), {
+    recursive: true,
+    force: true,
+  })
   fs.copyFileSync(windowsIconPath, path.join(resourcesPath, 'DataMoat.ico'))
   for (const [mode, icon] of Object.entries(windowsTrayIconPaths)) {
     fs.copyFileSync(icon, path.join(resourcesPath, `DataMoatTray-${mode}.ico`))
   }
+  writeWindowsPortableScripts(appRoot)
+}
+
+function writeWindowsPortableScripts(appRoot) {
+  const installScript = [
+    '@echo off',
+    'setlocal',
+    'set "APP_DIR=%~dp0"',
+    'set "APP_EXE=%APP_DIR%DataMoat.exe"',
+    'if not exist "%APP_EXE%" (',
+    '  echo DataMoat.exe was not found next to this script.',
+    '  pause',
+    '  exit /b 1',
+    ')',
+    'set "STARTUP_DIR=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"',
+    'set "STARTUP_VBS=%STARTUP_DIR%\\DataMoat Background.vbs"',
+    'mkdir "%STARTUP_DIR%" >nul 2>nul',
+    '> "%STARTUP_VBS%" echo Set shell = CreateObject("WScript.Shell")',
+    '>> "%STARTUP_VBS%" echo shell.Run """" ^& "%APP_EXE%" ^& """ --datamoat-tray-only", 0, False',
+    'start "" "%APP_EXE%"',
+    'echo DataMoat is installed for this Windows user and will start again after login.',
+    'echo Finish setup in the DataMoat window. Keep this folder together.',
+    'pause',
+    '',
+  ].join('\r\n')
+
+  const startScript = [
+    '@echo off',
+    'setlocal',
+    'set "APP_EXE=%~dp0DataMoat.exe"',
+    'if not exist "%APP_EXE%" (',
+    '  echo DataMoat.exe was not found next to this script.',
+    '  pause',
+    '  exit /b 1',
+    ')',
+    'start "" "%APP_EXE%"',
+    '',
+  ].join('\r\n')
+
+  const remoteScript = [
+    '@echo off',
+    'setlocal',
+    'set "APP_EXE=%~dp0DataMoat.exe"',
+    'if not exist "%APP_EXE%" (',
+    '  echo DataMoat.exe was not found next to this script.',
+    '  pause',
+    '  exit /b 1',
+    ')',
+    'start "" "%APP_EXE%" --datamoat-remote-no-screen',
+    'echo DataMoat remote no-screen capture was requested.',
+    'echo Finish password, authenticator, and recovery setup later on the protected desktop GUI.',
+    'pause',
+    '',
+  ].join('\r\n')
+
+  fs.writeFileSync(path.join(appRoot, 'Install DataMoat.cmd'), installScript, 'utf8')
+  fs.writeFileSync(path.join(appRoot, 'Start DataMoat.cmd'), startScript, 'utf8')
+  fs.writeFileSync(path.join(appRoot, 'Start DataMoat Remote No Screen.cmd'), remoteScript, 'utf8')
 }
 
 async function main() {

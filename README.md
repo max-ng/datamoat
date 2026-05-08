@@ -1,6 +1,6 @@
 # DataMoat
 
-[![Version](https://img.shields.io/badge/version-0.1.14-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-0.1.15-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -13,85 +13,42 @@
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
 
-> **Turn every supported local Claude, Codex, Cursor, OpenClaw, and agent session into private data assets for future AI employees.**
->
-> DataMoat is a local encrypted vault for AI-assisted work. It captures supported local AI session records before they disappear, seals transcripts and attachments, normalizes sessions for review and search, and keeps your AI work traces under your control.
->
-> **On-device by design:** your vault lives on your machine. There is no DataMoat cloud account or server-side vault, and your transcripts, attachments, and vault keys are not sent to DataMoat.
+Official website: [https://datamoat.org](https://datamoat.org)
+GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-**Your AI work history is not just history. It is the work-process data your future agents will need.**
+> **Capture everything you build with Claude, Codex, Cursor, and OpenClaw, and turn it into the most valuable private data asset of your life.**
+> DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
 
-DataMoat preserves the supported local working record: locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, and original source records on the same machine, so your work stays reviewable, protected, reusable, and useful for future AI employees.
+**Core backup scope:** DataMoat backs up supported **skills + sessions + attachments** into the same encrypted local vault. Skills are saved as full folder snapshots, not just names.
 
-![DataMoat conversation search and session detail UI](.github/assets/screenshot.png)
+**The people and companies that own their AI data will win the future.**
 
-## Why DataMoat Exists
+DataMoat is an AI work history vault for people and teams working across Claude CLI, Claude Desktop, Codex CLI, Codex app, Cursor, OpenClaw, and other AI tools. It preserves the full working record: sessions, locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, skills folder contents, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
 
-AI work is becoming real work.
-
-Future private AI employees — for individuals and companies — will not learn from documentation alone. They will need the real work process: the prompts, context, tool calls, outputs, corrections, and decisions that show how work actually gets done.
-
-People now ask Claude, Codex, Cursor, OpenClaw, and other agents to investigate bugs, edit code, inspect files, run commands, reason through problems, generate fixes, explain tradeoffs, and recover context across projects. The valuable record is not only the final answer. The valuable record is the work trace:
-
-- what the human asked for
-- what context the agent saw
-- what the agent tried
-- what tools were called
-- what files, logs, outputs, and attachments appeared
-- what the human corrected
-- what eventually worked
-- what should be remembered next time
-
-Those traces are private data assets for future AI employees. They can be protected and searched today before they disappear, then later become private memory, evaluation sets, handoff packs, workflow analytics, or company-specific model-improvement data when the right permissions, policies, cleaning, labeling, and export paths are in place.
-
-DataMoat starts with the most important step: **capture and protect the private AI work data asset while it still exists on your machine.**
-
-## What DataMoat Does Today
-
-DataMoat currently provides a real local capture, vault, and review foundation:
-
-- captures supported local records from Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported OpenClaw session records, and supported Cursor agent transcripts
-- runs on-device: captured content stays on your machine and is not sent to a DataMoat cloud service
-- stores normalized `Session` and `Message` records with prompts, responses, tool use and results, usage, model, timestamps, metadata, and parsed thinking or reasoning blocks when the source writes them locally
-- stores supported image, document, and file attachments as encrypted attachment blobs when the source provides attachment data
-- writes source records into the protected vault before normalized persistence and before advancing capture offsets
-- provides a local UI for browsing and searching captured sessions after unlock
-- keeps protected content local as encrypted vault files instead of plaintext transcript dumps
-- protects vault access with password-based unlock, optional authenticator support, recovery material, local auditability, and platform-specific hardening
-
-## Private by Design
-
-DataMoat is on-device by design. Your AI work vault lives on your machine, encrypted at rest. There is no DataMoat cloud vault, and DataMoat does not receive your transcripts, attachments, vault database, or vault keys.
-
-The local app can only read protected content after you unlock your vault. Your AI work data is captured for you, not for DataMoat.
-
-DataMoat protects the private data asset first. You decide how your protected work traces are later used.
-
-
+![DataMoat sessions, skills backup, and encrypted local vault UI](.github/assets/screenshot.png)
 
 ## How DataMoat Stores Your Work
 
 DataMoat keeps two layers:
 
-- **Raw source archive:** supported local JSONL, SQLite records, logs, attachments, metadata, and any locally stored thinking tokens or reasoning blocks are sealed in the encrypted vault as close to the source format as practical.
-- **Normalized session records:** records from different tools are converted into a common schema so you can search, review, compare, reuse, and hand off AI work across tools.
+- **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots, and any locally stored thinking tokens or reasoning blocks are preserved as close to the source format as possible.
+- **Normalized index:** records from different tools are converted into a common schema so you can search, review, export, analyze, reuse, and hand off work across tools.
 
 **Supported sources today:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local OpenClaw session records, and supported local Cursor agent transcripts.
+**More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
 
 ## Why Install DataMoat
 
-- **Create private data assets from real AI work.** Future AI employees will need the prompts, context, tool calls, outputs, corrections, and decisions that show how work actually gets done.
 - **Keep your full AI work history recoverable.** Local records can become harder to revisit after compaction, cleanup, retention changes, account downgrades, device replacement, or environment loss.
 - **Preserve the fullest local version while it is still available.** DataMoat saves the locally written transcript, including locally stored thinking tokens and reasoning blocks when the source stores them on disk.
+- **Back up the surrounding work context.** DataMoat protects supported sessions, attachments, and `SKILL.md`-based skills folder contents in the same encrypted vault.
 - **Search past prompts, solutions, tool output, and thinking-token context.** Find previous fixes, workflows, timestamps, and attachments without depending on a live service view.
 - **Protect continuity for individuals and teams.** Each protected machine can keep its own encrypted local archive for later review, handoff, and audit.
-- **Keep records encrypted, private, and under local control.** Your vault stays on-device; DataMoat does not receive your transcripts, attachments, or vault keys, and only approved unlock and recovery paths can decrypt it.
+- **Keep records encrypted and under local control.** Other software or services cannot read the vault directly; only approved unlock and recovery paths can decrypt it.
 
 ## Highlights
 
-- **On-device by design:** capture, encryption, vault storage, browse, and search run locally.
-- **No DataMoat cloud vault:** transcripts, attachments, vault databases, and vault keys are not sent to DataMoat.
-- **Encrypted local vault** for transcripts, attachments, and state using AES-256-GCM.
+- **Encrypted local vault** for transcripts, skills, attachments, and state using AES-256-GCM.
 - **Saved content stays local** as encrypted vault files, not plaintext transcript dumps.
 - **Strong local auth** with password, optional TOTP, a 24-word recovery phrase, and 8 one-time recovery codes.
 - **Secure Enclave-backed unlock path on supported Macs** for hardware-assisted daily unlock. See Apple's overview of the [Secure Enclave](https://support.apple.com/guide/security/secure-enclave-sec59b0b31ff/web). Touch ID is part of the packaged macOS app path.
@@ -109,7 +66,7 @@ DataMoat keeps two layers:
 |---|---|---|
 | **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.14-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
+| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.15-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Unsigned manual packages for Windows 11 x64 and Windows 11 on Arm; x64 has passed GitHub Actions packaged runtime smoke, ARM64 has passed real VM UI/background capture smoke; signed installer still in progress |
 
 ### Sources
@@ -122,12 +79,12 @@ DataMoat keeps two layers:
 | **Claude Desktop local-agent sessions (macOS)** | ✅ | Supported local Claude Desktop agent session records when present |
 | **OpenClaw** | ✅ | Supported local OpenClaw session transcripts and metadata |
 | **Cursor** | ✅ | Captures readable local Cursor `agent-transcripts` JSONL records, including text and tool blocks when present |
-| **Claude CLI attachments** | ✅ | Encrypted image and supported file/PDF blocks |
+| **Attachments** | ✅ | Encrypted image and supported file/PDF blocks, linked back to their source sessions |
+| **Skills folders** | ✅ | Global and project `SKILL.md` folder snapshots, including `SKILL.md` and included helper files, not just the skill name |
 
 ## Security At A Glance
 
-- **Vault encryption**: transcripts, attachments, and local state are encrypted at rest with AES-256-GCM.
-- **No server-side data access**: DataMoat does not receive your transcripts, attachments, vault database, or vault keys.
+- **Vault encryption**: transcripts, skills, attachments, and local state are encrypted at rest with AES-256-GCM.
 - **Owner-only local file permissions**: protected vault files, attachment blobs, and state files are written with restrictive local filesystem modes.
 - **Password handling**: passwords are stored as `scrypt` verifiers, not plaintext.
 - **Authenticator support**: TOTP works with standard authenticator apps such as Google Authenticator, 1Password, and Authy.
@@ -172,16 +129,17 @@ flowchart TD
 
 The signed / notarized macOS DMG is the recommended install path for Mac users. Source install remains available for Linux, development, and fallback cases. The macOS DMG is available from [GitHub Releases](https://github.com/max-ng/datamoat/releases) and includes Secure Enclave + Touch ID unlock on supported Macs, menu-bar auto-start at login, and packaged auto-update through GitHub Releases. Windows x64 and ARM64 are available as unsigned ZIP + `DataMoat.exe` packages while the signed installer is completed.
 
-Windows ZIP + `DataMoat.exe` downloads:
+Release downloads:
 
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.14-win32-x64.zip)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.14-win32-arm64.zip)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.15-macos-arm64.dmg)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.15-win32-x64.zip)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.15-win32-arm64.zip)
 
-Each Windows ZIP includes `DataMoat.exe` plus the required app files. Unzip the Windows package and run `DataMoat.exe` from inside the extracted folder. Keep the folder contents together; this is not a standalone single-file `.exe` installer yet.
+Each Windows ZIP includes `DataMoat.exe` plus the required app files. Unzip the Windows package, keep the folder contents together, and run `Install DataMoat.cmd` once. That launches DataMoat and registers startup for the current Windows user so the tray/background app comes back after login or restart. This is still a portable ZIP package, not a signed single-file installer yet.
 
 ### AI-Assisted Install
 
-For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.14-macos-arm64.dmg). Do not start with `git clone` on macOS unless the user explicitly wants source install or the packaged release is unavailable.
+For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.15-macos-arm64.dmg). Do not start with `git clone` on macOS unless the user explicitly wants source install or the packaged release is unavailable.
 
 You can ask Claude CLI, Codex CLI, or OpenClaw to install DataMoat when you are looking at the target desktop.
 
@@ -210,7 +168,7 @@ Do not use git clone or source install unless the DMG install fails.
 
 Steps:
 1. Download the latest macOS DMG:
-   https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.14-macos-arm64.dmg
+   https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.15-macos-arm64.dmg
 2. Mount the DMG.
 3. Copy DataMoat.app to ~/Applications.
 4. Launch exactly:
@@ -232,8 +190,8 @@ Do not use git clone or source install.
 
 Steps:
 1. Download the correct latest Windows ZIP from GitHub Releases:
-   x64: https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.14-win32-x64.zip
-   ARM64: https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.14-win32-arm64.zip
+   x64: https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.15-win32-x64.zip
+   ARM64: https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.15-win32-arm64.zip
 2. Extract the ZIP into Downloads.
 3. Launch exactly:
    %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen
@@ -308,15 +266,13 @@ Live git source installs support in-place source updates. Packaged macOS install
 
 ## Source Service Boundaries
 
-DataMoat backs up supported local transcript files that are already present on your device and already accessible to you. Your vault is stored on-device; DataMoat does not operate a server-side copy of your AI work history and does not receive your vault keys.
+DataMoat backs up supported local transcript files that are already present on your device and already accessible to you.
 
 It does not grant additional rights to content or source services. You remain responsible for complying with the terms, policies, plan restrictions, and internal rules that apply to Claude, Codex, OpenClaw, Cursor, and any other source service you use.
 
 ## Enterprise
 
 Enterprise deployment and management features are on the roadmap. More enterprise-focused capabilities are coming; star and watch this repository to follow updates.
-
-**The people and companies that own their AI data will win the future.**
 
 ## Consultation and Support
 

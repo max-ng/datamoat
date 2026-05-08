@@ -191,6 +191,29 @@ NODE
   exit 1
 }
 
+linux_systemctl_user() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local uid runtime_dir bus_addr uid_runtime_dir
+  uid="$(id -u)"
+  uid_runtime_dir="/run/user/${uid}"
+  if [ -S "${uid_runtime_dir}/bus" ]; then
+    runtime_dir="${uid_runtime_dir}"
+    bus_addr="unix:path=${runtime_dir}/bus"
+  else
+    runtime_dir="${XDG_RUNTIME_DIR:-${uid_runtime_dir}}"
+    bus_addr="${DBUS_SESSION_BUS_ADDRESS:-unix:path=${runtime_dir}/bus}"
+  fi
+
+  if [ -S "${runtime_dir}/bus" ]; then
+    XDG_RUNTIME_DIR="${runtime_dir}" DBUS_SESSION_BUS_ADDRESS="${bus_addr}" systemctl --user "$@"
+  else
+    systemctl --user "$@"
+  fi
+}
+
 # LaunchAgent (macOS auto-start on login)
 if [[ "$(uname)" == "Darwin" ]]; then
   PLIST="$HOME/Library/LaunchAgents/com.datamoat.daemon.plist"
@@ -300,16 +323,16 @@ RestartSec=3
 WantedBy=default.target
 SERVICE
 
-  if command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/null 2>&1; then
+  if linux_systemctl_user daemon-reload >/dev/null 2>&1; then
     if [ "$BOOTSTRAP_CAPTURE" -eq 1 ]; then
-      if systemctl --user enable --now datamoat-daemon.service >/dev/null 2>&1; then
+      if linux_systemctl_user enable --now datamoat-daemon.service >/dev/null 2>&1; then
         LINUX_SYSTEMD_DAEMON_ACTIVE=1
         echo -e "  ${GREEN}✓${RESET} systemd --user service installed (remote no-screen capture restarts on failure)"
       else
         HOME="$HOME" DATAMOAT_DAEMON=1 nohup "${NODE_BIN}" "$HOME/.datamoat/app/dist/daemon.js" >/dev/null 2>&1 &
         echo "  ! systemd --user unavailable; started remote no-screen capture for this session only"
       fi
-    elif systemctl --user enable --now datamoat-daemon.service >/dev/null 2>&1; then
+    elif linux_systemctl_user enable --now datamoat-daemon.service >/dev/null 2>&1; then
       LINUX_SYSTEMD_DAEMON_ACTIVE=1
       echo -e "  ${GREEN}✓${RESET} systemd --user service installed (auto-starts on login)"
     else

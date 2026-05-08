@@ -11,6 +11,7 @@ import { startBackgroundCapture, stopBackgroundCapture } from './background-capt
 import { ALL_SOURCES } from './config'
 import { bootstrapCaptureSummary } from './bootstrap-capture'
 import { importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from './watcher'
+import { scanAndBackupSkills } from './skills-backup'
 
 async function main() {
   ensureDirs()
@@ -57,6 +58,7 @@ async function main() {
   writeLog('info', 'daemon', 'ui_ready', { port })
   const captureStarted = await startBackgroundCapture()
   await retryBootstrapImportAfterStartup(captureStarted)
+  if (captureStarted) await scanAndBackupSkills('daemon_start')
   startAutoUpdateLoop(hasAuthenticatedUiSession)
 
   // Clean up PID on exit
@@ -101,4 +103,5 @@ async function retryBootstrapImportAfterStartup(captureStarted: boolean): Promis
   })
   writeLog('info', 'daemon', 'bootstrap_retry_done', result)
   await startWatchers('vault')
+  await scanAndBackupSkills('bootstrap_retry')
 }
