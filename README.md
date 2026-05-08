@@ -23,6 +23,8 @@
 
 DataMoat preserves the supported local working record: locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, and original source records on the same machine, so your work stays reviewable, protected, reusable, and useful for future AI employees.
 
+![DataMoat conversation search and session detail UI](.github/assets/screenshot.png)
+
 ## Why DataMoat Exists
 
 AI work is becoming real work.
