@@ -7,6 +7,20 @@ import { ensureDirs } from './store'
 import { isSetupDone } from './auth'
 import { loadInstallInfo } from './install-context'
 
+type DaemonMeta = {
+  pid: number
+  version?: string
+}
+
+function packageVersion(): string {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')) as { version?: unknown }
+    return typeof pkg.version === 'string' && pkg.version.trim() ? pkg.version.trim() : '0.0.0'
+  } catch {
+    return '0.0.0'
+  }
+}
+
 function linuxUserServiceFile(): string {
   return path.join(process.env.HOME || '', '.config', 'systemd', 'user', 'datamoat-daemon.service')
 }
@@ -321,7 +335,28 @@ export function probePort(port: number): Promise<boolean> {
   })
 }
 
-async function daemonMetaForPort(port: number): Promise<{ pid: number } | null> {
+function daemonMetaMatchesCurrentApp(meta: DaemonMeta): boolean {
+  return meta.version === packageVersion()
+}
+
+function stopStaleDaemon(meta: DaemonMeta): boolean {
+  const command = commandForPid(meta.pid)
+  if (!command || !isKnownDaemonCommand(command)) return false
+  stopDaemonPids([meta.pid])
+  return true
+}
+
+function clearDaemonStateForPid(pid: number): void {
+  try { fs.unlinkSync(path.join(STATE_DIR, 'port')) } catch { /* ignore */ }
+  try {
+    const pidFile = parseInt(fs.readFileSync(PID_FILE, 'utf8').trim())
+    if (pidFile === pid) fs.unlinkSync(PID_FILE)
+  } catch {
+    // ignore
+  }
+}
+
+async function daemonMetaForPort(port: number): Promise<DaemonMeta | null> {
   return new Promise(resolve => {
     const req = http.get({ hostname: '127.0.0.1', port, path: '/api/meta', timeout: 500 }, res => {
       if (res.statusCode !== 200) {
@@ -334,9 +369,12 @@ async function daemonMetaForPort(port: number): Promise<{ pid: number } | null> 
       res.on('data', chunk => { body += chunk })
       res.on('end', () => {
         try {
-          const parsed = JSON.parse(body) as { pid?: number }
+          const parsed = JSON.parse(body) as { pid?: number; version?: unknown }
           if (typeof parsed.pid === 'number' && Number.isFinite(parsed.pid)) {
-            resolve({ pid: parsed.pid })
+            resolve({
+              pid: parsed.pid,
+              version: typeof parsed.version === 'string' ? parsed.version : undefined,
+            })
             return
           }
         } catch {
@@ -357,6 +395,11 @@ export async function resolveActivePort(expectedPid?: number | null): Promise<nu
   const filePort = getPort()
   if (filePort && await probePort(filePort)) {
     const meta = await daemonMetaForPort(filePort)
+    if (meta && !daemonMetaMatchesCurrentApp(meta)) {
+      stopStaleDaemon(meta)
+      clearDaemonStateForPid(meta.pid)
+      return null
+    }
     if (meta && (!expectedPid || meta.pid === expectedPid)) return filePort
   }
 
@@ -364,6 +407,10 @@ export async function resolveActivePort(expectedPid?: number | null): Promise<nu
   for (let port = UI_PORT_RANGE.min; port <= UI_PORT_RANGE.max; port++) {
     const meta = await daemonMetaForPort(port)
     if (meta) {
+      if (!daemonMetaMatchesCurrentApp(meta)) {
+        stopStaleDaemon(meta)
+        continue
+      }
       if (expectedPid && meta.pid === expectedPid) {
         fs.writeFileSync(path.join(STATE_DIR, 'port'), String(port))
         return port
@@ -412,6 +459,21 @@ export async function ensureDaemonRunning(): Promise<{ pid: number | null; port:
     try { fs.unlinkSync(path.join(STATE_DIR, 'port')) } catch { /* ignore */ }
     let waited = 0
     while (findDaemonPids().length > 0 && waited < 3000) {
+      await sleep(150)
+      waited += 150
+    }
+    pid = null
+  }
+
+  if (pid) {
+    const existingPort = await waitForActivePort(pid, Math.min(DAEMON_START_TIMEOUT_MS, 5000))
+    if (existingPort) return { pid: isDaemonRunning() ?? pid, port: existingPort, url: buildUiUrl(existingPort) }
+
+    stopDaemonPids([pid])
+    try { fs.unlinkSync(PID_FILE) } catch { /* ignore */ }
+    try { fs.unlinkSync(path.join(STATE_DIR, 'port')) } catch { /* ignore */ }
+    let waited = 0
+    while (findDaemonPids().includes(pid) && waited < 3000) {
       await sleep(150)
       waited += 150
     }

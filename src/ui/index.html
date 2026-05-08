@@ -2195,17 +2195,24 @@ function renderOverview() {
   const data = weeklyAnalytics || buildWeeklyFallback()
   const summary = data.summary
   const exactReady = !!weeklyAnalytics && weeklyAnalytics.computedFrom !== 'index-fallback'
+  const analyticsFailed = !!weeklyAnalyticsError && !exactReady
   const latestSession = latestSessionForOverview()
   const useLatestPills = summary.conversations === 0 && !!latestSession
   const tokenNote = exactReady && summary.estimatedTranscriptTokens > 0
     ? `${fmtCompact(summary.estimatedInputLikeTokens)} input-like · ${fmtCompact(summary.estimatedAssistantTokens)} assistant`
-    : 'calculating visible transcript estimate…'
-  const scanningValue = 'calculating…'
-  const scanningClass = exactReady ? '' : 'loading'
+    : analyticsFailed
+      ? 'exact scan temporarily unavailable'
+      : 'calculating visible transcript estimate…'
+  const scanningValue = analyticsFailed ? 'unavailable' : 'calculating…'
+  const scanningClass = exactReady || analyticsFailed ? '' : 'loading'
   const messagesValue = exactReady
     ? fmtNumber(summary.messages)
     : (summary.activeConversationMessages > 0 ? fmtNumber(summary.activeConversationMessages) : scanningValue)
-  const messagesNote = exactReady ? 'exact in range' : 'active workstreams · scanning range'
+  const messagesNote = exactReady
+    ? 'exact in range'
+    : analyticsFailed
+      ? 'from session index'
+      : 'active workstreams · scanning range'
   const transcriptValue = exactReady ? fmtCompact(summary.estimatedTranscriptTokens) : scanningValue
   const toolOutputsValue = exactReady ? fmtNumber(summary.toolOutputs) : scanningValue
   const visibleWorkValue = exactReady ? fmtCompact(summary.visibleTextChars) : scanningValue
@@ -2214,7 +2221,9 @@ function renderOverview() {
   const topRole = exactReady ? bucketsFromRecord(data.roles)?.[0] : null
   const emptyPill = exactReady
     ? (sessions.length > 0 ? 'no recent data' : 'no sessions')
-    : (sessions.length > 0 ? 'no recent data' : scanningValue)
+    : analyticsFailed
+      ? (sessions.length > 0 ? 'no recent data' : 'no sessions')
+      : (sessions.length > 0 ? 'no recent data' : scanningValue)
   const topProjectValue = topProject
     ? `${shortPath(topProject.key)} · ${fmtNumber(topProject.count)}`
     : useLatestPills

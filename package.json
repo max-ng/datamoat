@@ -1,6 +1,6 @@
 {
   "name": "datamoat",
-  "version": "0.1.15",
+  "version": "0.1.16",
   "description": "DataMoat backs up Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records into an encrypted local vault.",
   "license": "BUSL-1.1",
   "homepage": "https://datamoat.org",

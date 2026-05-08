@@ -1016,6 +1016,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   app.get('/api/meta', (_req, res) => {
     res.json({
       pid: process.pid,
+      version: appVersion(),
       route: isSetupDone() ? 'unlock' : 'setup',
       platform: process.platform,
       touchIdSupportedPlatform: IS_MAC,
