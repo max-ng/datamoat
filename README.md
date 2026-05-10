@@ -46,6 +46,9 @@ DataMoat keeps two layers:
 - **Protect continuity for individuals and teams.** Each protected machine can keep its own encrypted local archive for later review, handoff, and audit.
 - **Keep records encrypted and under local control.** Other software or services cannot read the vault directly; only approved unlock and recovery paths can decrypt it.
 
+![DataMoat first-run setup flow](.github/assets/datamoat-setup-flow.png)
+*First-run setup flow: choose a local unlock method, save recovery material, optionally add authenticator verification, and activate the encrypted vault.*
+
 ## Highlights
 
 - **Encrypted local vault** for transcripts, skills, attachments, and state using AES-256-GCM.
