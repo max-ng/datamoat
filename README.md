@@ -279,7 +279,9 @@ Enterprise deployment and management features are on the roadmap. More enterpris
 
 ## Consultation and Support
 
-Questions or deployment help: `maxnghello at gmail.com`.
+Questions or deployment help:
+
+<img src=".github/assets/contact-email.png" alt="Contact email" width="520">
 
 ## License
 
