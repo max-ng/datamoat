@@ -18,6 +18,9 @@ GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/data
 
 > **Capture everything you build with Claude, Codex, Cursor, and OpenClaw, and turn it into the most valuable private data asset of your life.**
 > DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
+>
+> **Your most valuable future AI data is already disappearing.**
+> Download DataMoat now to see how much Claude, Codex, Cursor, and OpenClaw work history you can still capture.
 
 **Core backup scope:** DataMoat backs up supported **skills + sessions + attachments** into the same encrypted local vault. Skills are saved as full folder snapshots, not just names.
 
