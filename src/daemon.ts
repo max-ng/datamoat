@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { ensureDirs } from './store'
 import { hasAuthenticatedUiSession, startUIServer } from './ui/server'
-import { loadAuthConfig } from './auth'
+import { isSetupDone, loadAuthConfig } from './auth'
 import { PID_FILE, STATE_DIR } from './config'
 import { installCrashHandlers, updateHealth, writeLog } from './logging'
 import { findDaemonPids, isDaemonRunning } from './runtime'
@@ -12,8 +12,20 @@ import { ALL_SOURCES } from './config'
 import { bootstrapCaptureSummary } from './bootstrap-capture'
 import { importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from './watcher'
 import { scanAndBackupSkills } from './skills-backup'
+import { runParserReparseIfNeeded } from './parser-reparse'
+import { isWindowsSystemContext } from './windows-context'
+
+function allowWindowsSystemContextForTest(): boolean {
+  return process.env.DATAMOAT_ALLOW_WINDOWS_SYSTEM_CONTEXT === '1'
+    || process.env.DATAMOAT_ELECTRON_SMOKE === '1'
+}
 
 async function main() {
+  if (isWindowsSystemContext() && !allowWindowsSystemContextForTest()) {
+    console.error('DataMoat daemon refused to start from the Windows SYSTEM/session-0 profile.')
+    process.exit(1)
+  }
+
   ensureDirs()
   installCrashHandlers('daemon')
 
@@ -57,6 +69,7 @@ async function main() {
   updateHealth('daemon', { running: true, pid: process.pid, port, url })
   writeLog('info', 'daemon', 'ui_ready', { port })
   const captureStarted = await startBackgroundCapture()
+  await startBootstrapCaptureBeforeSetup(captureStarted)
   await retryBootstrapImportAfterStartup(captureStarted)
   if (captureStarted) await scanAndBackupSkills('daemon_start')
   startAutoUpdateLoop(hasAuthenticatedUiSession)
@@ -88,6 +101,27 @@ function findOtherDaemonPid(): number | null {
   return other ?? null
 }
 
+async function startBootstrapCaptureBeforeSetup(captureStarted: boolean): Promise<void> {
+  if (captureStarted || isSetupDone()) return
+  const bootstrap = bootstrapCaptureSummary()
+  if (!bootstrap.enabled) return
+
+  writeLog('info', 'daemon', 'bootstrap_capture_watchers_start', bootstrap)
+  updateHealth('daemon', {
+    bootstrapCapture: true,
+    bootstrapCaptureRequestedBy: bootstrap.requestedBy,
+    bootstrapCaptureStartedAt: bootstrap.createdAt,
+    bootstrapWatcherRunning: true,
+  })
+  updateHealth('capture', {
+    configured: false,
+    running: false,
+    bootstrapCapture: true,
+  })
+  await startWatchers('bootstrap')
+  writeLog('info', 'daemon', 'bootstrap_capture_watchers_ready', bootstrap)
+}
+
 async function retryBootstrapImportAfterStartup(captureStarted: boolean): Promise<void> {
   if (!captureStarted) return
   const bootstrap = bootstrapCaptureSummary()
@@ -102,6 +136,7 @@ async function retryBootstrapImportAfterStartup(captureStarted: boolean): Promis
     bootstrapRemainingFiles: result.remainingFiles,
   })
   writeLog('info', 'daemon', 'bootstrap_retry_done', result)
+  await runParserReparseIfNeeded('bootstrap_retry')
   await startWatchers('vault')
   await scanAndBackupSkills('bootstrap_retry')
 }

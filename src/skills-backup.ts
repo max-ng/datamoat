@@ -21,7 +21,7 @@ type SkillScope = 'global' | 'project'
 
 type SkillRootCandidate = {
   scope: SkillScope
-  tool: 'claude' | 'codex' | 'agents' | 'clawhub'
+  tool: 'claude' | 'codex' | 'agents'
   root: string
   project?: string
 }
@@ -32,6 +32,11 @@ type SkillFileRecord = {
   size: number
   mtimeMs: number
   mode: number
+}
+
+type SkillRootSelection = {
+  roots: SkillRootCandidate[]
+  skippedProtectedProjects: Map<string, string>
 }
 
 export type SkillSnapshotManifest = {
@@ -130,6 +135,27 @@ function readableDir(dirPath: string): boolean {
   }
 }
 
+function isSameOrInsidePath(candidate: string, parent: string): boolean {
+  const resolvedCandidate = path.resolve(candidate)
+  const resolvedParent = path.resolve(parent)
+  return resolvedCandidate === resolvedParent || resolvedCandidate.startsWith(`${resolvedParent}${path.sep}`)
+}
+
+export function protectedMacUserContentPathKind(dirPath: string): string | null {
+  if (process.platform !== 'darwin') return null
+  const protectedRoots = [
+    ['downloads', path.join(USER_HOME, 'Downloads')],
+    ['desktop', path.join(USER_HOME, 'Desktop')],
+    ['documents', path.join(USER_HOME, 'Documents')],
+    ['icloud', path.join(USER_HOME, 'Library', 'Mobile Documents')],
+    ['cloud-storage', path.join(USER_HOME, 'Library', 'CloudStorage')],
+  ] as const
+  for (const [kind, root] of protectedRoots) {
+    if (isSameOrInsidePath(dirPath, root)) return kind
+  }
+  return null
+}
+
 function writeSessionId(): string | null {
   return getCaptureSessionId() ?? getVaultSessionId()
 }
@@ -147,7 +173,7 @@ function ancestorsForProject(cwd: string): string[] {
   return dirs
 }
 
-function candidateRoots(sessions: Session[]): SkillRootCandidate[] {
+function selectCandidateRoots(sessions: Session[]): SkillRootSelection {
   const roots: SkillRootCandidate[] = [
     { scope: 'global', tool: 'claude', root: path.join(USER_HOME, '.claude', 'skills') },
     { scope: 'global', tool: 'codex', root: path.join(USER_HOME, '.codex', 'skills') },
@@ -155,25 +181,37 @@ function candidateRoots(sessions: Session[]): SkillRootCandidate[] {
   ]
 
   const projectDirs = new Set<string>()
+  const skippedProtectedProjects = new Map<string, string>()
   for (const session of sessions) {
     if (!session.cwd || !path.isAbsolute(session.cwd)) continue
-    for (const dir of ancestorsForProject(session.cwd)) projectDirs.add(dir)
+    for (const dir of ancestorsForProject(session.cwd)) {
+      const protectedKind = protectedMacUserContentPathKind(dir)
+      if (protectedKind) {
+        skippedProtectedProjects.set(dir, protectedKind)
+        continue
+      }
+      projectDirs.add(dir)
+    }
   }
 
   for (const project of projectDirs) {
     roots.push({ scope: 'project', tool: 'claude', root: path.join(project, '.claude', 'skills'), project })
     roots.push({ scope: 'project', tool: 'codex', root: path.join(project, '.codex', 'skills'), project })
     roots.push({ scope: 'project', tool: 'agents', root: path.join(project, '.agents', 'skills'), project })
-    roots.push({ scope: 'project', tool: 'clawhub', root: path.join(project, 'clawhub'), project })
   }
 
   const seen = new Set<string>()
-  return roots.filter(root => {
+  const readableRoots = roots.filter(root => {
     const key = `${root.scope}\0${root.tool}\0${path.resolve(root.root)}`
     if (seen.has(key)) return false
     seen.add(key)
     return readableDir(root.root)
   })
+  return { roots: readableRoots, skippedProtectedProjects }
+}
+
+export function candidateRootsForSkillsBackup(sessions: Session[]): SkillRootCandidate[] {
+  return selectCandidateRoots(sessions).roots
 }
 
 function walkForSkillDirs(root: string): string[] {
@@ -426,7 +464,20 @@ async function scanAndBackupSkillsInner(reason: string): Promise<SkillScanIndex 
     ensurePrivateDir(SKILLS_MANIFESTS_DIR)
 
     const sessions = await loadSessions()
-    const roots = candidateRoots(sessions)
+    const selectedRoots = selectCandidateRoots(sessions)
+    const roots = selectedRoots.roots
+    if (selectedRoots.skippedProtectedProjects.size > 0) {
+      const kinds = Array.from(new Set(selectedRoots.skippedProtectedProjects.values())).sort()
+      updateHealth('skills-backup', {
+        skippedProtectedProjectRoots: selectedRoots.skippedProtectedProjects.size,
+        skippedProtectedProjectRootKinds: kinds,
+        skippedProtectedProjectRootsAt: new Date().toISOString(),
+      })
+      writeLog('info', 'skills-backup', 'protected_project_roots_skipped', {
+        count: selectedRoots.skippedProtectedProjects.size,
+        kinds,
+      })
+    }
     const manifests: SkillSnapshotManifest[] = []
     for (const root of roots) {
       for (const skillDir of walkForSkillDirs(root.root)) {

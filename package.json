@@ -1,6 +1,6 @@
 {
   "name": "datamoat",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "description": "DataMoat backs up Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records into an encrypted local vault.",
   "license": "BUSL-1.1",
   "homepage": "https://datamoat.org",
@@ -22,8 +22,16 @@
     "dev:electron": "npm run build && electron dist/electron/main.js",
     "daemon": "ts-node src/daemon.ts",
     "watch": "tsc --watch",
+    "smoke:install-context": "node scripts/install-context-smoke.js",
+    "smoke:codex-parser": "node scripts/codex-parser-smoke.js",
+    "smoke:parser-reparse": "node scripts/parser-reparse-smoke.js",
+    "smoke:skills-permissions": "node scripts/skills-backup-permission-smoke.js",
+    "smoke:referenced-attachments": "node scripts/referenced-attachments-smoke.js",
     "github:traffic": "node scripts/github-traffic-report.js",
-    "github:traffic:all": "node scripts/github-traffic-report.js"
+    "github:traffic:all": "node scripts/github-traffic-report.js",
+    "github:growth": "node scripts/github-release-growth-check.js",
+    "github:growth:chart": "node scripts/github-growth-chart.js",
+    "github:growth:image": "node scripts/github-growth-image.js"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

@@ -13,13 +13,30 @@ type PackagedLaunchAgentOptions = {
 
 const HOME = os.homedir()
 const LAUNCH_AGENT_ENV_KEY = 'DATAMOAT_MAC_LAUNCH_AGENT'
-const LAUNCH_AGENTS_DIR = path.join(HOME, 'Library', 'LaunchAgents')
+const SMOKE_ONLY_LAUNCH_AGENT_LABEL = process.env.DATAMOAT_ELECTRON_SMOKE === '1'
+  ? process.env.DATAMOAT_MAC_LAUNCH_AGENT_LABEL?.trim()
+  : ''
+const LAUNCH_AGENTS_DIR = process.env.DATAMOAT_ELECTRON_SMOKE === '1'
+  && process.env.DATAMOAT_MAC_LAUNCH_AGENTS_DIR?.trim()
+  ? path.resolve(process.env.DATAMOAT_MAC_LAUNCH_AGENTS_DIR.trim())
+  : path.join(HOME, 'Library', 'LaunchAgents')
+const PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE = SMOKE_ONLY_LAUNCH_AGENT_LABEL || PACKAGED_TRAY_LAUNCH_AGENT_LABEL
 const PACKAGED_TRAY_LAUNCH_AGENT_PATH = path.join(
   LAUNCH_AGENTS_DIR,
-  `${PACKAGED_TRAY_LAUNCH_AGENT_LABEL}.plist`,
+  `${PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE}.plist`,
 )
 const PACKAGED_TRAY_STDOUT_LOG = path.join(STATE_DIR, 'tray-launch-agent.out.log')
 const PACKAGED_TRAY_STDERR_LOG = path.join(STATE_DIR, 'tray-launch-agent.err.log')
+const PASSTHROUGH_ENV_KEYS = [
+  'DATAMOAT_HOME',
+  'DATAMOAT_CLAUDE_CLI_ROOTS',
+  'DATAMOAT_CODEX_CLI_ROOTS',
+  'DATAMOAT_CLAUDE_APP_ROOTS',
+  'DATAMOAT_CURSOR_ROOTS',
+  'DATAMOAT_OPENCLAW_ROOTS',
+  'DATAMOAT_DAEMON_START_TIMEOUT_MS',
+  'DATAMOAT_DEBUG_LOGS',
+]
 
 function xmlEscape(value: string): string {
   return value
@@ -39,7 +56,7 @@ function userDomain(): string {
 }
 
 function serviceTarget(): string {
-  return `${userDomain()}/${PACKAGED_TRAY_LAUNCH_AGENT_LABEL}`
+  return `${userDomain()}/${PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE}`
 }
 
 function launchAgentLoaded(): boolean {
@@ -67,32 +84,31 @@ function currentAppPathFromExecutable(executable: string): string | null {
   return executable.slice(0, index + 4)
 }
 
+function sourceRootFromReleaseAppPath(appPath: string | null): string | null {
+  if (!appPath) return null
+  const resolved = path.resolve(appPath)
+  const releaseDir = path.dirname(path.dirname(resolved))
+  if (path.basename(releaseDir) !== 'release') return null
+  const sourceRoot = path.dirname(releaseDir)
+  if (!fs.existsSync(path.join(sourceRoot, 'package.json'))) return null
+  if (!fs.existsSync(path.join(sourceRoot, 'src'))) return null
+  return sourceRoot
+}
+
 function launchAgentPlist(executable: string, options: PackagedLaunchAgentOptions = {}): string {
   const escapedExecutable = xmlEscape(executable)
   const escapedStdoutLog = xmlEscape(PACKAGED_TRAY_STDOUT_LOG)
   const escapedStderrLog = xmlEscape(PACKAGED_TRAY_STDERR_LOG)
-  const mode = options.remoteNoScreen ? 'remote-no-screen' : 'tray'
   const args = [
     `    <string>${escapedExecutable}</string>`,
     ...(options.remoteNoScreen ? ['    <string>--datamoat-remote-no-screen</string>'] : []),
   ].join('\n')
-  const environment = options.remoteNoScreen
-    ? `  <key>EnvironmentVariables</key>
-  <dict>
-    <key>${LAUNCH_AGENT_ENV_KEY}</key><string>remote-no-screen</string>
-  </dict>
-`
-    : `  <key>EnvironmentVariables</key>
-  <dict>
-    <key>${LAUNCH_AGENT_ENV_KEY}</key><string>tray</string>
-    <key>DATAMOAT_TRAY_ONLY</key><string>1</string>
-  </dict>
-`
+  const environment = launchAgentEnvironmentPlist(options)
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>${PACKAGED_TRAY_LAUNCH_AGENT_LABEL}</string>
+  <key>Label</key><string>${PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE}</string>
   <key>ProgramArguments</key>
   <array>
 ${args}
@@ -107,6 +123,24 @@ ${environment}  <key>StandardOutPath</key><string>${escapedStdoutLog}</string>
   <key>StandardErrorPath</key><string>${escapedStderrLog}</string>
 </dict>
 </plist>
+`
+}
+
+function launchAgentEnvironmentPlist(options: PackagedLaunchAgentOptions = {}): string {
+  const entries = new Map<string, string>()
+  entries.set(LAUNCH_AGENT_ENV_KEY, options.remoteNoScreen ? 'remote-no-screen' : 'tray')
+  if (!options.remoteNoScreen) entries.set('DATAMOAT_TRAY_ONLY', '1')
+  for (const key of PASSTHROUGH_ENV_KEYS) {
+    const value = process.env[key]
+    if (typeof value === 'string' && value.trim()) entries.set(key, value)
+  }
+  const body = [...entries]
+    .map(([key, value]) => `    <key>${xmlEscape(key)}</key><string>${xmlEscape(value)}</string>`)
+    .join('\n')
+  return `  <key>EnvironmentVariables</key>
+  <dict>
+${body}
+  </dict>
 `
 }
 
@@ -134,6 +168,25 @@ export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOption
   if (process.platform !== 'darwin') return
   const appPath = currentAppPathFromExecutable(executable)
   if (!appPath || !fs.existsSync(executable)) return
+  const sourceRoot = sourceRootFromReleaseAppPath(appPath)
+  if (sourceRoot) {
+    const removed = removePackagedTrayLaunchAgent()
+    updateHealth('electron', {
+      launchAtLogin: false,
+      launchAgentLabel: PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE,
+      launchAgentAppPath: appPath,
+      launchAgentSkippedAt: new Date().toISOString(),
+      launchAgentSkippedReason: 'source_release_app_not_packaged',
+      launchAgentRemoved: removed,
+    })
+    writeLog('warn', 'electron', 'packaged_tray_launch_agent_skipped_source_release_app', {
+      executable,
+      appPath,
+      sourceRoot,
+      removed,
+    })
+    return
+  }
 
   const plist = launchAgentPlist(executable, options)
   const previous = fs.existsSync(PACKAGED_TRAY_LAUNCH_AGENT_PATH)
@@ -158,7 +211,7 @@ export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOption
     }
     updateHealth('electron', {
       launchAtLogin: true,
-      launchAgentLabel: PACKAGED_TRAY_LAUNCH_AGENT_LABEL,
+      launchAgentLabel: PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE,
       launchAgentPath: PACKAGED_TRAY_LAUNCH_AGENT_PATH,
       launchAgentAppPath: appPath,
       launchAgentMode: launcherMode,
@@ -166,7 +219,7 @@ export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOption
       launchAgentUpdatedAt: changed ? new Date().toISOString() : undefined,
     })
     writeLog('info', 'electron', 'packaged_tray_launch_agent_ready', {
-      label: PACKAGED_TRAY_LAUNCH_AGENT_LABEL,
+      label: PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE,
       path: PACKAGED_TRAY_LAUNCH_AGENT_PATH,
       executable,
       launcherMode,
@@ -176,7 +229,7 @@ export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOption
   } catch (error) {
     updateHealth('electron', {
       launchAtLogin: false,
-      launchAgentLabel: PACKAGED_TRAY_LAUNCH_AGENT_LABEL,
+      launchAgentLabel: PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE,
       launchAgentPath: PACKAGED_TRAY_LAUNCH_AGENT_PATH,
       launchAgentErrorAt: new Date().toISOString(),
     })

@@ -82,11 +82,26 @@ function currentAppPathFromExecutable(executable: string): string | null {
   return executable.slice(0, index + 4)
 }
 
-function sourceInstallAppPaths(info: InstallInfo | null): string[] {
+function currentSourceRootFromAppPath(currentAppPath: string | null): string | null {
+  if (!currentAppPath) return null
+  const resolved = path.resolve(currentAppPath)
+  const releaseDir = path.dirname(path.dirname(resolved))
+  if (path.basename(releaseDir) !== 'release') return null
+  const sourceRoot = path.dirname(releaseDir)
+  if (!fs.existsSync(path.join(sourceRoot, 'package.json'))) return null
+  if (!fs.existsSync(path.join(sourceRoot, 'src'))) return null
+  return sourceRoot
+}
+
+function sourceInstallAppPaths(info: InstallInfo | null, currentAppPath?: string | null): string[] {
   const home = os.homedir()
   const candidates = new Set<string>([
     path.join(home, '.datamoat', 'app', 'release', `DataMoat-darwin-${process.arch}`, 'DataMoat.app'),
   ])
+  const currentSourceRoot = currentSourceRootFromAppPath(currentAppPath ?? null)
+  if (currentSourceRoot) {
+    candidates.add(path.join(currentSourceRoot, 'release', `DataMoat-darwin-${process.arch}`, 'DataMoat.app'))
+  }
   if (info?.sourceRoot) {
     candidates.add(path.join(info.sourceRoot, 'release', `DataMoat-darwin-${process.arch}`, 'DataMoat.app'))
   }
@@ -113,7 +128,10 @@ function normalizeMode(info: InstallInfo | null, root: string): InstallMode {
   const currentAppPath = currentAppPathFromExecutable(process.execPath)
   if (currentAppPath) {
     const resolvedCurrentAppPath = path.resolve(currentAppPath)
-    if (sourceInstallAppPaths(info).includes(resolvedCurrentAppPath)) return 'source-copy'
+    if (sourceInstallAppPaths(info, currentAppPath).includes(resolvedCurrentAppPath)) {
+      const inferredSourceRoot = currentSourceRootFromAppPath(currentAppPath)
+      return inferredSourceRoot && hasGitRepo(inferredSourceRoot) ? 'source-dev' : 'source-copy'
+    }
     if (packagedInstallAppPaths(info).includes(resolvedCurrentAppPath)) return 'packaged'
   }
   if (looksPackagedInstall(root)) return 'packaged'
@@ -130,7 +148,7 @@ export function detectInstallContext(): InstallContext {
   const info = loadInstallInfo()
   const root = installRoot()
   const mode = normalizeMode(info, root)
-  const sourceRoot = info?.sourceRoot ?? null
+  const sourceRoot = info?.sourceRoot ?? currentSourceRootFromAppPath(currentAppPathFromExecutable(process.execPath)) ?? null
   const nodeBin = info?.nodeBin ?? null
 
   if (mode === 'packaged') {

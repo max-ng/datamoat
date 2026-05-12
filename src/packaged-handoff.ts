@@ -1,4 +1,5 @@
 import * as child_process from 'child_process'
+import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
@@ -20,6 +21,8 @@ export type InstallChoice = {
   sourceRoot?: string | null
   sourceAppPath?: string | null
   packagedAppPath?: string | null
+  sourceAppFingerprint?: string | null
+  packagedAppFingerprint?: string | null
 }
 
 export type DualInstallState = {
@@ -30,6 +33,8 @@ export type DualInstallState = {
   sourceRoot: string | null
   packagedAppPath: string | null
   sourceAppPath: string | null
+  sourceAppFingerprint: string | null
+  packagedAppFingerprint: string | null
   hasBoth: boolean
   storedChoice: InstallChoice | null
 }
@@ -60,10 +65,62 @@ function currentAppPathFromExecutable(executable: string): string | null {
   return executable.slice(0, index + 4)
 }
 
-function sourceInstallAppPaths(info: InstallInfo | null): string[] {
-  const paths = new Set<string>([
-    path.join(HOME, '.datamoat', 'app', 'release', `DataMoat-darwin-${process.arch}`, 'DataMoat.app'),
-  ])
+function readJsonVersion(filePath: string): string | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { version?: unknown }
+    return typeof parsed.version === 'string' ? parsed.version : null
+  } catch {
+    return null
+  }
+}
+
+function fileIdentity(filePath: string): Record<string, unknown> | null {
+  try {
+    const stat = fs.statSync(filePath)
+    return {
+      path: filePath,
+      size: stat.size,
+      mtimeMs: Math.round(stat.mtimeMs),
+      ino: stat.ino || null,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function appInstallFingerprint(appPath: string | null): string | null {
+  if (!appPath) return null
+  const executablePath = path.join(appPath, 'Contents', 'MacOS', 'DataMoat')
+  if (!fs.existsSync(executablePath)) return null
+  const payload = {
+    appPath: path.resolve(appPath),
+    packageVersion: readJsonVersion(path.join(appPath, 'Contents', 'Resources', 'app', 'package.json')),
+    executable: fileIdentity(executablePath),
+    mainJs: fileIdentity(path.join(appPath, 'Contents', 'Resources', 'app', 'dist', 'electron', 'main.js')),
+    helper: fileIdentity(path.join(appPath, 'Contents', 'Helpers', 'DataMoatTouchID.app', 'Contents', 'MacOS', 'DataMoatTouchID')),
+    info: fileIdentity(path.join(appPath, 'Contents', 'Info.plist')),
+  }
+  return crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 24)
+}
+
+function sourceRootFromReleaseAppPath(appPath: string | null): string | null {
+  if (!appPath) return null
+  const resolved = path.resolve(appPath)
+  const releaseDir = path.dirname(path.dirname(resolved))
+  if (path.basename(releaseDir) !== 'release') return null
+  const sourceRoot = path.dirname(releaseDir)
+  if (!fs.existsSync(path.join(sourceRoot, 'package.json'))) return null
+  if (!fs.existsSync(path.join(sourceRoot, 'src'))) return null
+  return sourceRoot
+}
+
+function sourceInstallAppPaths(info: InstallInfo | null, currentAppPath?: string | null): string[] {
+  const paths = new Set<string>()
+  const currentSourceRoot = sourceRootFromReleaseAppPath(currentAppPath ?? null)
+  if (currentSourceRoot) {
+    paths.add(path.join(currentSourceRoot, 'release', `DataMoat-darwin-${process.arch}`, 'DataMoat.app'))
+  }
+  paths.add(path.join(HOME, '.datamoat', 'app', 'release', `DataMoat-darwin-${process.arch}`, 'DataMoat.app'))
   if (info?.sourceRoot) {
     paths.add(path.join(info.sourceRoot, 'release', `DataMoat-darwin-${process.arch}`, 'DataMoat.app'))
   }
@@ -75,7 +132,7 @@ function packagedAppPaths(info: InstallInfo | null, currentAppPath: string | nul
   if (info?.packagedAppPath) candidates.add(info.packagedAppPath)
   candidates.add(path.join('/Applications', 'DataMoat.app'))
   candidates.add(path.join(HOME, 'Applications', 'DataMoat.app'))
-  if (currentAppPath && !sourceInstallAppPaths(info).includes(currentAppPath)) {
+  if (currentAppPath && !sourceInstallAppPaths(info, currentAppPath).includes(currentAppPath)) {
     candidates.add(currentAppPath)
   }
   return [...candidates].filter(candidate => fs.existsSync(candidate))
@@ -138,9 +195,9 @@ function stopPids(pids: number[]): number[] {
 }
 
 function matchingLegacyPids(currentExecutable: string, info: InstallInfo | null): number[] {
-  const appPrefixes = sourceInstallAppPaths(info).map(appPath => path.join(appPath, 'Contents') + path.sep)
-  const daemonScripts = legacySourceDaemonScripts(info)
   const currentAppPath = currentAppPathFromExecutable(currentExecutable)
+  const appPrefixes = sourceInstallAppPaths(info, currentAppPath).map(appPath => path.join(appPath, 'Contents') + path.sep)
+  const daemonScripts = legacySourceDaemonScripts(info)
 
   return readPsEntries()
     .filter(entry => {
@@ -241,11 +298,14 @@ export function detectDualInstallState(options: HandoffOptions = {}): DualInstal
   const info = loadInstallInfo()
   const currentExecutable = options.currentExecutable ?? process.execPath
   const currentAppPath = currentAppPathFromExecutable(currentExecutable)
-  const sourceAppPath = sourceInstallAppPaths(info)[0] ?? null
+  const inferredSourceRoot = sourceRootFromReleaseAppPath(currentAppPath)
+  const sourceAppPath = sourceInstallAppPaths(info, currentAppPath)[0] ?? null
   const packagedAppPath = packagedAppPaths(info, currentAppPath)[0] ?? null
-  const sourceRoot = info?.sourceRoot ?? null
+  const sourceAppFingerprint = appInstallFingerprint(sourceAppPath)
+  const packagedAppFingerprint = appInstallFingerprint(packagedAppPath)
+  const sourceRoot = info?.sourceRoot ?? inferredSourceRoot ?? null
   const currentVariant: InstallVariant = currentAppPath
-    ? sourceInstallAppPaths(info).includes(currentAppPath)
+    ? sourceInstallAppPaths(info, currentAppPath).includes(currentAppPath)
       ? 'source'
       : 'packaged'
     : 'unknown'
@@ -258,23 +318,49 @@ export function detectDualInstallState(options: HandoffOptions = {}): DualInstal
     sourceRoot,
     packagedAppPath,
     sourceAppPath,
+    sourceAppFingerprint,
+    packagedAppFingerprint,
     hasBoth: !!sourceAppPath && !!packagedAppPath && sourceAppPath !== packagedAppPath,
     storedChoice: loadInstallChoice(),
   }
+}
+
+export function installChoiceMatchesState(choice: InstallChoice | null, state: DualInstallState): boolean {
+  if (!choice) return false
+  if (choice.sourceRoot !== state.sourceRoot) return false
+  if ((choice.sourceAppPath ?? null) !== state.sourceAppPath) return false
+  if ((choice.packagedAppPath ?? null) !== state.packagedAppPath) return false
+
+  // If the user is already launching the same install type they chose, do not
+  // re-prompt just because that app was updated in place. The prompt exists to
+  // prevent an old preference from pulling a newly launched app across to the
+  // other install type.
+  if (choice.preferred === state.currentVariant) return true
+
+  if (choice.preferred === 'packaged') {
+    return (choice.packagedAppFingerprint ?? null) === state.packagedAppFingerprint
+  }
+  if (choice.preferred === 'source') {
+    return (choice.sourceAppFingerprint ?? null) === state.sourceAppFingerprint
+  }
+  return false
 }
 
 export function applyInstallPreference(preference: InstallPreference, options: HandoffOptions = {}): InstallPreferenceApplyResult {
   const state = detectDualInstallState(options)
   const info = loadInstallInfo()
   const currentExecutable = state.currentExecutable
-  const markers = sourceMarkers(info)
+  const effectiveInfo = state.sourceRoot ? { ...(info ?? {}), sourceRoot: state.sourceRoot } : info
+  const markers = sourceMarkers(effectiveInfo)
   const daemonPlist = path.join(MAC_LAUNCH_AGENTS_DIR, 'com.datamoat.daemon.plist')
   const trayPlist = path.join(MAC_LAUNCH_AGENTS_DIR, 'com.datamoat.tray.plist')
 
   saveInstallChoice(preference, {
-    sourceRoot: info?.sourceRoot ?? null,
+    sourceRoot: state.sourceRoot,
     sourceAppPath: state.sourceAppPath,
     packagedAppPath: state.packagedAppPath,
+    sourceAppFingerprint: state.sourceAppFingerprint,
+    packagedAppFingerprint: state.packagedAppFingerprint,
   })
 
   if (preference === 'packaged') {
@@ -309,10 +395,13 @@ export function applyInstallPreference(preference: InstallPreference, options: H
   const removedPackagedTrayAgent = removePackagedTrayLaunchAgent()
   const stoppedPids = stopPids(matchingPackagedPids(currentExecutable, info))
 
-  const nextMode: InstallMode = info?.sourceRoot ? 'source-copy' : 'unknown'
+  const nextMode: InstallMode = state.sourceRoot
+    ? fs.existsSync(path.join(state.sourceRoot, '.git')) ? 'source-dev' : 'source-copy'
+    : 'unknown'
   const updatedInstallInfo = writeInstallInfo(info, {
     previousMode: info?.mode ?? 'unknown',
     mode: nextMode,
+    sourceRoot: state.sourceRoot ?? undefined,
   })
 
   return {

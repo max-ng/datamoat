@@ -21,8 +21,9 @@ import {
   wrapSecretForSession,
 } from './vault-helper'
 import { startWatchers } from './watcher'
+import { runParserReparseIfNeeded } from './parser-reparse'
 import { updateHealth, writeAuditEvent, writeLog } from './logging'
-import { ensureWindowsAutostart } from './windows-autostart'
+import { ensureWindowsAutostart, isWindowsSystemContext, resolveWindowsStartupTarget } from './windows-autostart'
 
 const BACKGROUND_CAPTURE_SECRET_PREFIX = 'backgroundCaptureSecret'
 
@@ -40,12 +41,32 @@ function normalizedRequester(value: string | undefined): string | null {
 }
 
 function backgroundCaptureRequesterMigrationNeeded(config: AuthConfig): boolean {
+  // macOS Keychain access can depend on the signed requester. Windows DPAPI and
+  // Linux fallback secrets are user/root scoped, so a normal app-folder upgrade
+  // must not stop background capture just because process.execPath changed.
+  if (process.platform !== 'darwin') return false
+
   const current = normalizedRequester(currentKeychainRequester())
   if (!current) return false
 
   const stored = normalizedRequester(config.backgroundKeychainRequester)
   if (!stored) return process.platform === 'darwin'
   return stored !== current
+}
+
+function windowsBackgroundCaptureNeedsInteractiveUser(): { targetUser: string | null; targetSource: string } | null {
+  if (process.platform !== 'win32' || !isWindowsSystemContext()) return null
+
+  try {
+    const target = resolveWindowsStartupTarget()
+    if (target.source === 'interactive-user') {
+      return { targetUser: target.userName, targetSource: target.source }
+    }
+  } catch {
+    return { targetUser: null, targetSource: 'unresolved' }
+  }
+
+  return null
 }
 
 async function createBackgroundCaptureConfig(
@@ -56,6 +77,32 @@ async function createBackgroundCaptureConfig(
     reconfigured?: boolean
   } = {},
 ): Promise<boolean> {
+  const windowsUserMismatch = windowsBackgroundCaptureNeedsInteractiveUser()
+  if (windowsUserMismatch) {
+    const message = 'Windows background capture must be configured from the interactive Windows user session'
+    updateHealth('capture', {
+      configured: false,
+      running: false,
+      lastSkippedAt: new Date().toISOString(),
+      lastSkippedReason: 'windows_interactive_user_required',
+      lastErrorAt: new Date().toISOString(),
+      lastError: message,
+      targetUser: windowsUserMismatch.targetUser,
+      targetSource: windowsUserMismatch.targetSource,
+    })
+    writeLog('warn', 'capture', 'background_capture_windows_interactive_user_required', {
+      targetUser: windowsUserMismatch.targetUser,
+      targetSource: windowsUserMismatch.targetSource,
+      reason: options.reason ?? null,
+    })
+    writeAuditEvent('capture', 'background_capture_windows_interactive_user_required', {
+      targetUser: windowsUserMismatch.targetUser,
+      targetSource: windowsUserMismatch.targetSource,
+      reason: options.reason ?? null,
+    })
+    return false
+  }
+
   const account = `${BACKGROUND_CAPTURE_SECRET_PREFIX}:${crypto.randomUUID()}`
   const secret = crypto.randomBytes(32).toString('hex')
   await backgroundCaptureSecretStore(secret, account)
@@ -217,17 +264,26 @@ export async function startBackgroundCapture(): Promise<boolean> {
     configured: true,
     running: true,
     startingAt: new Date().toISOString(),
+    lastSkippedAt: null,
+    lastSkippedReason: null,
+    lastErrorAt: null,
+    lastError: null,
   })
   updateHealth('daemon', {
     captureRunning: true,
     captureStartingAt: new Date().toISOString(),
   })
   writeAuditEvent('capture', 'background_capture_starting')
+  await runParserReparseIfNeeded('background_capture_start')
   await startWatchers('vault')
   updateHealth('capture', {
     configured: true,
     running: true,
     startedAt: new Date().toISOString(),
+    lastSkippedAt: null,
+    lastSkippedReason: null,
+    lastErrorAt: null,
+    lastError: null,
   })
   updateHealth('daemon', {
     captureRunning: true,

@@ -12,6 +12,12 @@ export interface ContentBlock {
   attachmentIds?: string[] // sha256 hashes — for images nested inside tool_result content
   mediaType?: string       // e.g. 'image/png', 'application/pdf'
   attachmentName?: string  // original filename if available
+  referencedAttachments?: Array<{
+    originalPath: string
+    attachmentId: string
+    mediaType: string
+    attachmentName?: string
+  }>
 }
 
 export interface TokenUsage {

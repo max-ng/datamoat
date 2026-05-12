@@ -18,6 +18,12 @@ const pending = new Map<number, PendingRequest>()
 let stderrTail = ''
 const MAX_HELPER_LINE_PAYLOAD_BYTES = 128 * 1024
 const CHUNKED_LINE_PREFIX = 'dmchunk1:'
+const HELPER_READY_TIMEOUT_MS = positiveTimeoutMs(process.env.DATAMOAT_VAULT_HELPER_READY_TIMEOUT_MS, 30_000)
+
+function positiveTimeoutMs(value: string | undefined, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
 
 function ensureHelper(): ChildProcessWithoutNullStreams {
   if (helper && !helper.killed && helper.exitCode === null) return helper
@@ -85,8 +91,9 @@ async function waitForReady(proc: ChildProcessWithoutNullStreams): Promise<void>
   if (helperReady) return
   await new Promise<void>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject(new Error(stderrTail.trim() || 'vault helper did not become ready'))
-    }, 5000)
+      const details = stderrTail.trim()
+      reject(new Error(details || `vault helper did not become ready within ${HELPER_READY_TIMEOUT_MS}ms`))
+    }, HELPER_READY_TIMEOUT_MS)
     const tick = () => {
       if (proc.exitCode !== null || proc.killed) {
         clearTimeout(timeout)

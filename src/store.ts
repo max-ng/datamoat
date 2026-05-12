@@ -398,6 +398,18 @@ export async function appendMessages(session: Session, messages: Message[]): Pro
   }
 }
 
+export async function replaceSessionMessages(session: Session, messages: Message[]): Promise<void> {
+  const filePath = path.join(VAULT_DIR, session.vaultPath)
+  const dir = path.dirname(filePath)
+  ensurePrivateDir(dir)
+
+  const serialized = messages.map(message => JSON.stringify(message))
+  const encrypted = serialized.length > 0
+    ? await encryptLinesForSession(requireWriteSession(), serialized)
+    : []
+  writePrivateText(filePath, encrypted.length > 0 ? `${encrypted.join('\n')}\n` : '')
+}
+
 export function makeRawPath(source: Source, sessionUid: string): string {
   return path.join(source, `${sessionUid}.jsonl`)
 }

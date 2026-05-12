@@ -22,6 +22,7 @@ import { extractCursorLine, sessionIdFromPath as cursorSessionIdFromPath } from 
 import { detectInstallContext } from './install-context'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from './logging'
 import { buildSessionUid, sourceAccountFromPath } from './session-identity'
+import { queueReferencedAttachmentBackupForRawRecords } from './referenced-attachments'
 
 function log(event: string, fields: Record<string, unknown> = {}): void {
   writeLog('info', 'watcher', event, fields)
@@ -91,7 +92,75 @@ function fallbackRawSessionId(source: Source, filePath: string): string {
 const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
   'claude-cli': new Set(['user', 'assistant', 'system', 'summary']),
   'claude-app': new Set(['user', 'assistant', 'system', 'summary']),
-  'codex-cli': new Set(['session_meta', 'turn_context', 'response_item']),
+  'codex-cli': new Set([
+    'session_meta',
+    'turn_context',
+    'compacted',
+    'response_item.message',
+    'response_item.reasoning',
+    'response_item.function_call',
+    'response_item.function_call_output',
+    'response_item.custom_tool_call',
+    'response_item.custom_tool_call_output',
+    'response_item.web_search_call',
+    'response_item.tool_search_call',
+    'response_item.tool_search_output',
+    'response_item.image_generation_call',
+    'response_item.compaction',
+    'response_item.context_compaction',
+    'event_msg.task_started',
+    'event_msg.task_complete',
+    'event_msg.user_message',
+    'event_msg.agent_message',
+    'event_msg.agent_reasoning',
+    'event_msg.agent_reasoning_raw_content',
+    'event_msg.agent_reasoning_section_break',
+    'event_msg.token_count',
+    'event_msg.exec_command_begin',
+    'event_msg.exec_command_output_delta',
+    'event_msg.exec_command_end',
+    'event_msg.terminal_interaction',
+    'event_msg.mcp_startup_update',
+    'event_msg.mcp_startup_complete',
+    'event_msg.mcp_tool_call_begin',
+    'event_msg.mcp_tool_call_end',
+    'event_msg.web_search_begin',
+    'event_msg.web_search_end',
+    'event_msg.image_generation_begin',
+    'event_msg.image_generation_end',
+    'event_msg.patch_apply_begin',
+    'event_msg.patch_apply_updated',
+    'event_msg.patch_apply_end',
+    'event_msg.thread_name_updated',
+    'event_msg.thread_rolled_back',
+    'event_msg.context_compacted',
+    'event_msg.turn_aborted',
+    'event_msg.view_image_tool_call',
+    'event_msg.dynamic_tool_call_request',
+    'event_msg.dynamic_tool_call_response',
+    'event_msg.request_user_input',
+    'event_msg.elicitation_request',
+    'event_msg.skills_update_available',
+    'event_msg.plan_update',
+    'event_msg.plan_delta',
+    'event_msg.item_started',
+    'event_msg.item_completed',
+    'event_msg.hook_started',
+    'event_msg.hook_completed',
+    'event_msg.collab_agent_spawn_begin',
+    'event_msg.collab_agent_spawn_end',
+    'event_msg.collab_agent_interaction_begin',
+    'event_msg.collab_agent_interaction_end',
+    'event_msg.collab_waiting_begin',
+    'event_msg.collab_waiting_end',
+    'event_msg.collab_close_begin',
+    'event_msg.collab_close_end',
+    'event_msg.collab_resume_begin',
+    'event_msg.collab_resume_end',
+    'event_msg.error',
+    'event_msg.stream_error',
+    'event_msg.deprecation_notice',
+  ]),
   'openclaw': new Set(['session', 'message', 'custom', 'thinking_level_change']),
   'cursor': new Set(['message', 'user', 'assistant', 'system', 'tool']),
 }
@@ -120,11 +189,30 @@ export type BootstrapImportProgress = {
   done: boolean
 }
 
+export type WatcherStartupProgress = {
+  running: boolean
+  mode: WatcherMode
+  phase: 'idle' | 'discovering' | 'processing' | 'complete'
+  ready: boolean
+  watcherCount: number
+  queuedFiles: number
+  processedFiles: number
+  queuedSessions: number
+  processedSessions: number
+  queuedBytes: number
+  processedBytes: number
+  currentSource: Source | null
+  currentFile: string | null
+  currentSession: string | null
+  startedAt: string | null
+  updatedAt: string | null
+}
+
 function observeDrift(source: Source, obj: unknown, buckets: DriftBuckets): void {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return
   const o = obj as Record<string, unknown>
 
-  const type = typeof o.type === 'string' ? o.type : null
+  const type = normalizedEventType(source, o)
   if (type && !KNOWN_EVENT_TYPES[source].has(type)) {
     buckets.unknownEventTypes[type] = (buckets.unknownEventTypes[type] || 0) + 1
   }
@@ -134,6 +222,17 @@ function observeDrift(source: Source, obj: unknown, buckets: DriftBuckets): void
       buckets.unknownTopLevelKeys[key] = (buckets.unknownTopLevelKeys[key] || 0) + 1
     }
   }
+}
+
+function normalizedEventType(source: Source, obj: Record<string, unknown>): string | null {
+  const type = typeof obj.type === 'string' ? obj.type : null
+  if (!type) return null
+  if (source !== 'codex-cli') return type
+  if (type !== 'response_item' && type !== 'event_msg') return type
+  const payload = obj.payload
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return type
+  const subType = (payload as Record<string, unknown>).type
+  return typeof subType === 'string' && subType ? `${type}.${subType}` : type
 }
 
 function mergeDriftInto(existing: Record<string, number> | undefined, patch: Record<string, number>): Record<string, number> {
@@ -190,6 +289,26 @@ let offsetsPromise: Promise<OffsetState> | null = null
 let processQueue = Promise.resolve()
 type WatcherMode = 'vault' | 'bootstrap'
 let watcherMode: WatcherMode = 'vault'
+let watcherStartupProgress: WatcherStartupProgress = {
+  running: false,
+  mode: 'vault',
+  phase: 'idle',
+  ready: false,
+  watcherCount: 0,
+  queuedFiles: 0,
+  processedFiles: 0,
+  queuedSessions: 0,
+  processedSessions: 0,
+  queuedBytes: 0,
+  processedBytes: 0,
+  currentSource: null,
+  currentFile: null,
+  currentSession: null,
+  startedAt: null,
+  updatedAt: null,
+}
+const watcherStartupQueuedFiles = new Map<string, { size: number; processed: boolean; sessionKey: string }>()
+const watcherStartupQueuedSessions = new Map<string, { label: string; queuedFiles: number; processedFiles: number; processed: boolean }>()
 
 const WATCHER_READY_TIMEOUT_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_READY_TIMEOUT_MS, 10_000)
 const WATCHER_INITIAL_QUEUE_TIMEOUT_MS = nonNegativeTimeoutMs(process.env.DATAMOAT_WATCHER_INITIAL_QUEUE_TIMEOUT_MS, 0)
@@ -233,6 +352,180 @@ function watcherUsePollingDefault(): boolean {
   } catch {
     return false
   }
+}
+
+function updateWatcherStartupProgress(progress: Partial<WatcherStartupProgress>): void {
+  watcherStartupProgress = {
+    ...watcherStartupProgress,
+    ...progress,
+    updatedAt: new Date().toISOString(),
+  }
+}
+
+export function getWatcherStartupProgress(): WatcherStartupProgress {
+  return { ...watcherStartupProgress }
+}
+
+function watcherStartupKey(filePath: string, source: Source): string {
+  return `${source}:${filePath}`
+}
+
+function watcherStartupSessionLabel(source: Source, filePath: string): string {
+  if (source === 'codex-cli') return codexSessionIdFromPath(filePath) || path.basename(filePath, path.extname(filePath))
+  if (source === 'cursor') return cursorSessionIdFromPath(filePath) || path.basename(filePath, path.extname(filePath))
+  if (source === 'claude-app') return path.basename(path.dirname(filePath)) || path.basename(filePath, path.extname(filePath))
+  return path.basename(filePath, path.extname(filePath))
+}
+
+function watcherStartupSessionKey(filePath: string, source: Source): string {
+  return `${source}:${watcherStartupSessionLabel(source, filePath)}`
+}
+
+function markWatcherStartupQueued(filePath: string, source: Source, mode: WatcherMode): { counted: boolean; key: string | null; size: number } {
+  if (!watcherStartupProgress.running || watcherStartupProgress.mode !== mode) return { counted: false, key: null, size: 0 }
+  const key = `${source}:${filePath}`
+  const existing = watcherStartupQueuedFiles.get(key)
+  if (existing) return { counted: !existing.processed, key, size: existing.size }
+  const sessionKey = watcherStartupSessionKey(filePath, source)
+  const sessionLabel = watcherStartupSessionLabel(source, filePath)
+  const existingSession = watcherStartupQueuedSessions.get(sessionKey)
+  if (existingSession) {
+    existingSession.queuedFiles += 1
+    if (existingSession.processed) existingSession.processed = false
+  } else {
+    watcherStartupQueuedSessions.set(sessionKey, {
+      label: sessionLabel,
+      queuedFiles: 1,
+      processedFiles: 0,
+      processed: false,
+    })
+  }
+  let size = 0
+  try {
+    size = fs.statSync(filePath).size
+  } catch {
+    size = 0
+  }
+  watcherStartupQueuedFiles.set(key, { size, processed: false, sessionKey })
+  updateWatcherStartupProgress({
+    phase: watcherStartupProgress.ready ? 'processing' : 'discovering',
+    queuedFiles: watcherStartupProgress.queuedFiles + 1,
+    queuedSessions: watcherStartupQueuedSessions.size,
+    queuedBytes: watcherStartupProgress.queuedBytes + size,
+    currentSource: source,
+    currentFile: path.basename(filePath),
+    currentSession: sessionLabel,
+  })
+  return { counted: true, key, size }
+}
+
+function markWatcherStartupProcessed(filePath: string, source: Source, mode: WatcherMode, counted: boolean, key: string | null, size: number): void {
+  if (!counted || !watcherStartupProgress.running || watcherStartupProgress.mode !== mode) return
+  const progressKey = key || watcherStartupKey(filePath, source)
+  const existing = watcherStartupQueuedFiles.get(progressKey)
+  if (existing?.processed) return
+  if (existing) existing.processed = true
+  const sessionKey = existing?.sessionKey || watcherStartupSessionKey(filePath, source)
+  const session = watcherStartupQueuedSessions.get(sessionKey)
+  let processedSessions = watcherStartupProgress.processedSessions
+  if (session) {
+    session.processedFiles += 1
+    if (!session.processed && session.processedFiles >= session.queuedFiles) {
+      session.processed = true
+      processedSessions += 1
+    }
+  }
+  const nextProcessed = watcherStartupProgress.processedFiles + 1
+  const complete = watcherStartupProgress.ready && nextProcessed >= watcherStartupProgress.queuedFiles
+  updateWatcherStartupProgress({
+    phase: complete ? 'complete' : 'processing',
+    running: !complete,
+    processedFiles: nextProcessed,
+    processedSessions,
+    processedBytes: watcherStartupProgress.processedBytes + size,
+    currentSource: source,
+    currentFile: path.basename(filePath),
+    currentSession: session?.label || watcherStartupSessionLabel(source, filePath),
+  })
+}
+
+function watchPatternMatches(source: Source, filePath: string): boolean {
+  const normalized = filePath.replace(/\\/g, '/')
+  if (source === 'claude-app') return path.basename(filePath) === 'audit.jsonl'
+  if (source === 'cursor') return normalized.includes('/agent-transcripts/') && normalized.endsWith('.jsonl')
+  return normalized.endsWith('.jsonl')
+}
+
+function countExistingWatchFilesForSource(source: Source, root: string): void {
+  const stack = [root]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current) continue
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(fullPath)
+        continue
+      }
+      if (!entry.isFile() || !watchPatternMatches(source, fullPath)) continue
+      markWatcherStartupQueued(fullPath, source, watcherStartupProgress.mode)
+    }
+  }
+}
+
+function countExistingWatchFiles(watchPaths: Record<Source, string[]>): void {
+  for (const [source, basePaths] of Object.entries(watchPaths)) {
+    const src = source as Source
+    for (const basePath of basePaths) {
+      if (!fs.existsSync(basePath)) continue
+      countExistingWatchFilesForSource(src, basePath)
+    }
+  }
+}
+
+export function countExistingWatchSessions(): { totalSessions: number; bySource: Record<Source, number> } {
+  const watchPaths = resolveWatchPaths()
+  const sessions = new Set<string>()
+  const bySource = Object.fromEntries(ALL_SOURCES.map(source => [source, 0])) as Record<Source, number>
+
+  for (const [source, basePaths] of Object.entries(watchPaths)) {
+    const src = source as Source
+    const sourceSessions = new Set<string>()
+    for (const basePath of basePaths) {
+      if (!fs.existsSync(basePath)) continue
+      const stack = [basePath]
+      while (stack.length > 0) {
+        const current = stack.pop()
+        if (!current) continue
+        let entries: fs.Dirent[]
+        try {
+          entries = fs.readdirSync(current, { withFileTypes: true })
+        } catch {
+          continue
+        }
+        for (const entry of entries) {
+          const fullPath = path.join(current, entry.name)
+          if (entry.isDirectory()) {
+            stack.push(fullPath)
+            continue
+          }
+          if (!entry.isFile() || !watchPatternMatches(src, fullPath)) continue
+          const key = watcherStartupSessionKey(fullPath, src)
+          sessions.add(key)
+          sourceSessions.add(key)
+        }
+      }
+    }
+    bySource[src] = sourceSessions.size
+  }
+
+  return { totalSessions: sessions.size, bySource }
 }
 
 async function yieldToEventLoop(): Promise<void> {
@@ -482,9 +775,29 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
   if (watchersStarted && watcherMode !== mode) await stopWatchers()
   watcherMode = mode
   watchersStarted = true
+  watcherStartupQueuedFiles.clear()
+  watcherStartupQueuedSessions.clear()
+  updateWatcherStartupProgress({
+    running: true,
+    mode,
+    phase: 'discovering',
+    ready: false,
+    watcherCount: 0,
+    queuedFiles: 0,
+    processedFiles: 0,
+    queuedSessions: 0,
+    processedSessions: 0,
+    queuedBytes: 0,
+    processedBytes: 0,
+    currentSource: null,
+    currentFile: null,
+    currentSession: null,
+    startedAt: new Date().toISOString(),
+  })
   const offsets = await loadWatcherOffsets(mode)
   offsetsPromise = Promise.resolve(offsets)
   const watchPaths = resolveWatchPaths()
+  countExistingWatchFiles(watchPaths)
   const readyPromises: Promise<void>[] = []
 
   for (const [source, basePaths] of Object.entries(watchPaths)) {
@@ -517,6 +830,7 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
       const watcher = chokidar.watch(watchPath, {
         persistent: true,
         ignoreInitial: false,   // process existing files on startup
+        followSymlinks: false,
         usePolling: WATCHER_USE_POLLING,
         interval: WATCHER_POLL_INTERVAL_MS,
         binaryInterval: WATCHER_BINARY_POLL_INTERVAL_MS,
@@ -524,6 +838,7 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
         awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
       })
       activeWatchers.push(watcher)
+      updateWatcherStartupProgress({ watcherCount: activeWatchers.length })
 
       readyPromises.push(new Promise<void>(resolve => {
         watcher.once('ready', () => resolve())
@@ -545,12 +860,31 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
     WATCHER_READY_TIMEOUT_MS,
     { mode, watcherCount: activeWatchers.length },
   )
+  updateWatcherStartupProgress({
+    phase: watcherStartupProgress.processedSessions >= watcherStartupProgress.queuedSessions ? 'complete' : 'processing',
+    ready: true,
+    running: watcherStartupProgress.processedSessions < watcherStartupProgress.queuedSessions,
+    watcherCount: activeWatchers.length,
+  })
   const queueStatus = await waitForStartupPhase(
     'initial_queue',
     processQueue,
     WATCHER_INITIAL_QUEUE_TIMEOUT_MS,
     { mode, watcherCount: activeWatchers.length },
   )
+  if (queueStatus === 'completed') {
+    updateWatcherStartupProgress({
+      running: false,
+      phase: 'complete',
+      ready: true,
+      processedFiles: watcherStartupProgress.queuedFiles,
+      processedSessions: watcherStartupProgress.queuedSessions,
+      processedBytes: Math.max(watcherStartupProgress.processedBytes, watcherStartupProgress.queuedBytes),
+      currentFile: null,
+      currentSource: null,
+      currentSession: null,
+    })
+  }
   log('initial_scan_complete', { mode, watcherCount: activeWatchers.length, readyStatus, queueStatus })
 }
 
@@ -565,6 +899,24 @@ export async function stopWatchers(): Promise<void> {
   watcherMode = 'vault'
   fileStates.clear()
   offsetsPromise = null
+  watcherStartupQueuedFiles.clear()
+  watcherStartupQueuedSessions.clear()
+  updateWatcherStartupProgress({
+    running: false,
+    phase: 'idle',
+    ready: false,
+    watcherCount: 0,
+    queuedFiles: 0,
+    processedFiles: 0,
+    queuedSessions: 0,
+    processedSessions: 0,
+    queuedBytes: 0,
+    processedBytes: 0,
+    currentFile: null,
+    currentSource: null,
+    currentSession: null,
+    startedAt: null,
+  })
   log('stopped')
   for (const source of ALL_SOURCES) {
     updateHealth(`watcher:${source}`, { watching: false, stoppedAt: new Date().toISOString() })
@@ -574,6 +926,7 @@ export async function stopWatchers(): Promise<void> {
 function queueProcessFile(filePath: string, source: Source, event: 'add' | 'change'): void {
   const modeAtEnqueue = watcherMode
   const offsetsAtEnqueue = offsetsPromise
+  const startupCount = markWatcherStartupQueued(filePath, source, modeAtEnqueue)
   updateHealth(`watcher:${source}`, {
     lastEventAt: new Date().toISOString(),
     lastEvent: event,
@@ -585,6 +938,7 @@ function queueProcessFile(filePath: string, source: Source, event: 'add' | 'chan
       await yieldToEventLoop()
       const offsets = offsetsAtEnqueue ? await offsetsAtEnqueue : await loadWatcherOffsets(modeAtEnqueue)
       await processFile(filePath, source, offsets, modeAtEnqueue)
+      markWatcherStartupProcessed(filePath, source, modeAtEnqueue, startupCount.counted, startupCount.key, startupCount.size)
       await yieldToEventLoop()
     })
     .catch(err => {
@@ -844,6 +1198,7 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
       lastMod: stat.mtimeMs,
     }
     await saveOffsets(offsets)
+    queueReferencedAttachmentBackupForRawRecords(source, rawSessionUid, rawRecords)
     fileStates.set(filePath, state)
     await continueFileIfPending(filePath, source, offsets, mode, batch.endOffset, fileSize)
   } catch (err) {

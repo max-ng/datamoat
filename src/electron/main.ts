@@ -5,12 +5,12 @@ import * as path from 'path'
 import { ensureDaemonRunning, findDaemonPids, stopDaemonPids } from '../runtime'
 import { HEALTH_FILE, PUBLIC_STATUS_FILE } from '../config'
 import { isSetupDone } from '../auth'
-import { disableBootstrapCapture, enableBootstrapCapture, preflightBootstrapCapture } from '../bootstrap-capture'
+import { disableBootstrapCapture, enableBootstrapCapture, preflightBootstrapCaptureDetailed } from '../bootstrap-capture'
 import { detectInstallContext } from '../install-context'
 import { installCrashHandlers, updateHealth, writeLog } from '../logging'
-import { applyInstallPreference, clearInstallChoice, detectDualInstallState, saveInstallChoice, type DualInstallState, type InstallPreference } from '../packaged-handoff'
+import { applyInstallPreference, clearInstallChoice, detectDualInstallState, installChoiceMatchesState, saveInstallChoice, type DualInstallState, type InstallPreference } from '../packaged-handoff'
 import { ensureLinuxAutostart, ensureLinuxRemoteNoScreenAutostart } from '../linux-autostart'
-import { ensureWindowsPackagedAutostart, ensureWindowsRemoteNoScreenAutostart } from '../windows-autostart'
+import { ensureWindowsPackagedAutostart, ensureWindowsRemoteNoScreenAutostart, isWindowsSystemContext } from '../windows-autostart'
 import { ensureDirs } from '../store'
 import {
   applyPackagedUpdate,
@@ -72,6 +72,22 @@ if (
     console.error(error instanceof Error ? error.message : String(error))
     app.exit(1)
   }
+}
+
+function allowWindowsSystemContextForTest(): boolean {
+  return process.env.DATAMOAT_ALLOW_WINDOWS_SYSTEM_CONTEXT === '1'
+    || process.env.DATAMOAT_ELECTRON_SMOKE === '1'
+}
+
+function rejectWindowsSystemLaunchIfNeeded(): boolean {
+  if (process.platform !== 'win32') return false
+  if (!isWindowsSystemContext()) return false
+  if (allowWindowsSystemContextForTest()) return false
+
+  console.error('DataMoat refused to start from the Windows SYSTEM/session-0 profile.')
+  console.error('Start DataMoat from the real Windows desktop user so it can use that user vault, folders, and OS secrets.')
+  app.exit(1)
+  return true
 }
 
 // On login-item / LaunchAgent startup we want a true menu-bar-only app from the
@@ -260,7 +276,8 @@ async function enableRemoteNoScreenCapture(reason: string): Promise<boolean> {
   }
 
   const state = enableBootstrapCapture('remote-no-screen')
-  if (await preflightBootstrapCapture()) {
+  const preflight = await preflightBootstrapCaptureDetailed()
+  if (preflight.ok) {
     updateHealth('electron', {
       bootstrapCapture: true,
       bootstrapCaptureRequestedBy: state.requestedBy,
@@ -283,12 +300,16 @@ async function enableRemoteNoScreenCapture(reason: string): Promise<boolean> {
   updateHealth('electron', {
     bootstrapCapture: false,
     bootstrapCaptureErrorAt: new Date().toISOString(),
-    bootstrapCaptureError: 'bootstrap capture secret unavailable in OS keychain',
+    bootstrapCaptureError: preflight.error || 'bootstrap capture secret unavailable in OS keychain',
+    bootstrapCaptureErrorStack: preflight.stack || null,
     bootstrapCaptureEnabledBy: reason,
   })
-  writeLog('error', 'electron', 'remote_no_screen_capture_unavailable', { reason })
+  writeLog('error', 'electron', 'remote_no_screen_capture_unavailable', {
+    reason,
+    error: preflight.error,
+  })
   console.error('DataMoat remote no-screen capture could not start securely.')
-  console.error('A working local OS keychain is required before pre-setup capture can begin.')
+  console.error(preflight.error || 'A working local OS keychain is required before pre-setup capture can begin.')
   return false
 }
 
@@ -1200,6 +1221,15 @@ function promptInstallChoice(state: DualInstallState): InstallPreference {
     ? `Use source install\n(${state.sourceRoot})`
     : 'Use source install'
   const defaultId = state.currentVariant === 'source' ? 1 : 0
+  try {
+    if (process.platform === 'darwin') {
+      app.setActivationPolicy('regular')
+      app.dock?.show()
+      app.focus({ steal: true })
+    }
+  } catch {
+    // The dialog itself is still safe to show; this only helps bring it front.
+  }
   const clicked = dialog.showMessageBoxSync({
     type: 'question',
     buttons: [packagedLabel, sourceLabel],
@@ -1208,7 +1238,7 @@ function promptInstallChoice(state: DualInstallState): InstallPreference {
     noLink: true,
     title: 'DataMoat: multiple installs detected',
     message: 'Two DataMoat installs found on this computer',
-    detail: 'Pick which one to run. This choice is remembered; you will only be asked again if a different install appears or moves.',
+    detail: 'Pick which one to run. This choice is remembered; you will be asked again when either install changes, moves, or is replaced by a new DMG.',
   })
   return clicked === 1 ? 'source' : 'packaged'
 }
@@ -1226,11 +1256,7 @@ function resolveInstallChoiceOnStartup(): 'continue' | 'quit' {
   const state = detectDualInstallState()
   if (!state.eligible || !state.hasBoth) return 'continue'
 
-  const storedChoiceIsCurrent =
-    !!state.storedChoice
-    && state.storedChoice.sourceRoot === state.sourceRoot
-    && (state.storedChoice.sourceAppPath ?? null) === state.sourceAppPath
-    && (state.storedChoice.packagedAppPath ?? null) === state.packagedAppPath
+  const storedChoiceIsCurrent = installChoiceMatchesState(state.storedChoice, state)
 
   if (state.storedChoice && !storedChoiceIsCurrent) {
     clearInstallChoice()
@@ -1256,6 +1282,8 @@ function resolveInstallChoiceOnStartup(): 'continue' | 'quit' {
     sourceRoot: state.sourceRoot,
     sourceAppPath: state.sourceAppPath,
     packagedAppPath: state.packagedAppPath,
+    sourceAppFingerprint: state.sourceAppFingerprint,
+    packagedAppFingerprint: state.packagedAppFingerprint,
   })
   updateHealth('electron', {
     installChoicePromptedAt: new Date().toISOString(),
@@ -1337,7 +1365,9 @@ function installDesktopIpc(): void {
   })
 }
 
-if (!app.requestSingleInstanceLock()) {
+if (rejectWindowsSystemLaunchIfNeeded()) {
+  // Do not create a systemprofile vault or bind the local UI port.
+} else if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   try { ensureDirs() } catch { /* non-fatal: whenReady will retry and crash logging stays defensive */ }
@@ -1372,6 +1402,17 @@ if (!app.requestSingleInstanceLock()) {
       return
     }
     try {
+      if (resolveInstallChoiceOnStartup() === 'quit') {
+        app.quit()
+        return
+      }
+    } catch (error) {
+      writeLog('warn', 'electron', 'install_choice_startup_failed', { error })
+      updateHealth('electron', {
+        installChoiceStartupFailedAt: new Date().toISOString(),
+      })
+    }
+    try {
       await initializePackagedUpdater()
     } catch (error) {
       writeLog('warn', 'electron', 'packaged_update_init_failed', { error })
@@ -1382,17 +1423,6 @@ if (!app.requestSingleInstanceLock()) {
       }
     } catch (error) {
       writeLog('warn', 'electron', 'packaged_launch_agent_init_failed', { error })
-    }
-    try {
-      if (resolveInstallChoiceOnStartup() === 'quit') {
-        app.quit()
-        return
-      }
-    } catch (error) {
-      writeLog('warn', 'electron', 'install_choice_startup_failed', { error })
-      updateHealth('electron', {
-        installChoiceStartupFailedAt: new Date().toISOString(),
-      })
     }
     if (trayOnlyLaunch) enforceTrayOnlyPresentation()
     createTray()

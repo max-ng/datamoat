@@ -3,6 +3,8 @@ import * as path from 'path'
 import { Message, ContentBlock, TokenUsage } from '../types'
 import type { RawImageData } from './claude'
 
+export const CODEX_EXTRACTOR_VERSION = 2
+
 // Codex top-level keys the extractor binds to typed columns. Anything else
 // is preserved as unknownAttrs so the UI can still render it.
 const CODEX_KNOWN_FIELDS = new Set(['type', 'timestamp', 'payload'])
@@ -75,8 +77,7 @@ export function extractCodexLine(raw: string): {
     const ptype = payload.type as string
 
     if (ptype === 'message' && isMessageRole(role)) {
-      const rawContent = payload.content as unknown[]
-      const { blocks: content, images: rawImages } = parseCodexContent(rawContent)
+      const { blocks: content, images: rawImages } = parseCodexContent(payload.content)
 
       return {
         rawImages,
@@ -91,7 +92,8 @@ export function extractCodexLine(raw: string): {
     }
 
     if (ptype === 'reasoning') {
-      const thinking = parseReasoningSummary(payload.summary)
+      const thinking = parseReasoningText(payload.summary, payload.content)
+      if (!thinking) return { rawImages: [] }
       return {
         rawImages: [],
         message: decorate({
@@ -100,6 +102,77 @@ export function extractCodexLine(raw: string): {
           timestamp,
           content: [{ type: 'thinking', thinking }],
           hasThinking: true,
+        }),
+      }
+    }
+
+    if (ptype === 'tool_search_call') {
+      return {
+        rawImages: [],
+        message: decorate({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp,
+          content: [{
+            type: 'tool_use',
+            name: 'tool_search',
+            input: payload,
+            text: stringifyUnknown(payload),
+          }],
+          hasThinking: false,
+        }),
+      }
+    }
+
+    if (ptype === 'tool_search_output') {
+      const text = stringifyUnknown((payload as Record<string, unknown>).output ?? payload)
+      return {
+        rawImages: localImagesFromText(text, 0, 0),
+        message: decorate({
+          id: crypto.randomUUID(),
+          role: 'tool',
+          timestamp,
+          content: [{
+            type: 'tool_result',
+            name: (payload.call_id as string) || 'tool-search-output',
+            content: (payload as Record<string, unknown>).output ?? payload,
+            text,
+          }],
+          hasThinking: false,
+        }),
+      }
+    }
+
+    if (ptype === 'image_generation_call') {
+      const text = stringifyUnknown(payload)
+      return {
+        rawImages: localImagesFromText(text, 0, 0),
+        message: decorate({
+          id: crypto.randomUUID(),
+          role: 'assistant',
+          timestamp,
+          content: [{
+            type: 'tool_use',
+            name: 'image_generation',
+            input: payload,
+            text,
+          }],
+          hasThinking: false,
+        }),
+      }
+    }
+
+    if (ptype === 'compaction' || ptype === 'context_compaction') {
+      const text = firstNonEmptyText(payload.summary, payload.text, payload.message, payload)
+      if (!text) return { rawImages: [] }
+      return {
+        rawImages: [],
+        message: decorate({
+          id: crypto.randomUUID(),
+          role: 'system',
+          timestamp,
+          content: [{ type: 'text', text }],
+          hasThinking: false,
         }),
       }
     }
@@ -208,6 +281,20 @@ export function extractCodexLine(raw: string): {
         }),
       }
     }
+
+    const fallbackText = responseItemFallbackText(payload)
+    if (fallbackText) {
+      return {
+        rawImages: localImagesFromText(fallbackText, 0, 0),
+        message: decorate({
+          id: crypto.randomUUID(),
+          role: role === 'user' ? 'user' : role === 'system' || role === 'developer' ? 'system' : 'assistant',
+          timestamp,
+          content: [{ type: 'other', text: fallbackText, content: payload }],
+          hasThinking: false,
+        }),
+      }
+    }
   }
 
   return null
@@ -217,19 +304,22 @@ function codexSourceClient(payload: Record<string, unknown>): string | undefined
   const originator = typeof payload.originator === 'string' ? payload.originator : ''
   const source = typeof payload.source === 'string' ? payload.source : ''
 
-  if (originator === 'Codex Desktop') return 'Codex Desktop'
-  if (originator === 'codex_exec') return 'Codex Exec'
-  if (originator === 'codex-tui' || originator === 'codex_cli_rs') return 'Codex CLI'
-
   if (source === 'vscode') return 'Codex Desktop'
   if (source === 'exec') return 'Codex Exec'
   if (source === 'cli') return 'Codex CLI'
+
+  if (originator === 'Codex Desktop') return 'Codex Desktop'
+  if (originator === 'codex_exec') return 'Codex Exec'
+  if (originator === 'codex-tui' || originator === 'codex_cli_rs') return 'Codex CLI'
 
   if (originator || source) return 'Codex'
   return undefined
 }
 
-function parseCodexContent(rawContent: unknown[]): { blocks: ContentBlock[]; images: RawImageData[] } {
+function parseCodexContent(rawContent: unknown): { blocks: ContentBlock[]; images: RawImageData[] } {
+  if (typeof rawContent === 'string') {
+    return { blocks: rawContent ? [{ type: 'text', text: rawContent }] : [], images: [] }
+  }
   if (!Array.isArray(rawContent)) return { blocks: [], images: [] }
   const images: RawImageData[] = []
   const blocks: ContentBlock[] = []
@@ -237,8 +327,8 @@ function parseCodexContent(rawContent: unknown[]): { blocks: ContentBlock[]; ima
   for (const block of rawContent) {
     if (typeof block !== 'object' || !block) continue
     const b = block as Record<string, unknown>
-    if (b.type === 'input_text' || b.type === 'output_text') {
-      const text = b.text as string || ''
+    if (b.type === 'input_text' || b.type === 'output_text' || b.type === 'text') {
+      const text = firstNonEmptyText(b.text, b.content)
       blocks.push({ type: 'text' as const, text })
       const linkedImages = localImagesFromText(text, 0)
       for (const img of linkedImages) {
@@ -253,7 +343,7 @@ function parseCodexContent(rawContent: unknown[]): { blocks: ContentBlock[]; ima
       continue
     }
     if (b.type === 'input_image') {
-      const data = parseInlineImageData(b.image_url)
+      const data = parseInlineImageData(b.image_url ?? b.data ?? b.source)
       const blockIndex = blocks.length
       if (!data) {
         blocks.push({ type: 'image' as const, mediaType: 'image/png' })
@@ -268,8 +358,9 @@ function parseCodexContent(rawContent: unknown[]): { blocks: ContentBlock[]; ima
       blocks.push({ type: 'image' as const, mediaType: data.mediaType })
       continue
     }
-    if (b.type === 'reasoning') {
-      const thinking = parseReasoningSummary(b.summary)
+    if (b.type === 'reasoning' || b.type === 'reasoning_text' || b.type === 'summary_text') {
+      const thinking = parseReasoningText(b.summary, b.text, b.content)
+      if (!thinking) continue
       blocks.push({ type: 'thinking' as const, thinking })
       continue
     }
@@ -374,6 +465,18 @@ function normalizeLocalImagePath(candidate: string): string | null {
 }
 
 function parseInlineImageData(value: unknown): { mediaType: string; base64Data: string } | null {
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>
+    if (record.type === 'base64' && typeof record.data === 'string') {
+      const mediaType = typeof record.media_type === 'string'
+        ? record.media_type
+        : typeof record.mediaType === 'string'
+          ? record.mediaType
+          : 'image/png'
+      return { mediaType, base64Data: record.data }
+    }
+    return parseInlineImageData(record.url ?? record.image_url ?? record.data)
+  }
   if (typeof value !== 'string') return null
   const match = value.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([a-zA-Z0-9+/=]+)$/)
   if (!match) return null
@@ -390,17 +493,51 @@ function normalizeRole(role: string): Message['role'] {
   return 'system'
 }
 
-function parseReasoningSummary(rawSummary: unknown): string {
-  if (!Array.isArray(rawSummary)) return ''
-  const parts = rawSummary.flatMap(item => {
-    if (typeof item !== 'object' || !item) return []
-    const record = item as Record<string, unknown>
-    if (record.type === 'summary_text' && typeof record.text === 'string') {
-      return [record.text]
-    }
-    return []
-  })
+function parseReasoningText(...values: unknown[]): string {
+  const parts = values.flatMap(value => collectTextFragments(value, new Set([
+    'summary_text',
+    'reasoning_text',
+    'reasoning',
+    'text',
+    'output_text',
+    'input_text',
+  ])))
   return parts.join('\n\n').trim()
+}
+
+function collectTextFragments(value: unknown, allowedTypes?: Set<string>): string[] {
+  if (typeof value === 'string') return value.trim() ? [value] : []
+  if (Array.isArray(value)) return value.flatMap(item => collectTextFragments(item, allowedTypes))
+  if (!value || typeof value !== 'object') return []
+  const record = value as Record<string, unknown>
+  const type = typeof record.type === 'string' ? record.type : ''
+  const out: string[] = []
+  if ((!allowedTypes || !type || allowedTypes.has(type)) && typeof record.text === 'string' && record.text.trim()) {
+    out.push(record.text)
+  }
+  if ((!allowedTypes || !type || allowedTypes.has(type)) && typeof record.content === 'string' && record.content.trim()) {
+    out.push(record.content)
+  }
+  if (Array.isArray(record.content)) out.push(...collectTextFragments(record.content, allowedTypes))
+  if (Array.isArray(record.summary)) out.push(...collectTextFragments(record.summary, allowedTypes))
+  return out
+}
+
+function firstNonEmptyText(...values: unknown[]): string {
+  for (const value of values) {
+    const text = collectTextFragments(value).join('\n\n').trim()
+    if (text) return text
+  }
+  return ''
+}
+
+function responseItemFallbackText(payload: Record<string, unknown>): string {
+  const text = firstNonEmptyText(payload.text, payload.message, payload.output, payload.content)
+  if (text) return text
+  const type = typeof payload.type === 'string' ? payload.type : ''
+  if (!type || type === 'reasoning') return ''
+  if (type.endsWith('_call') || type.endsWith('_output')) return stringifyUnknown(payload)
+  return ''
 }
 
 function parseMaybeJson(raw: string): unknown {

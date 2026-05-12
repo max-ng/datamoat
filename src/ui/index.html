@@ -1247,6 +1247,169 @@
     background: #0a1016;
     padding: 12px;
   }
+  .settings-card.wide {
+    display: grid;
+    gap: 10px;
+  }
+  .referenced-backup-card {
+    gap: 12px;
+  }
+  .referenced-backup-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .referenced-backup-badge {
+    border: 1px solid rgba(0, 220, 190, 0.3);
+    border-radius: 999px;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .referenced-backup-badge.off {
+    border-color: rgba(255, 255, 255, 0.16);
+    color: var(--muted);
+  }
+  .referenced-backup-copy {
+    max-width: 760px;
+  }
+  .referenced-backup-permission {
+    border-left: 2px solid #f0aa28;
+    color: #f0c27a;
+    font-size: 12px;
+    line-height: 1.55;
+    padding-left: 10px;
+  }
+  .referenced-backup-progress {
+    display: grid;
+    gap: 7px;
+  }
+  .referenced-progress-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .referenced-progress-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #121a23;
+  }
+  .referenced-progress-fill {
+    width: 0;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--accent), #f0aa28);
+    transition: width 180ms ease;
+  }
+  .referenced-attachment-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+  }
+  .referenced-attachment-stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+  }
+  .referenced-attachment-stat strong {
+    font-size: 14px;
+    color: var(--text);
+  }
+  .referenced-attachment-stat span {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .referenced-folder-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+  .referenced-folder-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px 8px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    background: #070c11;
+  }
+  .referenced-folder-chip span {
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .referenced-backup-toggle {
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid rgba(0, 220, 190, 0.34);
+    border-radius: 10px;
+    background: rgba(0, 200, 160, 0.07);
+    color: var(--text);
+    cursor: pointer;
+    padding: 9px 13px;
+    font-family: var(--font-mono);
+    text-align: left;
+  }
+  .referenced-backup-toggle:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+  .referenced-backup-toggle:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .referenced-toggle-track {
+    width: 38px;
+    height: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    background: #111821;
+    padding: 2px;
+    flex: 0 0 auto;
+  }
+  .referenced-toggle-knob {
+    display: block;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: transform 160ms ease, background 160ms ease;
+  }
+  .referenced-backup-toggle.is-on .referenced-toggle-track {
+    border-color: rgba(0, 220, 190, 0.5);
+    background: rgba(0, 200, 160, 0.18);
+  }
+  .referenced-backup-toggle.is-on .referenced-toggle-knob {
+    transform: translateX(16px);
+    background: var(--accent);
+  }
+  .referenced-toggle-copy {
+    display: grid;
+    gap: 2px;
+  }
+  .referenced-toggle-copy strong {
+    font-size: 12px;
+    color: var(--text);
+  }
+  .referenced-toggle-copy span {
+    font-size: 10px;
+    color: var(--muted);
+    line-height: 1.45;
+  }
   .settings-label {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -1648,6 +1811,36 @@
 
       <div class="settings-message" id="update-message">This app is working normally. Only live git source installs update in place; other installs open the latest download page instead.</div>
 
+      <div class="settings-card wide referenced-backup-card" id="referenced-attachments-card">
+        <div class="referenced-backup-head">
+          <div>
+            <div class="settings-label">Referenced File Backup</div>
+            <div class="settings-value" id="referenced-attachments-state">checking…</div>
+          </div>
+          <div class="referenced-backup-badge" id="referenced-attachments-badge">optional</div>
+        </div>
+        <div class="settings-message referenced-backup-copy" id="referenced-attachments-message"></div>
+        <div class="referenced-backup-progress" id="referenced-attachments-progress" hidden>
+          <div class="referenced-progress-row">
+            <span id="referenced-attachments-progress-label">Checking previous conversations</span>
+            <span id="referenced-attachments-progress-count"></span>
+          </div>
+          <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="referenced-attachments-progress-fill"></div></div>
+        </div>
+        <div class="referenced-backup-permission" id="referenced-attachments-permission" hidden></div>
+        <div class="referenced-attachment-stats" id="referenced-attachments-stats"></div>
+        <div class="referenced-folder-list" id="referenced-attachments-folders" hidden></div>
+        <div class="settings-actions">
+          <button id="referenced-attachments-enable-btn" class="referenced-backup-toggle" type="button" aria-pressed="false">
+            <span class="referenced-toggle-track" aria-hidden="true"><span class="referenced-toggle-knob"></span></span>
+            <span class="referenced-toggle-copy">
+              <strong>Enable referenced file backup</strong>
+              <span>Copy path-only files into the encrypted vault</span>
+            </span>
+          </button>
+        </div>
+      </div>
+
       <div class="source-field" id="reinstall-source-field" hidden>
         <label class="source-label" for="reinstall-source-path">Source Folder</label>
         <input id="reinstall-source-path" class="source-input" type="text" placeholder="/path/to/live/git/checkout">
@@ -1686,6 +1879,10 @@ let updatePanelBusy = false
 let reinstallInfo = null
 let updatePanelMessage = ''
 let updatePanelMessageIsError = false
+let referencedAttachmentStatus = null
+let referencedAttachmentBusy = false
+let referencedAttachmentPollTimer = null
+let referencedAttachmentPollTail = 0
 let releasesUrl = ''
 let settingsAppVersion = ''
 let noticeActionHandler = null
@@ -2595,8 +2792,40 @@ function renderInlineDisplay(text, max = DISPLAY_TEXT_MAX) {
   return `${esc(sliced.text)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
 }
 
-function renderTextDisplay(text, className) {
-  return `<div class="${className}">${renderInlineDisplay(text)}</div>`
+function normalizeReferencedDisplayPath(value) {
+  let out = String(value || '').trim()
+  if (!out) return ''
+  if (out.startsWith('file://')) {
+    try { out = decodeURIComponent(new URL(out).pathname) } catch { out = out.replace(/^file:\/\//, '') }
+  }
+  try { out = decodeURIComponent(out) } catch {}
+  out = out.replace(/\\/g, '/')
+  return /^[A-Za-z]:\//.test(out) ? out.toLowerCase() : out
+}
+
+function renderInlineDisplayWithReferencedAttachments(text, referencedAttachments, max = DISPLAY_TEXT_MAX) {
+  const sliced = displaySlice(text, max)
+  const attachments = Array.isArray(referencedAttachments) ? referencedAttachments : []
+  if (attachments.length === 0) return `${esc(sliced.text)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
+  const byPath = new Map(attachments.map(item => [normalizeReferencedDisplayPath(item.originalPath), item]))
+  const imagePattern = /!\[([^\]]*)\]\(([^)]+)\)/g
+  let out = ''
+  let last = 0
+  let match
+  while ((match = imagePattern.exec(sliced.text))) {
+    const attachment = byPath.get(normalizeReferencedDisplayPath(match[2]))
+    if (!attachment?.attachmentId) continue
+    out += esc(sliced.text.slice(last, match.index))
+    const alt = match[1] || attachment.attachmentName || 'referenced image'
+    out += `<div class="attachment-block referenced-image"><img src="/api/attachment/${attachmentPath(attachment.attachmentId)}" alt="${escAttr(alt)}" style="max-width:100%;max-height:480px;border-radius:4px;border:1px solid var(--border);display:block;margin:8px 0"></div>`
+    last = match.index + match[0].length
+  }
+  out += esc(sliced.text.slice(last))
+  return `${out}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
+}
+
+function renderTextDisplay(text, className, referencedAttachments) {
+  return `<div class="${className}">${renderInlineDisplayWithReferencedAttachments(text, referencedAttachments)}</div>`
 }
 
 function renderPreDisplay(text, className = '') {
@@ -2807,7 +3036,7 @@ function renderMessage(msg) {
       <div class="message-role system">turn summary <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
       ${renderAttrStrip(msg)}
       ${renderTurnSummary(msg)}
-      ${msg.content && msg.content[0]?.text ? renderTextDisplay(msg.content[0].text, 'text-block') : ''}
+      ${msg.content && msg.content[0]?.text ? renderTextDisplay(msg.content[0].text, 'text-block', msg.content[0].referencedAttachments) : ''}
     </div>`
   }
   if (msg.sourceEventType === 'rate_limit_event') {
@@ -2824,18 +3053,18 @@ function renderMessage(msg) {
       const thinkingText = typeof block.thinking === 'string' ? block.thinking : ''
       const thinkingCountLabel = thinkingText.trim()
         ? `${wordCount(thinkingText)} words`
-        : '0 token'
+        : '0 · event captured, no text summary'
       return `<div class="thinking-block">
         <div class="thinking-toggle" onclick="toggleThinking('${id}')">
           <span class="thinking-arrow" id="arr_${id}">▶</span>
           <span>thinking block</span>
           <span style="margin-left:auto;opacity:.5">${thinkingCountLabel}</span>
         </div>
-        <div class="thinking-content" id="${id}">${thinkingText ? renderInlineDisplay(thinkingText) : ''}</div>
+        <div class="thinking-content" id="${id}">${thinkingText ? renderInlineDisplay(thinkingText) : '<span style="color:var(--muted)">Reasoning event was captured, but the source record did not include a text summary.</span>'}</div>
       </div>`
     }
     if (block.type === 'text' && block.text?.trim()) {
-      return renderTextDisplay(block.text, 'text-block')
+      return renderTextDisplay(block.text, 'text-block', block.referencedAttachments)
     }
     if (block.type === 'tool_use') {
       const rawInput = pretty(block.input ?? block.text ?? '')
@@ -3222,8 +3451,184 @@ function renderUpdatePanel() {
 
   setUpdatePanelMessage(updatePanelMessage, updatePanelMessageIsError)
   if (showSourceControls) renderReinstallHelp()
+  renderReferencedAttachmentPanel()
   renderBackupPathsPanel()
   renderSkillsBackupPanel()
+}
+
+function referencedAttachmentAppsText(status) {
+  const apps = Array.isArray(status?.coveredApps) ? status.coveredApps.map(source => SOURCE_LABELS[source] || source) : []
+  return apps.length ? apps.join(', ') : ''
+}
+
+function scheduleReferencedAttachmentPoll() {
+  if (referencedAttachmentPollTimer) {
+    window.clearTimeout(referencedAttachmentPollTimer)
+    referencedAttachmentPollTimer = null
+  }
+  if (!settingsOpen) return
+  if (referencedAttachmentStatus?.running === true) {
+    referencedAttachmentPollTail = 2
+  } else if (referencedAttachmentPollTail > 0) {
+    referencedAttachmentPollTail -= 1
+  } else {
+    return
+  }
+  referencedAttachmentPollTimer = window.setTimeout(() => { void loadReferencedAttachmentPanel() }, 1500)
+}
+
+function referencedAttachmentPermissionText(status, folders) {
+  const folderText = folders || 'a referenced folder'
+  if (status?.platform === 'darwin') {
+    return `Folder access needed for ${folderText}. Open System Settings > Privacy & Security > Files and Folders > DataMoat, then enable that folder. If the folder is not listed there, add DataMoat under Full Disk Access. Everything else keeps backing up while this permission is off.`
+  }
+  if (status?.platform === 'win32') {
+    return `Windows denied access to ${folderText}. DataMoat can copy files that are readable by the current Windows user; check the folder or file permissions, then DataMoat will retry on the next scan.`
+  }
+  return `Folder access needed for ${folderText}. DataMoat can copy files that are readable by this user account; check the folder or file permissions, then DataMoat will retry on the next scan.`
+}
+
+function renderReferencedAttachmentPanel() {
+  const stateEl = document.getElementById('referenced-attachments-state')
+  const badgeEl = document.getElementById('referenced-attachments-badge')
+  const messageEl = document.getElementById('referenced-attachments-message')
+  const progressEl = document.getElementById('referenced-attachments-progress')
+  const progressLabelEl = document.getElementById('referenced-attachments-progress-label')
+  const progressCountEl = document.getElementById('referenced-attachments-progress-count')
+  const progressFillEl = document.getElementById('referenced-attachments-progress-fill')
+  const permissionEl = document.getElementById('referenced-attachments-permission')
+  const statsEl = document.getElementById('referenced-attachments-stats')
+  const foldersEl = document.getElementById('referenced-attachments-folders')
+  const enableBtn = document.getElementById('referenced-attachments-enable-btn')
+  if (!stateEl || !badgeEl || !messageEl || !progressEl || !progressLabelEl || !progressCountEl || !progressFillEl || !permissionEl || !statsEl || !foldersEl || !enableBtn) return
+
+  const status = referencedAttachmentStatus
+  const loading = referencedAttachmentBusy && !status
+  const enabled = status?.enabled === true
+  const running = status?.running === true
+  const progress = status?.scanProgress || null
+  const isMac = status?.platform === 'darwin'
+
+  stateEl.textContent = !status
+    ? 'checking...'
+    : enabled
+      ? running
+        ? 'processing previous conversations'
+        : 'enabled'
+      : 'not enabled'
+
+  badgeEl.textContent = loading
+    ? 'checking'
+    : running
+      ? 'processing'
+      : enabled
+        ? 'on'
+        : 'off'
+  badgeEl.classList.toggle('off', !enabled && !running && !loading)
+
+  if (!status) {
+    messageEl.textContent = 'Checking referenced file backup status...'
+  } else if (enabled && running) {
+    messageEl.textContent = isMac
+      ? 'Referenced file backup is enabled. DataMoat is processing previous conversations now and will also protect future path-referenced files automatically. If macOS asks for folder access, it is so DataMoat can copy the original file into your encrypted vault.'
+      : 'Referenced file backup is enabled. DataMoat is processing previous conversations now and will also protect future path-referenced files automatically when those files are readable by this user account.'
+  } else if (enabled) {
+    messageEl.textContent = 'Referenced file backup is enabled. DataMoat protects future path-referenced files automatically and keeps embedded files and images protected as before.'
+  } else {
+    messageEl.textContent = isMac
+      ? 'DataMoat already protects embedded files and images saved inside supported sessions. Some conversations only mention files by path, such as files in Downloads, Desktop, or Documents. Enable this to copy those originals into your encrypted vault; macOS only asks when DataMoat actually reaches a folder that needs permission.'
+      : 'DataMoat already protects embedded files and images saved inside supported sessions. Some conversations only mention files by path. Enable this to copy those originals into your encrypted vault when they are readable by this user account.'
+  }
+
+  if (running) {
+    const checked = Number(progress?.checked || status?.previousSessionsChecked || 0)
+    const total = Number(progress?.total || 0)
+    const pct = total > 0 ? Math.max(4, Math.min(100, Math.round((checked / total) * 100))) : 12
+    progressEl.hidden = false
+    progressLabelEl.textContent = 'Processing previous conversations'
+    progressCountEl.textContent = total > 0 ? `${fmtNumber(checked)} / ${fmtNumber(total)}` : 'starting...'
+    progressFillEl.style.width = `${pct}%`
+  } else {
+    progressEl.hidden = true
+    progressCountEl.textContent = ''
+    progressFillEl.style.width = '0'
+  }
+
+  const permissionIssues = Array.isArray(status?.permissionIssues) ? status.permissionIssues : []
+  if (permissionIssues.length > 0) {
+    const labels = permissionIssues.map(issue => issue?.label).filter(Boolean)
+    const folders = labels.length ? labels.join(', ') : 'a referenced folder'
+    permissionEl.hidden = false
+    permissionEl.textContent = referencedAttachmentPermissionText(status, folders)
+  } else {
+    permissionEl.hidden = true
+    permissionEl.textContent = ''
+  }
+
+  const protectedFiles = status?.protectedFiles || 0
+  const checked = running ? 0 : status?.previousSessionsChecked || 0
+  const coveredApps = referencedAttachmentAppsText(status)
+  const stats = []
+  if (protectedFiles > 0) {
+    stats.push(`<div class="referenced-attachment-stat"><strong>${fmtNumber(protectedFiles)}</strong><span>referenced files protected</span></div>`)
+  }
+  if (checked > 0) {
+    stats.push(`<div class="referenced-attachment-stat"><strong>${fmtNumber(checked)}</strong><span>previous sessions checked</span></div>`)
+  }
+  if (coveredApps) {
+    stats.push(`<div class="referenced-attachment-stat"><strong>${esc(coveredApps)}</strong><span>covered apps</span></div>`)
+  }
+  statsEl.hidden = stats.length === 0
+  statsEl.innerHTML = stats.join('')
+
+  const protectedFolders = Array.isArray(status?.protectedFolders) ? status.protectedFolders : []
+  foldersEl.hidden = protectedFolders.length === 0
+  foldersEl.innerHTML = protectedFolders.map(folder => {
+    const count = Number(folder?.files || 0)
+    const fileLabel = count === 1 ? 'file' : 'files'
+    return `<div class="referenced-folder-chip"><strong>${esc(folder?.label || 'Folder')}</strong><span>${fmtNumber(count)} ${fileLabel}</span></div>`
+  }).join('')
+
+  enableBtn.hidden = false
+  enableBtn.disabled = referencedAttachmentBusy || running || enabled
+  enableBtn.classList.toggle('is-on', enabled)
+  enableBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false')
+  const toggleTitle = enableBtn.querySelector('.referenced-toggle-copy strong')
+  const toggleSub = enableBtn.querySelector('.referenced-toggle-copy span')
+  if (toggleTitle) toggleTitle.textContent = enabled ? 'Referenced file backup enabled' : 'Enable referenced file backup'
+  if (toggleSub) toggleSub.textContent = enabled
+    ? 'Path-only files will be copied when available'
+    : 'Copy path-only files into the encrypted vault'
+}
+
+async function loadReferencedAttachmentPanel() {
+  referencedAttachmentBusy = true
+  renderReferencedAttachmentPanel()
+  try {
+    referencedAttachmentStatus = await jsonOrThrow(await apiFetch('/api/referenced-attachments'))
+  } catch {
+    referencedAttachmentStatus = null
+  } finally {
+    referencedAttachmentBusy = false
+    renderReferencedAttachmentPanel()
+    scheduleReferencedAttachmentPoll()
+  }
+}
+
+async function enableReferencedAttachmentBackup() {
+  referencedAttachmentBusy = true
+  renderReferencedAttachmentPanel()
+  try {
+    referencedAttachmentStatus = await jsonOrThrow(await apiFetch('/api/referenced-attachments/enable', { method: 'POST' }))
+    referencedAttachmentPollTail = 3
+    window.setTimeout(() => { void loadReferencedAttachmentPanel() }, 1200)
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    referencedAttachmentBusy = false
+    renderReferencedAttachmentPanel()
+    scheduleReferencedAttachmentPoll()
+  }
 }
 
 function sourceRootFromOriginalPath(source, originalPath) {
@@ -3666,10 +4071,15 @@ function openSettings() {
   settingsOpen = true
   document.getElementById('settings-backdrop').hidden = false
   void loadUpdatePanel()
+  void loadReferencedAttachmentPanel()
 }
 
 function closeSettings() {
   settingsOpen = false
+  if (referencedAttachmentPollTimer) {
+    window.clearTimeout(referencedAttachmentPollTimer)
+    referencedAttachmentPollTimer = null
+  }
   document.getElementById('settings-backdrop').hidden = true
 }
 
@@ -3886,6 +4296,7 @@ document.getElementById('update-check-btn').addEventListener('click', () => { vo
 document.getElementById('update-apply-btn').addEventListener('click', () => { void applyUpdateNow() })
 document.getElementById('update-install-latest-btn').addEventListener('click', () => { void installLatestVersion() })
 document.getElementById('update-reinstall-btn').addEventListener('click', () => { void reinstallFromSource() })
+document.getElementById('referenced-attachments-enable-btn').addEventListener('click', () => { void enableReferencedAttachmentBackup() })
 document.getElementById('reinstall-source-path').addEventListener('input', e => {
   const input = e.target
   if (!(input instanceof HTMLInputElement)) return

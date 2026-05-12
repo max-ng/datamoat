@@ -62,6 +62,14 @@ export type BootstrapCaptureLineBatch = {
   nextSpoolCursor: number
 }
 
+export type BootstrapCapturePreflightResult = {
+  ok: true
+} | {
+  ok: false
+  error: string
+  stack?: string
+}
+
 let bootstrapSessionId: string | null = null
 
 function ensurePrivateDir(dirPath: string): void {
@@ -145,12 +153,20 @@ export async function stopBootstrapCaptureSession(): Promise<void> {
 }
 
 export async function preflightBootstrapCapture(): Promise<boolean> {
+  return (await preflightBootstrapCaptureDetailed()).ok
+}
+
+export async function preflightBootstrapCaptureDetailed(): Promise<BootstrapCapturePreflightResult> {
   try {
     await ensureBootstrapCaptureSession()
     await stopBootstrapCaptureSession()
-    return true
-  } catch {
-    return false
+    return { ok: true }
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error && error.message ? error.message : String(error),
+      stack: error instanceof Error && error.stack ? error.stack : undefined,
+    }
   }
 }
 

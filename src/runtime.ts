@@ -2,7 +2,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as http from 'http'
 import * as child_process from 'child_process'
-import { PID_FILE, STATE_DIR, UI_PORT_RANGE } from './config'
+import { DATAMOAT_ROOT, PID_FILE, STATE_DIR, UI_PORT_RANGE } from './config'
 import { ensureDirs } from './store'
 import { isSetupDone } from './auth'
 import { loadInstallInfo } from './install-context'
@@ -10,6 +10,7 @@ import { loadInstallInfo } from './install-context'
 type DaemonMeta = {
   pid: number
   version?: string
+  dataRoot?: string
 }
 
 function packageVersion(): string {
@@ -244,6 +245,34 @@ function commandIncludes(command: string, needle: string): boolean {
     || haystack.includes(candidate.replace(/\\/g, '/'))
 }
 
+function normalizeRootForCompare(value: string): string {
+  const resolved = path.resolve(value)
+  return process.platform === 'win32'
+    ? resolved.replace(/\//g, '\\').replace(/\\+$/g, '').toLowerCase()
+    : resolved.replace(/\/+$/g, '')
+}
+
+function rootMatchesCurrentApp(value: string | undefined): boolean {
+  const trimmed = value?.trim()
+  if (!trimmed) return false
+  return normalizeRootForCompare(trimmed) === normalizeRootForCompare(DATAMOAT_ROOT)
+}
+
+function commandDataRoot(command: string): string | null {
+  const match = command.match(/--datamoat-root=(?:"([^"]+)"|'([^']+)'|([^\s]+))/i)
+  return (match?.[1] || match?.[2] || match?.[3] || '').trim() || null
+}
+
+function looksLikeDataMoatDaemonCommand(command: string): boolean {
+  const normalized = command.replace(/\\/g, '/').toLowerCase()
+  return normalized.includes('/dist/daemon.js')
+    && (
+      normalized.includes('datamoat.exe')
+      || normalized.includes('/datamoat/')
+      || normalized.includes('/.datamoat/')
+    )
+}
+
 function isKnownDaemonCommand(command: string): boolean {
   const matchesScript = daemonScriptCandidates().some(candidate => commandIncludes(command, candidate))
   if (!matchesScript) return false
@@ -336,12 +365,20 @@ export function probePort(port: number): Promise<boolean> {
 }
 
 function daemonMetaMatchesCurrentApp(meta: DaemonMeta): boolean {
-  return meta.version === packageVersion()
+  if (meta.version !== packageVersion()) return false
+  if (meta.dataRoot) return rootMatchesCurrentApp(meta.dataRoot)
+
+  const command = commandForPid(meta.pid)
+  if (!command) return true
+
+  const commandRoot = commandDataRoot(command)
+  if (commandRoot) return rootMatchesCurrentApp(commandRoot)
+  return isKnownDaemonCommand(command)
 }
 
 function stopStaleDaemon(meta: DaemonMeta): boolean {
   const command = commandForPid(meta.pid)
-  if (!command || !isKnownDaemonCommand(command)) return false
+  if (!command || (!isKnownDaemonCommand(command) && !looksLikeDataMoatDaemonCommand(command))) return false
   stopDaemonPids([meta.pid])
   return true
 }
@@ -369,11 +406,12 @@ async function daemonMetaForPort(port: number): Promise<DaemonMeta | null> {
       res.on('data', chunk => { body += chunk })
       res.on('end', () => {
         try {
-          const parsed = JSON.parse(body) as { pid?: number; version?: unknown }
+          const parsed = JSON.parse(body) as { pid?: number; version?: unknown; dataRoot?: unknown }
           if (typeof parsed.pid === 'number' && Number.isFinite(parsed.pid)) {
             resolve({
               pid: parsed.pid,
               version: typeof parsed.version === 'string' ? parsed.version : undefined,
+              dataRoot: typeof parsed.dataRoot === 'string' ? parsed.dataRoot : undefined,
             })
             return
           }

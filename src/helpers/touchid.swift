@@ -570,7 +570,6 @@ if CommandLine.arguments.contains("--check") {
     do {
         _ = try makeContext()
         guard supportsSecureEnclave() else { exit(2) }
-        try ensureTouchIdEnrollmentSupported()
         print("ok", terminator: "")
         exit(0)
     } catch {

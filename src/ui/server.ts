@@ -11,6 +11,7 @@ import {
   readSessionMessagesPage,
   readRawRecords,
   readAttachment,
+  readPublicStatus,
   setVaultSession,
   encryptVaultFiles,
   encryptAttachmentFiles,
@@ -22,7 +23,7 @@ import {
   migrateStateStorage,
 } from '../store'
 import { Message, Session, Source } from '../types'
-import { UI_PORT_RANGE } from '../config'
+import { DATAMOAT_ROOT, UI_PORT_RANGE } from '../config'
 import {
   isSetupDone, loadAuthConfig, saveAuthConfig,
   generateTOTPSecret, verifyTOTP, generateMnemonic,
@@ -33,7 +34,7 @@ import {
 } from '../auth'
 import { IS_MAC, secureEnclaveAvailable, secureEnclaveStatus, backgroundCaptureSecretDelete } from '../keychain'
 import { updateHealth, writeAuditEvent, writeLog } from '../logging'
-import { BootstrapImportProgress, importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from '../watcher'
+import { BootstrapImportProgress, getWatcherStartupProgress, importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from '../watcher'
 import { ensureBackgroundCaptureConfigured, startBackgroundCapture, stopBackgroundCapture } from '../background-capture'
 import {
   createVaultSession,
@@ -55,7 +56,7 @@ import {
   saveAppConfig,
   isUpdateRunning,
 } from '../update-config'
-import { bootstrapCaptureSummary, loadBootstrapCaptureState, preflightBootstrapCapture } from '../bootstrap-capture'
+import { bootstrapCaptureSummary } from '../bootstrap-capture'
 import { extractClaudeLine } from '../extractors/claude'
 import { extractCodexLine } from '../extractors/codex'
 import { extractOpenclawLine } from '../extractors/openclaw'
@@ -68,6 +69,13 @@ import {
   readSkillsBackupIndexForUI,
   scanAndBackupSkills,
 } from '../skills-backup'
+import {
+  queueReferencedAttachmentBackfill,
+  readReferencedAttachmentsForSessionUI,
+  referencedAttachmentStatus,
+  setReferencedAttachmentBackupEnabled,
+} from '../referenced-attachments'
+import { runParserReparseIfNeeded } from '../parser-reparse'
 
 type SessionFlow =
   | 'touchid'
@@ -100,6 +108,15 @@ type SetupActivationProgress = {
   importedFiles: number
   totalFiles: number
   importedMessages: number
+  progressUnit?: string
+  progressText?: string
+  stepText?: string
+  processedSessions?: number
+  totalSessions?: number
+  discoveredSessions?: number
+  sourceRecordsProcessed?: number
+  sourceRecordsTotal?: number
+  elapsedLabel?: string
   done: boolean
   updatedAt: string | null
 }
@@ -511,6 +528,60 @@ function updateSetupActivationProgress(progress: Partial<SetupActivationProgress
   }
 }
 
+function setupActivationProgressSnapshot(): SetupActivationProgress & Record<string, unknown> {
+  const progress = { ...setupActivationProgress } as SetupActivationProgress & Record<string, unknown>
+  if (!progress.running || progress.done || progress.phase !== 'scanning') return progress
+
+  const watcherProgress = getWatcherStartupProgress()
+  if (watcherProgress.mode !== 'vault') return progress
+  if (!watcherProgress.running && watcherProgress.phase === 'idle' && watcherProgress.queuedSessions === 0) return progress
+
+  const queuedRecords = watcherProgress.queuedSessions
+  const processedRecords = watcherProgress.processedSessions
+  const visibleSessions = Math.max(0, Number(readPublicStatus()?.totalSessions || 0))
+  const elapsedMs = watcherProgress.startedAt
+    ? Math.max(0, Date.now() - Date.parse(watcherProgress.startedAt))
+    : 0
+  const elapsedSeconds = Math.floor(elapsedMs / 1000)
+  const elapsedLabel = elapsedSeconds >= 60
+    ? `${Math.floor(elapsedSeconds / 60)}m ${elapsedSeconds % 60}s`
+    : `${elapsedSeconds}s`
+  const hasKnownTotal = queuedRecords > 0
+  const scanPercent = hasKnownTotal
+    ? Math.max(0, Math.min(100, (processedRecords / Math.max(queuedRecords, 1)) * 100))
+    : null
+  const current = watcherProgress.currentSource
+    ? `${watcherProgress.currentSource}${watcherProgress.currentSession ? ` · ${watcherProgress.currentSession}` : ''}`
+    : ''
+  const progressText = hasKnownTotal && scanPercent !== null
+    ? `${Math.round(scanPercent)}%`
+    : (elapsedLabel || 'scanning')
+
+  return {
+    ...progress,
+    phase: hasKnownTotal ? 'processing' : 'discovering',
+    label: visibleSessions > 0 ? 'Building session index' : 'Scanning local AI work records',
+    detail: visibleSessions > 0
+      ? `Building the session index. The final session count will appear after indexing${current ? ` · ${current}` : ''}.`
+      : `Reading supported local Claude, Codex, Cursor, OpenClaw, and agent records before opening${current ? ` · ${current}` : ''}.`,
+    percent: scanPercent,
+    importedFiles: visibleSessions,
+    totalFiles: 0,
+    discoveredSessions: 0,
+    processedSessions: visibleSessions,
+    totalSessions: 0,
+    sourceRecordsProcessed: processedRecords,
+    sourceRecordsTotal: queuedRecords,
+    progressUnit: 'sessions',
+    progressText,
+    stepText: visibleSessions > 0 ? 'Indexing sessions' : 'Scanning local records',
+    elapsedSeconds,
+    elapsedLabel,
+    watcherReady: watcherProgress.ready,
+    watcherRunning: watcherProgress.running,
+  }
+}
+
 async function requireAuth(req: Request, res: Response, next: NextFunction): Promise<void> {
   if (activeSession && activeSession.expiresAt <= Date.now()) {
     await lockVault(res)
@@ -538,7 +609,13 @@ async function activateVault(
   } = {},
 ): Promise<{ backgroundConfigured: boolean; backgroundStarted: boolean; captureWarning: string | null }> {
   const report = (progress: Partial<SetupActivationProgress>): void => {
-    options.setupProgress?.(progress)
+    const phase = progress.phase
+    const activePhase = phase !== 'done' && phase !== 'error'
+    options.setupProgress?.({
+      ...progress,
+      running: activePhase,
+      done: phase === 'done' ? true : activePhase ? false : progress.done,
+    })
   }
   writeLog('info', 'auth', 'activate_vault_started', {
     skipBackgroundCaptureSetup: !!options.skipBackgroundCaptureSetup,
@@ -607,10 +684,11 @@ async function activateVault(
     phase: 'importing',
     label: bootstrapBeforeImport.entries > 0 ? 'Importing protected pre-setup capture' : 'Checking pre-setup capture',
     detail: bootstrapBeforeImport.entries > 0
-      ? 'Moving records captured before setup into the encrypted vault.'
-      : 'No pre-setup capture backlog found.',
+      ? 'Moving protected records into the encrypted vault.'
+      : 'Checking protected records before opening.',
     percent: 42,
     totalFiles: bootstrapBeforeImport.entries,
+    progressUnit: 'pre-setup records',
   })
   writeLog('info', 'auth', 'activate_vault_step', { step: 'bootstrap_import_start' })
   const bootstrapImport = await importBootstrapCaptureIntoVault(options.bootstrapImportProgress)
@@ -639,22 +717,45 @@ async function activateVault(
     })
   } else {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'background_start_start' })
+    const visibleSessions = Math.max(0, Number(readPublicStatus()?.totalSessions || 0))
     report({
       phase: 'scanning',
-      label: 'Scanning supported AI work records',
-      detail: 'Checking local AI work records and skills for this vault.',
-      percent: 70,
+      label: visibleSessions > 0 ? 'Building session index' : 'Scanning local AI work records',
+      detail: visibleSessions > 0
+        ? 'Building the session index. The final session count will appear after indexing.'
+        : 'Reading supported local Claude, Codex, Cursor, OpenClaw, and agent records before opening.',
+      percent: null,
+      importedFiles: visibleSessions,
+      totalFiles: 0,
+      processedSessions: visibleSessions,
+      totalSessions: 0,
+      discoveredSessions: 0,
+      progressUnit: 'sessions',
+      progressText: visibleSessions > 0 ? 'indexing' : 'scanning',
+      stepText: visibleSessions > 0 ? 'Indexing sessions' : 'Scanning local records',
     })
     backgroundStarted = await startBackgroundCapture()
     writeLog('info', 'auth', 'activate_vault_step', { step: 'background_start_done', backgroundStarted })
   }
   if (!backgroundStarted && !options.skipWatcherStart) {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_start' })
+    await runParserReparseIfNeeded('foreground_watcher_start')
+    const visibleSessions = Math.max(0, Number(readPublicStatus()?.totalSessions || 0))
     report({
       phase: 'scanning',
-      label: 'Scanning supported AI work records',
-      detail: 'This one-time first scan can take a few minutes on large local histories.',
-      percent: 76,
+      label: visibleSessions > 0 ? 'Building session index' : 'Scanning local AI work records',
+      detail: visibleSessions > 0
+        ? 'Building the session index. The final session count will appear after indexing.'
+        : 'Reading supported local Claude, Codex, Cursor, OpenClaw, and agent records before opening.',
+      percent: null,
+      importedFiles: visibleSessions,
+      totalFiles: 0,
+      processedSessions: visibleSessions,
+      totalSessions: 0,
+      discoveredSessions: 0,
+      progressUnit: 'sessions',
+      progressText: visibleSessions > 0 ? 'indexing' : 'scanning',
+      stepText: visibleSessions > 0 ? 'Indexing sessions' : 'Scanning local records',
     })
     await startWatchers('vault')
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_done' })
@@ -662,18 +763,29 @@ async function activateVault(
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_deferred' })
   }
   writeLog('info', 'auth', 'activate_vault_step', { step: 'skills_backup_scan_start' })
-  report({
-    phase: 'skills',
-    label: 'Backing up skills folders',
-    detail: 'Saving full supported skills folder contents into the encrypted vault.',
-    percent: 88,
-  })
+    report({
+      phase: 'skills',
+      label: 'Backing up skills folders',
+      detail: 'Saving full supported skills folder contents into the encrypted vault.',
+      percent: null,
+      importedFiles: 0,
+      totalFiles: 0,
+      progressUnit: 'skills folders',
+      progressText: 'backing up',
+      stepText: 'Backing up skills',
+      processedSessions: 0,
+      totalSessions: 0,
+      discoveredSessions: 0,
+      sourceRecordsProcessed: 0,
+      sourceRecordsTotal: 0,
+    })
   const skillsBackup = await scanAndBackupSkills('vault_activated')
   writeLog('info', 'auth', 'activate_vault_step', {
     step: 'skills_backup_scan_done',
     skillsBackedUp: skillsBackup?.skillsBackedUp ?? 0,
     filesBackedUp: skillsBackup?.filesBackedUp ?? 0,
   })
+  queueReferencedAttachmentBackfill('vault_activated')
   updateHealth('daemon', {
     locked: false,
     unlockedAt: new Date().toISOString(),
@@ -1017,6 +1129,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     res.json({
       pid: process.pid,
       version: appVersion(),
+      dataRoot: DATAMOAT_ROOT,
       route: isSetupDone() ? 'unlock' : 'setup',
       platform: process.platform,
       touchIdSupportedPlatform: IS_MAC,
@@ -1042,13 +1155,22 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       importedFiles: 0,
       totalFiles: 0,
       importedMessages: 0,
+      progressUnit: undefined,
+      progressText: undefined,
+      stepText: undefined,
+      processedSessions: 0,
+      totalSessions: 0,
+      discoveredSessions: 0,
+      sourceRecordsProcessed: 0,
+      sourceRecordsTotal: 0,
+      elapsedLabel: undefined,
       done: false,
     })
     res.json(await setupInitPayload())
   })
 
   app.get('/api/setup/progress', (_req, res) => {
-    res.json(setupActivationProgress)
+    res.json(setupActivationProgressSnapshot())
   })
 
   app.post('/api/setup/reset', (_req, res) => {
@@ -1062,6 +1184,15 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       importedFiles: 0,
       totalFiles: 0,
       importedMessages: 0,
+      progressUnit: undefined,
+      progressText: undefined,
+      stepText: undefined,
+      processedSessions: 0,
+      totalSessions: 0,
+      discoveredSessions: 0,
+      sourceRecordsProcessed: 0,
+      sourceRecordsTotal: 0,
+      elapsedLabel: undefined,
       done: false,
     })
     writeAuditEvent('setup', 'setup_reset')
@@ -1182,6 +1313,15 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         importedFiles: 0,
         totalFiles: bootstrapCaptureSummary().entries,
         importedMessages: 0,
+        progressUnit: 'pre-setup records',
+        progressText: undefined,
+        stepText: undefined,
+        processedSessions: 0,
+        totalSessions: 0,
+        discoveredSessions: 0,
+        sourceRecordsProcessed: 0,
+        sourceRecordsTotal: 0,
+        elapsedLabel: undefined,
         done: false,
       })
       const activation = await activateVaultForSetup(helperSessionId, progress => {
@@ -1195,12 +1335,20 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
           phase: 'importing',
           label: total > 0 ? 'Importing protected pre-setup capture' : 'Checking pre-setup capture',
           detail: total > 0
-            ? `Imported ${imported} of ${total} files and ${progress.importedMessages} messages.`
-            : 'No pre-setup capture backlog found.',
+            ? 'Moving protected records into the encrypted vault.'
+            : 'Checking protected records before opening.',
           percent: pct,
           importedFiles: progress.importedFiles,
           totalFiles: progress.totalFiles,
           importedMessages: progress.importedMessages,
+          progressUnit: 'pre-setup records',
+          progressText: undefined,
+          stepText: undefined,
+          processedSessions: 0,
+          totalSessions: 0,
+          discoveredSessions: 0,
+          sourceRecordsProcessed: progress.importedFiles,
+          sourceRecordsTotal: progress.totalFiles,
           done: progress.done,
         })
       }, updateSetupActivationProgress)
@@ -1213,6 +1361,15 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         importedFiles: setupActivationProgress.importedFiles,
         totalFiles: setupActivationProgress.totalFiles,
         importedMessages: setupActivationProgress.importedMessages,
+        progressUnit: undefined,
+        progressText: undefined,
+        stepText: undefined,
+        processedSessions: Math.max(0, Number(readPublicStatus()?.totalSessions || 0)),
+        totalSessions: 0,
+        discoveredSessions: 0,
+        sourceRecordsProcessed: setupActivationProgress.sourceRecordsProcessed || 0,
+        sourceRecordsTotal: setupActivationProgress.sourceRecordsTotal || 0,
+        elapsedLabel: undefined,
         done: true,
       })
       saveAuthConfig({
@@ -1733,6 +1890,19 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     })
   })
 
+  app.get('/api/referenced-attachments', requireAuth, async (_req, res) => {
+    res.json(await referencedAttachmentStatus())
+  })
+
+  app.post('/api/referenced-attachments/enable', requireAuth, async (_req, res) => {
+    res.json(await setReferencedAttachmentBackupEnabled(true))
+  })
+
+  app.post('/api/referenced-attachments/scan', requireAuth, async (_req, res) => {
+    queueReferencedAttachmentBackfill('manual')
+    res.json(await referencedAttachmentStatus())
+  })
+
   app.get('/api/update/status', requireAuth, (_req, res) => {
     res.json(loadUpdateState())
   })
@@ -1887,33 +2057,6 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     server.on('error', (err) => { throw err })
   })
 
-  const bootstrap = loadBootstrapCaptureState()
-  if (!isSetupDone() && bootstrap) {
-    if (await preflightBootstrapCapture()) {
-      await startWatchers('bootstrap')
-      updateHealth('daemon', {
-        bootstrapCapture: true,
-        bootstrapCaptureRequestedBy: bootstrap.requestedBy,
-        bootstrapCaptureStartedAt: bootstrap.createdAt,
-      })
-      writeLog('info', 'daemon', 'bootstrap_capture_running', {
-        requestedBy: bootstrap.requestedBy,
-        startedAt: bootstrap.createdAt,
-      })
-    } else {
-      updateHealth('daemon', {
-        bootstrapCapture: false,
-        bootstrapCaptureRequestedBy: bootstrap.requestedBy,
-        bootstrapCaptureStartedAt: bootstrap.createdAt,
-        bootstrapCaptureErrorAt: new Date().toISOString(),
-        bootstrapCaptureError: 'bootstrap capture secret unavailable in OS keychain',
-      })
-      writeLog('error', 'daemon', 'bootstrap_capture_unavailable', {
-        requestedBy: bootstrap.requestedBy,
-      })
-    }
-  }
-
   return { port, url: `http://localhost:${port}` }
 }
 
@@ -1946,8 +2089,50 @@ async function readMessagesForUI(session: Session, options: ReadMessagesForUIOpt
     content: message.content,
     hasThinking: messageHasThinkingBlock(message),
   }))
-  if (pageMode) return messages
-  return await backfillThinkingMessagesForUI(session, messages)
+  const withReferencedAttachments = await attachReferencedAttachmentsForUI(session, messages)
+  if (pageMode) return withReferencedAttachments
+  return await backfillThinkingMessagesForUI(session, withReferencedAttachments)
+}
+
+function normalizeReferencedTextPath(value: string): string {
+  let out = String(value || '').trim()
+  if (out.startsWith('file://')) {
+    try {
+      out = decodeURIComponent(new URL(out).pathname)
+    } catch {
+      out = out.replace(/^file:\/\//, '')
+    }
+  } else {
+    try {
+      out = decodeURIComponent(out)
+    } catch {
+      // Keep the original string when it is not URI-encoded.
+    }
+  }
+  out = out.replace(/\\/g, '/')
+  return /^[A-Za-z]:\//.test(out) ? out.toLowerCase() : out
+}
+
+function textReferencesPath(text: string, originalPath: string): boolean {
+  if (text.includes(originalPath)) return true
+  const normalizedPath = normalizeReferencedTextPath(originalPath)
+  const normalizedText = normalizeReferencedTextPath(text)
+  return normalizedPath ? normalizedText.includes(normalizedPath) : false
+}
+
+async function attachReferencedAttachmentsForUI(session: Session, messages: Message[]): Promise<Message[]> {
+  const attachments = await readReferencedAttachmentsForSessionUI(session.source, session.uid)
+  if (attachments.length === 0) return messages
+  return messages.map(message => ({
+    ...message,
+    content: message.content.map(block => {
+      if (block.type !== 'text' || !block.text) return block
+      const matches = attachments.filter(item => textReferencesPath(block.text || '', item.originalPath))
+      return matches.length > 0
+        ? { ...block, referencedAttachments: matches }
+        : block
+    }),
+  }))
 }
 
 async function findSearchExcerptForUI(session: Session, q: string): Promise<string | null> {
@@ -2490,8 +2675,14 @@ function setupPageHTML(): string {
   .activate-label { max-width: 640px; padding: 0 24px; text-align: center; font-size: 11px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; min-height: 18px; transition: color 0.5s; }
   .activate-label.bright { color: var(--accent2); }
   .activate-detail { max-width: 640px; min-height: 42px; padding: 0 24px; text-align: center; font-size: 12px; line-height: 1.55; color: #aab5c3; }
+  .activate-progress-wrap { width: 480px; max-width: 90vw; display: grid; gap: 8px; }
+  .activate-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; font-family: var(--mono); }
+  .activate-step { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; }
+  .activate-percent { flex: 0 0 auto; color: var(--accent2); font-size: 14px; letter-spacing: 1px; }
   .progress-track { width: 480px; max-width: 90vw; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
   .progress-fill { height: 100%; width: 0%; background: var(--accent2); border-radius: 2px; transition: width linear; box-shadow: 0 0 10px var(--accent2); }
+  .progress-track.indeterminate .progress-fill { width: 32%; animation: progress-slide 1.25s ease-in-out infinite; transition: none; }
+  @keyframes progress-slide { from { transform: translateX(-120%); } to { transform: translateX(340%); } }
   .activate-done { font-size: 22px; color: var(--accent2); opacity: 0; transition: opacity 0.6s; }
   .activate-done.show { opacity: 1; }
   /* Steps nav */
@@ -2801,7 +2992,13 @@ function setupPageHTML(): string {
 <!-- Activation overlay -->
 <div class="activate-overlay" id="activate-overlay">
   <div class="activate-logo">data<span>moat</span></div>
-  <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+  <div class="activate-progress-wrap">
+    <div class="activate-progress-head">
+      <div class="activate-step" id="activate-step">Starting setup</div>
+      <div class="activate-percent" id="activate-percent">0%</div>
+    </div>
+    <div class="progress-track" id="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+  </div>
   <div class="activate-label" id="activate-label">Initialising vault…</div>
   <div class="activate-detail" id="activate-detail">This first scan runs once and stays local.</div>
   <div class="activate-done" id="activate-done">✓</div>
@@ -3217,58 +3414,83 @@ function checkFinal() {
 
 async function activate() {
   const overlay = document.getElementById('activate-overlay');
+  const track = document.getElementById('progress-track');
   const fill = document.getElementById('progress-fill');
+  const percent = document.getElementById('activate-percent');
+  const stepName = document.getElementById('activate-step');
   const label = document.getElementById('activate-label');
   const detail = document.getElementById('activate-detail');
   const done = document.getElementById('activate-done');
   const err = document.getElementById('activate-error');
+  const clampPct = value => Math.max(0, Math.min(100, Math.round(Number(value) || 0)));
+  const setActivationProgress = (pct, text, detailText, stepText, durationMs = 450, progressText = '') => {
+    const hasPct = typeof pct === 'number' && Number.isFinite(pct);
+    if (hasPct) {
+      const safePct = clampPct(pct);
+      track.classList.remove('indeterminate');
+      fill.style.transform = '';
+      fill.style.transitionDuration = durationMs + 'ms';
+      fill.style.width = safePct + '%';
+      percent.textContent = progressText || (safePct + '%');
+    } else {
+      track.classList.add('indeterminate');
+      fill.style.transitionDuration = '0ms';
+      percent.textContent = progressText || 'working';
+    }
+    if (stepText) stepName.textContent = stepText;
+    if (text) label.textContent = text;
+    if (detailText) detail.textContent = detailText;
+  };
   err.style.display = 'none';
   done.classList.remove('show');
   label.classList.remove('bright');
+  track.classList.remove('indeterminate');
   fill.style.transitionDuration = '0ms';
+  fill.style.transform = '';
   fill.style.width = '0%';
+  percent.textContent = '0%';
+  stepName.textContent = 'Starting setup';
   overlay.classList.add('show');
-  fill.style.transitionDuration = '350ms';
-  fill.style.width = '18%';
-  label.textContent = 'Creating encrypted vault…';
-  detail.textContent = 'DataMoat is setting up local encrypted storage. This first scan stays on this Mac.';
-  const progressSteps = [
-    { pct: 32, delay: 800, duration: 700, text: 'Preparing encrypted vault…', detail: 'No cloud upload. Data is sealed into the local vault on this machine.' },
-    { pct: 48, delay: 1800, duration: 1200, text: 'Checking supported AI tool folders…', detail: 'Looking for Claude, Codex, Cursor, and OpenClaw records in their normal app folders.' },
-    { pct: 66, delay: 4200, duration: 2600, text: 'Scanning existing conversations…', detail: 'Large histories can take a few minutes. DataMoat will open as soon as the first scan is complete.' },
-    { pct: 84, delay: 9000, duration: 7000, text: 'Building session index…', detail: 'This one-time setup makes the session list fast after the app opens.' },
-    { pct: 92, delay: 18000, duration: 15000, text: 'Finishing local setup…', detail: 'DataMoat will open automatically when setup is ready.' },
-  ];
-  const progressTimers = progressSteps.map(step => setTimeout(() => {
-    fill.style.transitionDuration = step.duration + 'ms';
-    fill.style.width = step.pct + '%';
-    label.textContent = step.text;
-    detail.textContent = step.detail;
-  }, step.delay));
-  const clearProgressTimers = () => progressTimers.forEach(timer => clearTimeout(timer));
+  setActivationProgress(18, 'Creating encrypted vault…', 'DataMoat is setting up local encrypted storage. This first scan stays on this Mac.', 'Local vault', 350);
+  const clearProgressTimers = () => {};
   let serverProgressSeen = false;
   const progressPollTimer = setInterval(async () => {
     try {
       const r = await apiFetch('/api/setup/progress');
       if (!r.ok) return;
       const p = await r.json();
-      const total = Number(p.totalFiles || 0);
-      const imported = Number(p.importedFiles || 0);
-      const pctFromServer = Number(p.percent || 0);
+      const unit = typeof p.progressUnit === 'string' && p.progressUnit.trim() ? p.progressUnit.trim() : 'sessions';
+      const usesSessionProgress = unit === 'sessions';
+      const totalSessions = usesSessionProgress ? Number(p.totalSessions || 0) : 0;
+      const protectedSessions = usesSessionProgress ? Number(p.processedSessions || 0) : 0;
+      const sourceRecordsTotal = Number(p.sourceRecordsTotal || 0);
+      const progressTextFromServer = typeof p.progressText === 'string' ? p.progressText.trim() : '';
+      const stepTextFromServer = typeof p.stepText === 'string' ? p.stepText.trim() : '';
+      const elapsedLabel = typeof p.elapsedLabel === 'string' ? p.elapsedLabel : '';
+      const hasServerPercent = typeof p.percent === 'number' && Number.isFinite(p.percent);
+      const pctFromServer = hasServerPercent ? Number(p.percent) : null;
       const labelFromServer = typeof p.label === 'string' ? p.label.trim() : '';
       const detailFromServer = typeof p.detail === 'string' ? p.detail.trim() : '';
-      if (pctFromServer <= 0 && !labelFromServer && !detailFromServer && total <= 0) return;
+      if (!hasServerPercent && !labelFromServer && !detailFromServer && !progressTextFromServer && totalSessions <= 0 && sourceRecordsTotal <= 0) return;
       if (!serverProgressSeen) {
         serverProgressSeen = true;
         clearProgressTimers();
       }
-      const pct = pctFromServer > 0
-        ? Math.max(4, Math.min(100, pctFromServer))
-        : Math.max(48, Math.min(92, 48 + (imported / total) * 44));
-      fill.style.transitionDuration = '450ms';
-      fill.style.width = pct + '%';
-      label.textContent = labelFromServer || ('Imported ' + imported + ' / ' + total + ' conversation files');
-      detail.textContent = detailFromServer || 'Importing protected records into the encrypted vault.';
+      const pct = hasServerPercent ? Math.max(0, Math.min(100, pctFromServer)) : null;
+      const stepText = stepTextFromServer || (totalSessions > 0
+        ? protectedSessions + '/' + totalSessions + ' ' + unit
+        : (sourceRecordsTotal > 0 ? 'Scanning local records' : (p.phase || 'Setup')));
+      const progressText = progressTextFromServer || (totalSessions > 0
+        ? protectedSessions + '/' + totalSessions
+        : (hasServerPercent ? clampPct(pct) + '%' : (elapsedLabel || 'scanning')));
+      setActivationProgress(
+        pct,
+        labelFromServer || (protectedSessions > 0 ? ('Indexed ' + protectedSessions + ' sessions') : 'Scanning local AI work records'),
+        detailFromServer || 'Reading local records and building the session index.',
+        stepText,
+        450,
+        progressText,
+      );
     } catch {}
   }, 1000);
   const rememberCaptureWarning = (payload) => {
@@ -3293,6 +3515,7 @@ async function activate() {
         return;
       }
       overlay.classList.remove('show');
+      track.classList.remove('indeterminate');
       fill.style.width = '0%';
       detail.textContent = '';
       err.textContent = (d && typeof d.error === 'string' && d.error.trim())
@@ -3307,6 +3530,7 @@ async function activate() {
     clearProgressTimers();
     clearInterval(progressPollTimer);
     overlay.classList.remove('show');
+    track.classList.remove('indeterminate');
     fill.style.width = '0%';
     detail.textContent = '';
     err.textContent = 'Could not activate vault. Try again.';
@@ -3319,10 +3543,7 @@ async function activate() {
     { pct: 100, ms: 320, text: 'Done.', detail: 'Opening DataMoat now.' },
   ];
   for (const step of steps) {
-    fill.style.transitionDuration = step.ms + 'ms';
-    fill.style.width = step.pct + '%';
-    label.textContent = step.text;
-    detail.textContent = step.detail;
+    setActivationProgress(step.pct, step.text, step.detail, step.text.replace(/…|\\.$/g, ''), step.ms);
     await new Promise(r => setTimeout(r, step.ms + 80));
   }
   label.classList.add('bright');
