@@ -16,6 +16,8 @@
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
+<img src=".github/assets/datamoat-private-ai-belongs-teal.png" alt="Private AI should belong to YOU - to every individual and every company" width="100%">
+
 <img src=".github/assets/readme-brand-hero.svg" alt="Capture everything you build with Claude, Codex, Cursor, and OpenClaw, and turn it into the most valuable private data asset of your life." width="100%">
 
 > **Capture everything you build with Claude, Codex, Cursor, and OpenClaw, and turn it into the most valuable private data asset of your life.**
