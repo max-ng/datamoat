@@ -1,6 +1,14 @@
 import * as path from 'path'
 import { Message, ContentBlock, TokenUsage } from '../types'
 
+export const CLAUDE_EXTRACTOR_VERSION = 1
+export const CLAUDE_EXTRACTOR_COMPATIBILITY_VERSION = 1
+
+export function claudeParserCompatibilityKey(source: 'claude-cli' | 'claude-app', appVersion: string | undefined): string {
+  const family = source === 'claude-app' ? 'audit-jsonl' : 'project-jsonl'
+  return `${source}:${family}:${CLAUDE_EXTRACTOR_COMPATIBILITY_VERSION}`
+}
+
 export interface RawImageData {
   blockIndex: number   // outer content array index (always)
   innerIndex?: number  // if set: nested inside tool_result at this inner position
@@ -16,6 +24,7 @@ export interface RawImageData {
 const CLAUDE_KNOWN_FIELDS = new Set([
   'type', 'uuid', 'sessionId', 'session_id', 'version', 'claude_code_version',
   'timestamp', '_audit_timestamp', '_audit_hmac', 'message', 'model', 'cwd',
+  'aiTitle',
   'parent_tool_use_id', 'client_platform',
   // result-event fields we map to typed columns
   'subtype', 'duration_ms', 'duration_api_ms', 'num_turns', 'result',
@@ -168,6 +177,10 @@ export function extractClaudeLine(raw: string): { sessionId: string; appVersion:
     if (extras) message.unknownAttrs = extras
     return { sessionId, appVersion, rawImages: [], message }
   }
+
+  // Claude CLI may emit repeated title metadata. It does not carry a turn body,
+  // and the raw record remains backed up for provenance.
+  if (type === 'ai-title') return null
 
   return null
 }

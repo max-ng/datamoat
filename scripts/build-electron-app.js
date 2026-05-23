@@ -47,6 +47,32 @@ function commonIgnorePatterns() {
   ]
 }
 
+function isPackagedDebugArtifact(fileName) {
+  return fileName.endsWith('.map') || fileName.endsWith('.d.ts')
+}
+
+function prunePackagedDebugArtifacts(appRoot) {
+  if (!fs.existsSync(appRoot)) return 0
+  let removed = 0
+  const visit = dirPath => {
+    for (const entry of fs.readdirSync(dirPath, { withFileTypes: true })) {
+      const absolute = path.join(dirPath, entry.name)
+      if (entry.isDirectory()) {
+        visit(absolute)
+        continue
+      }
+      if (!entry.isFile() || !isPackagedDebugArtifact(entry.name)) continue
+      fs.rmSync(absolute, { force: true })
+      removed += 1
+    }
+  }
+  visit(appRoot)
+  if (removed > 0) {
+    console.log(`Pruned ${removed} packaged source-map/declaration artifact(s) from ${path.relative(root, appRoot)}`)
+  }
+  return removed
+}
+
 function wallMerlons(cx, cy, radius, count, width, height, fill, stroke, strokeWidth = 0) {
   const x = cx - width / 2
   const y = cy - radius - height / 2
@@ -789,6 +815,7 @@ async function packageDarwin() {
     throw new Error(`packaged app missing at ${bundlePath}`)
   }
 
+  prunePackagedDebugArtifacts(path.join(bundleResourcesPath, 'app'))
   fs.copyFileSync(iconPath, path.join(bundleResourcesPath, 'electron.icns'))
   fs.copyFileSync(trayTemplatePath, path.join(bundleResourcesPath, 'DataMoatStatusTemplate.png'))
   fs.copyFileSync(trayTemplate2xPath, path.join(bundleResourcesPath, 'DataMoatStatusTemplate@2x.png'))
@@ -833,6 +860,7 @@ async function packageWindows() {
     throw new Error(`packaged app missing at ${exePath}`)
   }
 
+  prunePackagedDebugArtifacts(path.join(appRoot, 'resources', 'app'))
   fs.rmSync(path.join(appRoot, 'resources', 'app', 'node_modules', 'keytar'), {
     recursive: true,
     force: true,

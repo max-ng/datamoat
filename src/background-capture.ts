@@ -1,5 +1,6 @@
 import * as crypto from 'crypto'
 import * as path from 'path'
+import { spawnSync } from 'child_process'
 import {
   type AuthConfig,
   loadAuthConfig,
@@ -9,6 +10,8 @@ import {
   backgroundCaptureSecretDelete,
   backgroundCaptureSecretLoad,
   backgroundCaptureSecretStore,
+  macHelperSecretAccessRequesterIdentity,
+  macHelperSecretAccessRequesterPath,
 } from './keychain'
 import {
   clearCaptureSession,
@@ -27,17 +30,47 @@ import { ensureWindowsAutostart, isWindowsSystemContext, resolveWindowsStartupTa
 
 const BACKGROUND_CAPTURE_SECRET_PREFIX = 'backgroundCaptureSecret'
 
+export type StartBackgroundCaptureOptions = {
+  parserReparse?: 'await' | 'background' | 'skip'
+}
+
 function backgroundCaptureKeychainAccount(config: AuthConfig): string {
   return config.backgroundKeychainAccount || BACKGROUND_CAPTURE_SECRET_PREFIX
 }
 
 function currentKeychainRequester(): string {
+  if (process.platform === 'darwin') {
+    const helperPath = macHelperSecretAccessRequesterPath()
+    if (helperPath) return helperPath
+  }
   return path.resolve(process.execPath)
+}
+
+function currentKeychainRequesterIdentity(): string | null {
+  if (process.platform !== 'darwin') return null
+  const helperIdentity = macHelperSecretAccessRequesterIdentity()
+  if (helperIdentity) return helperIdentity
+
+  const executable = currentKeychainRequester()
+  const result = spawnSync('/usr/bin/codesign', ['-dv', '--verbose=4', executable], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  const output = `${result.stdout || ''}\n${result.stderr || ''}`
+  const identifier = output.match(/^Identifier=(.+)$/m)?.[1]?.trim() || ''
+  const teamId = output.match(/^TeamIdentifier=(.+)$/m)?.[1]?.trim() || ''
+  if (!identifier || !teamId || teamId === 'not set') return null
+  return `darwin-codesign-v1:${teamId}:${identifier}`
 }
 
 function normalizedRequester(value: string | undefined): string | null {
   const trimmed = value?.trim()
   return trimmed ? path.resolve(trimmed) : null
+}
+
+function normalizedRequesterIdentity(value: string | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed || null
 }
 
 function backgroundCaptureRequesterMigrationNeeded(config: AuthConfig): boolean {
@@ -51,7 +84,12 @@ function backgroundCaptureRequesterMigrationNeeded(config: AuthConfig): boolean 
 
   const stored = normalizedRequester(config.backgroundKeychainRequester)
   if (!stored) return process.platform === 'darwin'
-  return stored !== current
+  if (stored !== current) return true
+
+  const currentIdentity = currentKeychainRequesterIdentity()
+  const storedIdentity = normalizedRequesterIdentity(config.backgroundKeychainRequesterIdentity)
+  if (currentIdentity) return storedIdentity !== currentIdentity
+  return !!storedIdentity
 }
 
 function windowsBackgroundCaptureNeedsInteractiveUser(): { targetUser: string | null; targetSource: string } | null {
@@ -114,6 +152,9 @@ async function createBackgroundCaptureConfig(
   config.backgroundWrapSalt = wrapped.salt
   config.backgroundKeychainAccount = account
   config.backgroundKeychainRequester = currentKeychainRequester()
+  const requesterIdentity = currentKeychainRequesterIdentity()
+  if (requesterIdentity) config.backgroundKeychainRequesterIdentity = requesterIdentity
+  else delete config.backgroundKeychainRequesterIdentity
   saveAuthConfig(config)
   ensureWindowsAutostart()
 
@@ -142,18 +183,25 @@ export async function ensureBackgroundCaptureConfigured(
 
   const hasStoredConfig = !!config.backgroundWrappedVaultKey && !!config.backgroundWrapSalt
   const previousAccount = hasStoredConfig ? backgroundCaptureKeychainAccount(config) : null
+  const requesterMigrationNeeded = !options.forceReconfigure && hasStoredConfig
+    ? backgroundCaptureRequesterMigrationNeeded(config)
+    : false
   if (!options.forceReconfigure && hasStoredConfig) {
-    if (backgroundCaptureRequesterMigrationNeeded(config)) {
+    if (requesterMigrationNeeded) {
       writeLog('info', 'capture', 'background_capture_requester_migration_required', {
         account: previousAccount,
         previousRequester: config.backgroundKeychainRequester || null,
         currentRequester: currentKeychainRequester(),
+        previousRequesterIdentity: config.backgroundKeychainRequesterIdentity || null,
+        currentRequesterIdentity: currentKeychainRequesterIdentity(),
         reason: options.reason ?? 'requester_changed',
       })
       writeAuditEvent('capture', 'background_capture_requester_migration_required', {
         account: previousAccount,
         previousRequester: config.backgroundKeychainRequester || null,
         currentRequester: currentKeychainRequester(),
+        previousRequesterIdentity: config.backgroundKeychainRequesterIdentity || null,
+        currentRequesterIdentity: currentKeychainRequesterIdentity(),
         reason: options.reason ?? 'requester_changed',
       })
     } else {
@@ -187,14 +235,24 @@ export async function ensureBackgroundCaptureConfigured(
     reconfigured: options.forceReconfigure === true || hasStoredConfig,
   })
   if (configured && previousAccount && previousAccount !== backgroundCaptureKeychainAccount(config)) {
-    await backgroundCaptureSecretDelete(previousAccount)
+    if (process.platform === 'darwin' && requesterMigrationNeeded) {
+      writeLog('info', 'capture', 'background_capture_previous_secret_left_for_keychain_acl', {
+        account: previousAccount,
+        reason: options.reason ?? 'requester_changed',
+      })
+    } else {
+      await backgroundCaptureSecretDelete(previousAccount)
+    }
   }
   return configured
 }
 
 export async function ensureBackgroundCaptureSession(): Promise<string | null> {
   const existing = getCaptureSessionId()
-  if (existing) return existing
+  if (existing) {
+    clearCaptureSession()
+    writeLog('info', 'capture', 'background_capture_session_refresh_required')
+  }
 
   const config = loadAuthConfig()
   if (!config?.backgroundWrappedVaultKey || !config.backgroundWrapSalt) {
@@ -220,6 +278,8 @@ export async function ensureBackgroundCaptureSession(): Promise<string | null> {
       account: backgroundCaptureKeychainAccount(config),
       previousRequester: config.backgroundKeychainRequester || null,
       currentRequester: currentKeychainRequester(),
+      previousRequesterIdentity: config.backgroundKeychainRequesterIdentity || null,
+      currentRequesterIdentity: currentKeychainRequesterIdentity(),
     })
     return null
   }
@@ -255,10 +315,22 @@ export async function ensureBackgroundCaptureSession(): Promise<string | null> {
   }
 }
 
-export async function startBackgroundCapture(): Promise<boolean> {
+function runParserReparseInBackground(reason: string): void {
+  void runParserReparseIfNeeded(reason).catch(error => {
+    writeLog('warn', 'parser-reparse', 'background_reparse_failed', { reason, error })
+    updateHealth('parser-reparse', {
+      running: false,
+      lastErrorAt: new Date().toISOString(),
+      lastError: error instanceof Error ? error.message : String(error),
+    })
+  })
+}
+
+export async function startBackgroundCapture(options: StartBackgroundCaptureOptions = {}): Promise<boolean> {
   const sessionId = await ensureBackgroundCaptureSession()
   if (!sessionId) return false
   ensureWindowsAutostart()
+  const parserReparseMode = options.parserReparse ?? 'skip'
 
   updateHealth('capture', {
     configured: true,
@@ -274,7 +346,15 @@ export async function startBackgroundCapture(): Promise<boolean> {
     captureStartingAt: new Date().toISOString(),
   })
   writeAuditEvent('capture', 'background_capture_starting')
-  await runParserReparseIfNeeded('background_capture_start')
+  if (parserReparseMode === 'await') {
+    await runParserReparseIfNeeded('background_capture_start')
+  } else if (parserReparseMode === 'skip') {
+    updateHealth('parser-reparse', {
+      running: false,
+      lastSkippedAt: new Date().toISOString(),
+      lastSkippedReason: 'background_capture_start_skipped',
+    })
+  }
   await startWatchers('vault')
   updateHealth('capture', {
     configured: true,
@@ -290,6 +370,9 @@ export async function startBackgroundCapture(): Promise<boolean> {
     captureStartedAt: new Date().toISOString(),
   })
   writeAuditEvent('capture', 'background_capture_started')
+  if (parserReparseMode === 'background') {
+    runParserReparseInBackground('background_capture_start')
+  }
   return true
 }
 

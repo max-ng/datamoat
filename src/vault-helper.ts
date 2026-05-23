@@ -9,6 +9,7 @@ const JS_HELPER_BIN = path.join(__dirname, 'helpers', 'session-helper.js')
 type PendingRequest = {
   resolve: (value: any) => void
   reject: (err: Error) => void
+  timer?: ReturnType<typeof setTimeout>
 }
 
 let helper: ChildProcessWithoutNullStreams | null = null
@@ -19,10 +20,35 @@ let stderrTail = ''
 const MAX_HELPER_LINE_PAYLOAD_BYTES = 128 * 1024
 const CHUNKED_LINE_PREFIX = 'dmchunk1:'
 const HELPER_READY_TIMEOUT_MS = positiveTimeoutMs(process.env.DATAMOAT_VAULT_HELPER_READY_TIMEOUT_MS, 30_000)
+const TOUCHID_REQUEST_TIMEOUT_MS = positiveTimeoutMs(process.env.DATAMOAT_TOUCHID_REQUEST_TIMEOUT_MS, 20_000)
+const HELPER_RESTART_TIMEOUT_MS = positiveTimeoutMs(process.env.DATAMOAT_VAULT_HELPER_RESTART_TIMEOUT_MS, 1_500)
 
 function positiveTimeoutMs(value: string | undefined, fallback: number): number {
   const parsed = Number(value)
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+function commandTimeoutMs(cmd: string): number | undefined {
+  return ['unwrap_touchid', 'wrap_touchid', 'reset_touchid_key'].includes(cmd)
+    ? TOUCHID_REQUEST_TIMEOUT_MS
+    : undefined
+}
+
+function clearPendingRequest(id: number): PendingRequest | undefined {
+  const request = pending.get(id)
+  if (!request) return undefined
+  pending.delete(id)
+  if (request.timer) clearTimeout(request.timer)
+  return request
+}
+
+function rejectPendingRequests(err: Error): void {
+  const requests = Array.from(pending.values())
+  pending.clear()
+  for (const request of requests) {
+    if (request.timer) clearTimeout(request.timer)
+    request.reject(err)
+  }
 }
 
 function ensureHelper(): ChildProcessWithoutNullStreams {
@@ -51,9 +77,8 @@ function ensureHelper(): ChildProcessWithoutNullStreams {
       helperReady = true
       return
     }
-    const request = pending.get(payload.id)
+    const request = clearPendingRequest(payload.id)
     if (!request) return
-    pending.delete(payload.id)
     if (payload.ok) request.resolve(payload)
     else request.reject(new Error(payload.error || 'vault helper request failed'))
   })
@@ -66,8 +91,7 @@ function ensureHelper(): ChildProcessWithoutNullStreams {
     const err = new Error(stderrTail.trim() || 'vault helper exited unexpectedly')
     helper = null
     helperReady = false
-    for (const request of pending.values()) request.reject(err)
-    pending.clear()
+    rejectPendingRequests(err)
   })
 
   return helper
@@ -111,18 +135,51 @@ async function waitForReady(proc: ChildProcessWithoutNullStreams): Promise<void>
   })
 }
 
+export async function restartVaultHelper(reason = 'restart requested'): Promise<void> {
+  const current = helper
+  const err = new Error(`vault helper restarted: ${reason}`)
+  helper = null
+  helperReady = false
+  stderrTail = ''
+  rejectPendingRequests(err)
+
+  if (!current || current.exitCode !== null || current.killed) return
+
+  await new Promise<void>(resolve => {
+    const timeout = setTimeout(() => {
+      if (current.exitCode === null) current.kill('SIGKILL')
+      resolve()
+    }, HELPER_RESTART_TIMEOUT_MS)
+    current.once('exit', () => {
+      clearTimeout(timeout)
+      resolve()
+    })
+    current.kill('SIGTERM')
+  })
+}
+
 async function request<T>(cmd: string, payload: Record<string, unknown> = {}): Promise<T> {
   const proc = ensureHelper()
   await waitForReady(proc)
 
   const id = nextRequestId++
   const body = JSON.stringify({ id, cmd, ...payload })
+  const timeoutMs = commandTimeoutMs(cmd)
 
   return await new Promise<T>((resolve, reject) => {
-    pending.set(id, { resolve, reject })
+    const request: PendingRequest = { resolve, reject }
+    if (timeoutMs) {
+      request.timer = setTimeout(() => {
+        const timedOut = clearPendingRequest(id)
+        if (!timedOut) return
+        timedOut.reject(new Error(`${cmd} did not respond within ${timeoutMs}ms`))
+        void restartVaultHelper(`${cmd} timeout`)
+      }, timeoutMs)
+    }
+    pending.set(id, request)
     proc.stdin.write(`${body}\n`, err => {
       if (!err) return
-      pending.delete(id)
+      clearPendingRequest(id)
       reject(err)
     })
   })
@@ -156,6 +213,10 @@ export async function unwrapSecretToCaptureSession(secret: string, salt: string,
 export async function wrapTouchIdForSession(sessionId: string): Promise<string> {
   const res = await request<{ blob: string }>('wrap_touchid', { sessionId })
   return res.blob
+}
+
+export async function resetTouchIdKey(): Promise<void> {
+  await request('reset_touchid_key')
 }
 
 export async function unwrapTouchIdToSession(blob: string): Promise<string> {

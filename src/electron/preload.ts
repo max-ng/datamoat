@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('datamoatDesktop', {
     apply: () => ipcRenderer.invoke('datamoat:update:apply'),
     openLatest: () => ipcRenderer.invoke('datamoat:update:openLatest'),
   },
+  transfer: {
+    selectFolder: () => ipcRenderer.invoke('datamoat:transfer:selectFolder'),
+  },
 })
 
 export {}

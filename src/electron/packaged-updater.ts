@@ -10,7 +10,7 @@ import { autoUpdater, type ProgressInfo, type UpdateDownloadedEvent, type Update
 import { detectInstallContext } from '../install-context'
 import { writeLog } from '../logging'
 import { loadAppConfig, loadUpdateState, saveAppConfig, writeUpdateState, type UpdateState } from '../update-config'
-import { UPDATE_GITHUB_HOST, UPDATE_GITHUB_OWNER, UPDATE_GITHUB_REPO, packagedUpdateFeedOptions, updateReleasesUrl } from '../update-channel'
+import { UPDATE_GITHUB_HOST, UPDATE_GITHUB_OWNER, UPDATE_GITHUB_REPO, WINDOWS_UPDATE_MANIFEST_URL, packagedUpdateFeedOptions, updateReleasesUrl } from '../update-channel'
 
 type PackagedUpdateSettingsResponse = {
   autoUpdateEnabled: boolean
@@ -36,15 +36,26 @@ type GithubRelease = {
 
 type WindowsManualManifest = {
   version?: string
+  tag?: string
   platform?: string
   architecture?: string
   artifacts?: {
     zip?: {
+      filename?: string
       path?: string
       url?: string
+      githubFallbackUrl?: string
       sha256?: string
       size?: number
     }
+    [key: string]: {
+      filename?: string
+      path?: string
+      url?: string
+      githubFallbackUrl?: string
+      sha256?: string
+      size?: number
+    } | undefined
   }
 }
 
@@ -475,7 +486,44 @@ function findWindowsAsset(assets: ReleaseAsset[], kind: 'manifest' | 'zip', arch
   return candidates[0] || null
 }
 
-async function resolveWindowsManualUpdate(): Promise<{
+function windowsManifestArtifactKey(arch: string): string {
+  return arch === 'x64' || arch === 'arm64' ? `windows-${arch}` : `windows-${arch.toLowerCase()}`
+}
+
+function basenameFromUrlOrPath(value: string): string {
+  try {
+    const parsed = new URL(value)
+    return path.basename(parsed.pathname)
+  } catch {
+    return path.basename(value)
+  }
+}
+
+async function resolveWindowsManualUpdateFromManifest(manifestUrl: string): Promise<{
+  version: string
+  zipUrl: string
+  manifestUrl: string
+  sha256: string | null
+  assetName: string
+  releaseUrl: string
+}> {
+  const arch = currentWindowsPackageArch()
+  const manifest = await requestJson<WindowsManualManifest>(manifestUrl)
+  const zip = manifest.artifacts?.[windowsManifestArtifactKey(arch)] || manifest.artifacts?.zip
+  const zipPath = zip?.url || zip?.path
+  if (!zipPath) throw new Error(`R2 update manifest does not include a Windows ${arch} artifact URL`)
+  const zipUrl = new URL(zipPath, manifestUrl).toString()
+  return {
+    version: normalizeVersion(manifest.version || manifest.tag),
+    zipUrl,
+    manifestUrl,
+    sha256: zip.sha256 || null,
+    assetName: zip.filename || basenameFromUrlOrPath(zipUrl),
+    releaseUrl: zip.githubFallbackUrl || updateReleasesUrl(),
+  }
+}
+
+async function resolveWindowsManualUpdateFromGithub(): Promise<{
   version: string
   zipUrl: string
   manifestUrl: string | null
@@ -484,22 +532,6 @@ async function resolveWindowsManualUpdate(): Promise<{
   releaseUrl: string
 }> {
   const arch = currentWindowsPackageArch()
-  const manifestOverride = process.env.DATAMOAT_WINDOWS_UPDATE_MANIFEST_URL?.trim()
-  if (manifestOverride) {
-    const manifest = await requestJson<WindowsManualManifest>(manifestOverride)
-    const zip = manifest.artifacts?.zip
-    const zipPath = zip?.url || zip?.path
-    if (!zipPath) throw new Error('Windows update manifest does not include artifacts.zip.url/path')
-    return {
-      version: normalizeVersion(manifest.version),
-      zipUrl: new URL(zipPath, manifestOverride).toString(),
-      manifestUrl: manifestOverride,
-      sha256: zip.sha256 || null,
-      assetName: path.basename(zipPath),
-      releaseUrl: updateReleasesUrl(),
-    }
-  }
-
   const latest = await requestJson<GithubRelease>(githubLatestReleaseApiUrl())
   const assets = latest.assets || []
   const manifestAsset = findWindowsAsset(assets, 'manifest', arch)
@@ -519,7 +551,7 @@ async function resolveWindowsManualUpdate(): Promise<{
       zipUrl: new URL(zipPath, manifestUrl).toString(),
       manifestUrl,
       sha256: manifest.artifacts?.zip?.sha256 || null,
-      assetName: path.basename(zipPath),
+      assetName: manifest.artifacts?.zip?.filename || basenameFromUrlOrPath(zipPath),
       releaseUrl: latest.html_url || updateReleasesUrl(),
     }
   }
@@ -534,6 +566,28 @@ async function resolveWindowsManualUpdate(): Promise<{
     assetName: zipAsset.name,
     releaseUrl: latest.html_url || updateReleasesUrl(),
   }
+}
+
+async function resolveWindowsManualUpdate(): Promise<{
+  version: string
+  zipUrl: string
+  manifestUrl: string | null
+  sha256: string | null
+  assetName: string
+  releaseUrl: string
+}> {
+  const manifestOverride = process.env.DATAMOAT_WINDOWS_UPDATE_MANIFEST_URL?.trim()
+  const manifestUrl = manifestOverride || WINDOWS_UPDATE_MANIFEST_URL
+  try {
+    return await resolveWindowsManualUpdateFromManifest(manifestUrl)
+  } catch (error) {
+    writeLog('warn', 'packaged-update', 'windows_r2_manifest_failed', {
+      manifestUrl,
+      error: error instanceof Error ? error.message : String(error),
+    })
+    if (manifestOverride) throw error
+  }
+  return await resolveWindowsManualUpdateFromGithub()
 }
 
 function sha256File(filePath: string): string {

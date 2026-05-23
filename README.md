@@ -1,6 +1,6 @@
 # DataMoat
 
-[![Version](https://img.shields.io/badge/version-0.1.17-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.3-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -52,13 +52,13 @@ DataMoat keeps two layers:
 - **Keep records encrypted and under local control.** Other software or services cannot read the vault directly; only approved unlock and recovery paths can decrypt it.
 
 ![DataMoat first-run setup flow](.github/assets/datamoat-setup-flow.png)
-*First-run setup flow: choose an unlock method, save the 24-word recovery phrase, optionally add authenticator verification, then save one-time recovery codes before activating DataMoat.*
+*First-run setup flow: choose an unlock method, save the 24-word recovery phrase, optionally add authenticator verification, then activate DataMoat.*
 
 ## Highlights
 
 - **Encrypted local vault** for transcripts, skills, attachments, and state using AES-256-GCM.
 - **Saved content stays local** as encrypted vault files, not plaintext transcript dumps.
-- **Strong local auth** with password, optional TOTP, a 24-word recovery phrase, and 8 one-time recovery codes.
+- **Strong local auth** with password, optional TOTP, and a 24-word recovery phrase.
 - **Secure Enclave-backed unlock path on supported Macs** for hardware-assisted daily unlock. See Apple's overview of the [Secure Enclave](https://support.apple.com/guide/security/secure-enclave-sec59b0b31ff/web). Touch ID is part of the packaged macOS app path.
 - **Helper-owned key custody** so the main UI process does not keep the active vault key.
 - **Tamper-evident local audit chain**: current local audit entries are hash-chained and verifiable with `datamoat audit verify`.
@@ -74,7 +74,7 @@ DataMoat keeps two layers:
 |---|---|---|
 | **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.17-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
+| **Packaged macOS DMG** | [Download DMG](https://datamoat.org/download/macos) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Unsigned manual packages for Windows 11 x64 and Windows 11 on Arm; x64 has passed GitHub Actions packaged runtime smoke, ARM64 has passed real VM UI/background capture smoke; signed installer still in progress |
 
 ### Sources
@@ -96,7 +96,7 @@ DataMoat keeps two layers:
 - **Owner-only local file permissions**: protected vault files, attachment blobs, and state files are written with restrictive local filesystem modes.
 - **Password handling**: passwords are stored as `scrypt` verifiers, not plaintext.
 - **Authenticator support**: TOTP works with standard authenticator apps such as Google Authenticator, 1Password, and Authy.
-- **Recovery design**: every vault gets a 24-word BIP39 recovery phrase and 8 one-time recovery codes.
+- **Recovery design**: every vault gets a 24-word BIP39 recovery phrase.
 - **Local-only UI**: the UI binds to `127.0.0.1` and uses `HttpOnly` + `SameSite=Strict` cookies.
 - **Reduced browser attack surface**: the default Electron shell avoids the normal general-purpose browser path; browser fallback remains available when needed.
 - **Local API write protection**: mutating requests must come from the same origin and include a CSRF token.
@@ -122,7 +122,7 @@ flowchart TD
     P["Password"] --> P2["scrypt verifier + wrapped release"]
     T["Packaged macOS app on supported Macs"] --> T2["Secure Enclave-backed release + Touch ID"]
     G["TOTP authenticator"] --> G2["second-factor gate"]
-    R["24-word phrase + 8 one-time recovery codes"] --> R2["recovery release path"]
+    R["24-word phrase"] --> R2["recovery release path"]
 
     P2 --> H["Helper-owned active key session"]
     T2 --> H
@@ -135,26 +135,26 @@ flowchart TD
 
 ## Install
 
-The signed / notarized macOS DMG is the recommended install path for Mac users. Source install remains available for Linux, development, and fallback cases. The macOS DMG is available from [GitHub Releases](https://github.com/max-ng/datamoat/releases) and includes Secure Enclave + Touch ID unlock on supported Macs, menu-bar auto-start at login, and packaged auto-update through GitHub Releases. Windows x64 and ARM64 are available as unsigned ZIP + `DataMoat.exe` packages while the signed installer is completed.
+The signed / notarized macOS DMG is the recommended install path for Mac users. Source install remains available for Linux, development, and fallback cases. The macOS DMG is available from DataMoat release downloads at [https://datamoat.org/download/macos](https://datamoat.org/download/macos) and includes Secure Enclave + Touch ID unlock on supported Macs, menu-bar auto-start at login, and packaged auto-update through DataMoat's R2 release feed. Windows x64 and ARM64 are available as unsigned ZIP + `DataMoat.exe` packages while the signed installer is completed.
 
 Release downloads:
 
-[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.17-macos-arm64.dmg)
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.17-win32-x64.zip)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.17-win32-arm64.zip)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://datamoat.org/download/macos)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://datamoat.org/download/windows-x64)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://datamoat.org/download/windows-arm64)
 
 Each Windows ZIP includes `DataMoat.exe` plus the required app files. Unzip the Windows package, keep the folder contents together, and run `Install DataMoat.cmd` once. That launches DataMoat and registers startup for the current Windows user so the tray/background app comes back after login or restart. This is still a portable ZIP package, not a signed single-file installer yet.
 
 ### AI-Assisted Install
 
-For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.17-macos-arm64.dmg). Do not start with `git clone` on macOS unless the user explicitly wants source install or the packaged release is unavailable.
+For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://datamoat.org/download/macos). Do not start with `git clone` on macOS unless the user explicitly wants source install or the packaged release is unavailable.
 
 You can ask Claude CLI, Codex CLI, or OpenClaw to install DataMoat when you are looking at the target desktop.
 
 Typical prompt:
 
 ```text
-Install DataMoat on this Mac using the latest signed macOS DMG from GitHub Releases. Copy DataMoat.app to Applications, launch it, and tell me when the local setup UI appears so I can complete the password, authenticator, Touch ID, and recovery steps myself on the protected desktop.
+Install DataMoat on this Mac using the latest signed macOS DMG from DataMoat release downloads. Copy DataMoat.app to Applications, launch it, and tell me when the local setup UI appears so I can complete the password, authenticator, Touch ID, and recovery steps myself on the protected desktop.
 ```
 
 Important:
@@ -176,14 +176,14 @@ Do not use git clone or source install unless the DMG install fails.
 
 Steps:
 1. Download the latest macOS DMG:
-   https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.17-macos-arm64.dmg
+   https://datamoat.org/download/macos
 2. Mount the DMG.
 3. Copy DataMoat.app to ~/Applications.
 4. Launch exactly:
    ~/Applications/DataMoat.app/Contents/MacOS/DataMoat --datamoat-remote-no-screen
 
 Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
-Do not complete password, authenticator, Touch ID, recovery phrase, or recovery-code setup in this chat.
+Do not complete password, authenticator, Touch ID, or recovery phrase setup in this chat.
 
 After launch, tell me:
 DataMoat was installed from the DMG and remote no-screen capture was started. I must finish setup later on the protected desktop GUI.
@@ -197,16 +197,16 @@ Install DataMoat on this Windows machine using the latest Windows ZIP and DataMo
 Do not use git clone or source install.
 
 Steps:
-1. Download the correct latest Windows ZIP from GitHub Releases:
-   x64: https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.17-win32-x64.zip
-   ARM64: https://github.com/max-ng/datamoat/releases/latest/download/DataMoat-0.1.17-win32-arm64.zip
+1. Download the correct latest Windows ZIP from DataMoat release downloads:
+   x64: https://datamoat.org/download/windows-x64
+   ARM64: https://datamoat.org/download/windows-arm64
 2. Extract the ZIP into Downloads.
 3. Launch exactly:
    %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen
 
 Use DataMoat-win32-x64 for x64 or DataMoat-win32-arm64 for ARM64.
 Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
-Do not complete password, authenticator, recovery phrase, or recovery-code setup in this chat.
+Do not complete password, authenticator, or recovery phrase setup in this chat.
 
 After launch, tell me:
 DataMoat was installed from the Windows ZIP and remote no-screen capture was started. I must finish setup later on the protected desktop GUI.
@@ -218,7 +218,7 @@ Manual macOS launch command after installing the DMG:
 "$HOME/Applications/DataMoat.app/Contents/MacOS/DataMoat" --datamoat-remote-no-screen
 ```
 
-Use this mode to prevent the password, authenticator enrollment secret, Touch ID prompt, 24-word recovery phrase, and recovery codes from ever appearing in Telegram, WhatsApp, OpenClaw chat, screenshots, or any other remote relay. DataMoat starts collecting supported local records immediately with pre-setup encrypted capture, but the full unlock setup must still be completed later on the protected desktop.
+Use this mode to prevent the password, authenticator enrollment secret, Touch ID prompt, and 24-word recovery phrase from ever appearing in Telegram, WhatsApp, OpenClaw chat, screenshots, or any other remote relay. DataMoat starts collecting supported local records immediately with pre-setup encrypted capture, but the full unlock setup must still be completed later on the protected desktop.
 
 After the remote install finishes, the agent should report that DataMoat was installed successfully and is already capturing supported local records. When you return to the protected desktop, open DataMoat there and complete setup locally. Do not complete password, authenticator, Touch ID, or recovery setup inside the bot conversation.
 
@@ -253,7 +253,6 @@ The first setup flow shows recovery material locally:
 - password
 - authenticator enrollment secret / QR
 - 24-word recovery phrase
-- 8 one-time recovery codes
 
 Final vault setup should be completed on the actual desktop screen of the machine being protected, not relayed through chat apps, screenshots, or remote messaging channels.
 
@@ -270,7 +269,7 @@ datamoat update check
 
 Audit verification checks the integrity of the audit log that is present on disk. Without an external checkpoint, it cannot by itself prove that a local audit file was never deleted, truncated, or fully rewritten by someone with write access.
 
-Live git source installs support in-place source updates. Packaged macOS installs use GitHub Releases as the packaged update source: the DMG is for first install, and later packaged updates download a signed ZIP payload and apply it through the macOS app updater instead of asking users to mount a new DMG for every release.
+Live git source installs support in-place source updates. Packaged macOS installs use DataMoat R2 release downloads as the packaged update source: the DMG is for first install, and later packaged updates download a signed ZIP payload and apply it through the macOS app updater instead of asking users to mount a new DMG for every release.
 
 ## Source Service Boundaries
 

@@ -4,7 +4,7 @@ import * as path from 'path'
 import {
   REFERENCED_ATTACHMENTS_FILE,
 } from './config'
-import type { RawRecord, Source } from './types'
+import type { RawRecord, Session, Source } from './types'
 import {
   getCaptureSessionId,
   getVaultSessionId,
@@ -24,7 +24,7 @@ import {
 } from './logging'
 
 const STATE_PREFIX = 'dmstate1:'
-const INDEX_VERSION = 1
+const INDEX_VERSION = 2
 const MAX_REFERENCE_SCAN_CHARS = 256 * 1024
 const MAX_REFERENCES_PER_TEXT = 50
 const MAX_REFERENCED_FILE_BYTES = 100 * 1024 * 1024
@@ -32,6 +32,8 @@ const MAX_BACKFILL_SESSIONS_PER_RUN = 5000
 const MAX_BACKFILL_RECORDS_PER_SESSION = 5000
 const MAX_QUEUE_BATCHES_PER_DRAIN = 25
 const MAX_BACKFILL_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.DATAMOAT_REFERENCED_ATTACHMENT_BACKFILL_CONCURRENCY || 3) || 3))
+const AUTO_BACKFILL_DELAY_MS = positiveInt(process.env.DATAMOAT_REFERENCED_ATTACHMENT_AUTO_BACKFILL_DELAY_MS, 45000)
+const AUTO_BACKFILL_COOLDOWN_MS = positiveInt(process.env.DATAMOAT_REFERENCED_ATTACHMENT_AUTO_BACKFILL_COOLDOWN_MS, 6 * 60 * 60 * 1000)
 
 type PermissionIssueRecord = {
   kind: string
@@ -57,18 +59,29 @@ type ReferencedAttachmentRecord = {
   capturedAt: string
 }
 
+type CheckedSessionRecord = {
+  source: Source
+  sessionUid: string
+  messageCount: number
+  lastTimestamp: string
+  checkedAt: string
+}
+
 type ReferencedAttachmentIndex = {
   version: number
   enabled: boolean
+  enabledByUserAt: string | null
   updatedAt: string
   lastScanAt: string | null
   previousSessionsChecked: number
   protected: Record<string, ReferencedAttachmentRecord>
   permissionIssues: Record<string, PermissionIssueRecord>
+  checkedSessions: Record<string, CheckedSessionRecord>
 }
 
 export type ReferencedAttachmentStatus = {
   enabled: boolean
+  enabledByUserAt: string | null
   running: boolean
   protectedFiles: number
   previousSessionsChecked: number
@@ -103,6 +116,8 @@ let queue: QueuedRawBatch[] = []
 let drainScheduled = false
 let scanInFlight: Promise<ReferencedAttachmentStatus> | null = null
 let activeScanProgress: ReferencedAttachmentStatus['scanProgress'] = null
+let autoBackfillTimer: ReturnType<typeof setTimeout> | null = null
+let lastAutoBackfillQueuedAt = 0
 
 const REFERENCED_FILE_EXTENSIONS = [
   'png', 'jpg', 'jpeg', 'gif', 'webp',
@@ -145,15 +160,22 @@ const MIME_BY_EXT: Record<string, string> = {
   log: 'text/plain',
 }
 
+function positiveInt(value: unknown, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
 function defaultIndex(): ReferencedAttachmentIndex {
   return {
     version: INDEX_VERSION,
     enabled: false,
+    enabledByUserAt: null,
     updatedAt: new Date().toISOString(),
     lastScanAt: null,
     previousSessionsChecked: 0,
     protected: {},
     permissionIssues: {},
+    checkedSessions: {},
   }
 }
 
@@ -190,9 +212,11 @@ async function readIndex(): Promise<ReferencedAttachmentIndex> {
 function normalizeIndex(value: unknown): ReferencedAttachmentIndex {
   if (!value || typeof value !== 'object') return defaultIndex()
   const raw = value as Partial<ReferencedAttachmentIndex>
+  const enabledByUserAt = typeof raw.enabledByUserAt === 'string' ? raw.enabledByUserAt : null
   return {
     version: INDEX_VERSION,
-    enabled: raw.enabled === true,
+    enabled: raw.enabled === true && !!enabledByUserAt,
+    enabledByUserAt,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : new Date().toISOString(),
     lastScanAt: typeof raw.lastScanAt === 'string' ? raw.lastScanAt : null,
     previousSessionsChecked: typeof raw.previousSessionsChecked === 'number'
@@ -201,6 +225,9 @@ function normalizeIndex(value: unknown): ReferencedAttachmentIndex {
     protected: raw.protected && typeof raw.protected === 'object' ? raw.protected : {},
     permissionIssues: raw.permissionIssues && typeof raw.permissionIssues === 'object'
       ? raw.permissionIssues
+      : {},
+    checkedSessions: raw.checkedSessions && typeof raw.checkedSessions === 'object'
+      ? raw.checkedSessions
       : {},
   }
 }
@@ -222,6 +249,7 @@ async function writeIndex(index: ReferencedAttachmentIndex): Promise<void> {
 }
 
 function statusFromIndex(index: ReferencedAttachmentIndex, running = false): ReferencedAttachmentStatus {
+  const visibleRunning = index.enabled && running
   const coveredApps = new Set<Source>()
   const uniqueAttachments = new Set<string>()
   const folderAttachments = new Map<string, Set<string>>()
@@ -238,25 +266,80 @@ function statusFromIndex(index: ReferencedAttachmentIndex, running = false): Ref
     .slice(0, 8)
   return {
     enabled: index.enabled,
-    running,
+    enabledByUserAt: index.enabledByUserAt,
+    running: visibleRunning,
     protectedFiles: uniqueAttachments.size,
-    previousSessionsChecked: Math.max(index.previousSessionsChecked, activeScanProgress?.checked ?? 0),
+    previousSessionsChecked: Math.max(
+      index.previousSessionsChecked,
+      Object.keys(index.checkedSessions).length,
+      visibleRunning ? activeScanProgress?.checked ?? 0 : 0,
+    ),
     coveredApps: Array.from(coveredApps).sort(),
     protectedFolders,
     permissionIssues: Object.values(index.permissionIssues).sort((a, b) => a.label.localeCompare(b.label)),
-    scanProgress: activeScanProgress,
+    scanProgress: visibleRunning ? activeScanProgress : null,
     lastScanAt: index.lastScanAt,
     updatedAt: index.updatedAt || null,
     platform: process.platform,
   }
 }
 
+function sessionScanKey(session: Pick<Session, 'source' | 'uid'>): string {
+  return crypto
+    .createHash('sha256')
+    .update(`${session.source}\0${session.uid}`)
+    .digest('hex')
+}
+
+function checkedSessionMatches(record: CheckedSessionRecord | undefined, session: Session): boolean {
+  return !!record
+    && record.source === session.source
+    && record.sessionUid === session.uid
+    && record.messageCount === session.messageCount
+    && record.lastTimestamp === session.lastTimestamp
+}
+
+function markSessionChecked(index: ReferencedAttachmentIndex, session: Session, checkedAt = new Date().toISOString()): void {
+  index.checkedSessions[sessionScanKey(session)] = {
+    source: session.source,
+    sessionUid: session.uid,
+    messageCount: session.messageCount,
+    lastTimestamp: session.lastTimestamp,
+    checkedAt,
+  }
+}
+
+function migrateLegacyCheckedSessions(index: ReferencedAttachmentIndex, sessions: Session[]): boolean {
+  if (Object.keys(index.checkedSessions).length > 0) return false
+  if (sessions.length === 0 || index.previousSessionsChecked < sessions.length) return false
+  const checkedAt = index.lastScanAt || index.updatedAt || new Date().toISOString()
+  for (const session of sessions) markSessionChecked(index, session, checkedAt)
+  return true
+}
+
+function pruneCheckedSessions(index: ReferencedAttachmentIndex, sessions: Session[]): boolean {
+  const current = new Set(sessions.map(sessionScanKey))
+  let changed = false
+  for (const key of Object.keys(index.checkedSessions)) {
+    if (!current.has(key)) {
+      delete index.checkedSessions[key]
+      changed = true
+    }
+  }
+  return changed
+}
+
+function sessionsNeedingBackfill(index: ReferencedAttachmentIndex, sessions: Session[], reason: string): Session[] {
+  if (reason === 'manual') return sessions
+  return sessions.filter(session => !checkedSessionMatches(index.checkedSessions[sessionScanKey(session)], session))
+}
+
 export async function referencedAttachmentStatus(): Promise<ReferencedAttachmentStatus> {
-  const running = !!scanInFlight || drainScheduled
   const index = await readIndex()
   if (index.enabled && clearResolvedPermissionIssues(index)) {
     await writeIndex(index)
   }
+  const running = index.enabled && (!!scanInFlight || drainScheduled)
   return statusFromIndex(index, running)
 }
 
@@ -265,7 +348,6 @@ export async function readReferencedAttachmentsForSessionUI(
   sessionUid: string,
 ): Promise<ReferencedAttachmentForUI[]> {
   const index = await readIndex()
-  if (!index.enabled) return []
   const seen = new Set<string>()
   const out: ReferencedAttachmentForUI[] = []
   for (const item of Object.values(index.protected)) {
@@ -285,14 +367,20 @@ export async function readReferencedAttachmentsForSessionUI(
 
 export async function setReferencedAttachmentBackupEnabled(enabled: boolean): Promise<ReferencedAttachmentStatus> {
   const index = await readIndex()
+  const now = new Date().toISOString()
   index.enabled = enabled
+  index.enabledByUserAt = enabled ? (index.enabledByUserAt || now) : null
   await writeIndex(index)
   updateHealth('referenced-attachments', {
     enabled,
-    updatedAt: new Date().toISOString(),
+    enabledByUserAt: index.enabledByUserAt,
+    updatedAt: now,
   })
   writeAuditEvent('referenced-attachments', enabled ? 'enabled' : 'disabled')
-  if (enabled) queueReferencedAttachmentBackfill('enabled')
+  if (enabled) {
+    lastAutoBackfillQueuedAt = Date.now()
+    queueReferencedAttachmentBackfill('enabled')
+  }
   return statusFromIndex(index, enabled)
 }
 
@@ -324,6 +412,76 @@ export function queueReferencedAttachmentBackfill(reason: string): void {
     }) as Promise<ReferencedAttachmentStatus>
 }
 
+export function scheduleReferencedAttachmentBackfillAfterUnlock(reason = 'unlock-idle'): void {
+  if (autoBackfillTimer || scanInFlight) return
+  autoBackfillTimer = setTimeout(() => {
+    autoBackfillTimer = null
+    void maybeQueueReferencedAttachmentBackfill(reason)
+  }, AUTO_BACKFILL_DELAY_MS)
+  autoBackfillTimer.unref?.()
+  updateHealth('referenced-attachments', {
+    autoBackfillScheduledAt: new Date().toISOString(),
+    autoBackfillDelayMs: AUTO_BACKFILL_DELAY_MS,
+    autoBackfillReason: reason,
+  })
+}
+
+async function maybeQueueReferencedAttachmentBackfill(reason: string): Promise<void> {
+  try {
+    if (scanInFlight) return
+    const now = Date.now()
+    if (lastAutoBackfillQueuedAt > 0 && now - lastAutoBackfillQueuedAt < AUTO_BACKFILL_COOLDOWN_MS) {
+      updateHealth('referenced-attachments', {
+        running: false,
+        lastAutoBackfillSkippedAt: new Date().toISOString(),
+        lastAutoBackfillSkipReason: 'cooldown',
+        autoBackfillCooldownMs: AUTO_BACKFILL_COOLDOWN_MS,
+      })
+      return
+    }
+
+    const index = await readIndex()
+    if (!index.enabled) {
+      updateHealth('referenced-attachments', {
+        running: false,
+        lastAutoBackfillSkippedAt: new Date().toISOString(),
+        lastAutoBackfillSkipReason: 'not_enabled_by_user',
+      })
+      return
+    }
+
+    const sessions = (await loadSessions()).slice(0, MAX_BACKFILL_SESSIONS_PER_RUN)
+    const sessionsToScan = sessionsNeedingBackfill(index, sessions, reason)
+    if (sessionsToScan.length === 0) {
+      updateHealth('referenced-attachments', {
+        running: false,
+        lastAutoBackfillSkippedAt: new Date().toISOString(),
+        lastAutoBackfillSkipReason: 'no_sessions_need_backfill',
+        totalSessions: sessions.length,
+        previousSessionsChecked: index.previousSessionsChecked,
+        protectedFiles: statusFromIndex(index).protectedFiles,
+      })
+      return
+    }
+
+    lastAutoBackfillQueuedAt = now
+    updateHealth('referenced-attachments', {
+      autoBackfillQueuedAt: new Date().toISOString(),
+      autoBackfillReason: reason,
+      sessionsToScan: sessionsToScan.length,
+      totalSessions: sessions.length,
+    })
+    queueReferencedAttachmentBackfill(reason)
+  } catch (error) {
+    writeLog('warn', 'referenced-attachments', 'auto_backfill_failed', { reason, error: safeError(error) })
+    updateHealth('referenced-attachments', {
+      lastErrorAt: new Date().toISOString(),
+      lastError: safeError(error),
+      lastAutoBackfillSkipReason: 'error',
+    })
+  }
+}
+
 function scheduleDrain(): void {
   if (drainScheduled) return
   drainScheduled = true
@@ -341,7 +499,8 @@ async function drainQueuedRawBatches(): Promise<void> {
     let index = await readIndex()
     if (!index.enabled) return
     for (const batch of batches) {
-      index = await backUpRawRecordReferences(index, batch.source, batch.sessionUid, batch.records)
+      const result = await backUpRawRecordReferences(index, batch.source, batch.sessionUid, batch.records)
+      index = result.index
     }
     index.lastScanAt = new Date().toISOString()
     await writeIndex(index)
@@ -363,11 +522,33 @@ export async function scanPreviousSessionsForReferencedAttachments(
   if (!index.enabled) return statusFromIndex(index)
 
   const sessions = (await loadSessions()).slice(0, MAX_BACKFILL_SESSIONS_PER_RUN)
+  let indexChanged = migrateLegacyCheckedSessions(index, sessions)
+  indexChanged = pruneCheckedSessions(index, sessions) || indexChanged
+  const sessionsToScan = sessionsNeedingBackfill(index, sessions, reason)
+  if (sessionsToScan.length === 0) {
+    const previousSessionsChecked = Math.max(index.previousSessionsChecked, Object.keys(index.checkedSessions).length)
+    if (previousSessionsChecked !== index.previousSessionsChecked) {
+      index.previousSessionsChecked = previousSessionsChecked
+      indexChanged = true
+    }
+    if (indexChanged) await writeIndex(index)
+    updateHealth('referenced-attachments', {
+      running: false,
+      lastScanSkippedAt: new Date().toISOString(),
+      lastScanSkipReason: 'no_sessions_need_backfill',
+      reason,
+      totalSessions: sessions.length,
+      previousSessionsChecked: index.previousSessionsChecked,
+      protectedFiles: statusFromIndex(index).protectedFiles,
+    })
+    return statusFromIndex(index)
+  }
+
   let checked = 0
   activeScanProgress = {
     phase: 'checking previous sessions',
     checked,
-    total: sessions.length,
+    total: sessionsToScan.length,
     startedAt: new Date().toISOString(),
   }
   updateHealth('referenced-attachments', {
@@ -375,17 +556,29 @@ export async function scanPreviousSessionsForReferencedAttachments(
     lastScanStartedAt: activeScanProgress.startedAt,
     reason,
     totalSessions: sessions.length,
+    sessionsToScan: sessionsToScan.length,
     concurrency: MAX_BACKFILL_CONCURRENCY,
   })
 
   let nextSessionIndex = 0
+  let checkpointWrite = Promise.resolve()
+  const queueCheckpoint = (): void => {
+    checkpointWrite = checkpointWrite
+      .catch(() => undefined)
+      .then(() => writeIndex(index))
+      .catch(error => {
+        writeLog('warn', 'referenced-attachments', 'checkpoint_failed', { error: safeError(error) })
+      })
+  }
   const worker = async (): Promise<void> => {
-    while (nextSessionIndex < sessions.length) {
-      const session = sessions[nextSessionIndex]
+    while (nextSessionIndex < sessionsToScan.length) {
+      const session = sessionsToScan[nextSessionIndex]
       nextSessionIndex += 1
       try {
         const rawRecords = (await readRawRecords(session.source, session.uid)).slice(0, MAX_BACKFILL_RECORDS_PER_SESSION)
-        index = await backUpRawRecordReferences(index, session.source, session.uid, rawRecords)
+        const result = await backUpRawRecordReferences(index, session.source, session.uid, rawRecords)
+        index = result.index
+        if (!result.hadPermissionIssue) markSessionChecked(index, session)
       } catch (error) {
         writeLog('warn', 'referenced-attachments', 'session_scan_skipped', {
           source: session.source,
@@ -395,11 +588,13 @@ export async function scanPreviousSessionsForReferencedAttachments(
       } finally {
         checked += 1
         if (activeScanProgress) activeScanProgress.checked = checked
-        if (checked % 10 === 0 || checked === sessions.length) {
+        if (checked % 10 === 0 || checked === sessionsToScan.length) {
+          index.previousSessionsChecked = Math.max(index.previousSessionsChecked, Object.keys(index.checkedSessions).length)
+          if (checked % 10 === 0) queueCheckpoint()
           updateHealth('referenced-attachments', {
             running: true,
             progressChecked: checked,
-            progressTotal: sessions.length,
+            progressTotal: sessionsToScan.length,
             protectedFiles: statusFromIndex(index, true).protectedFiles,
           })
         }
@@ -408,10 +603,11 @@ export async function scanPreviousSessionsForReferencedAttachments(
   }
 
   await Promise.all(
-    Array.from({ length: Math.min(MAX_BACKFILL_CONCURRENCY, sessions.length || 1) }, () => worker()),
+    Array.from({ length: Math.min(MAX_BACKFILL_CONCURRENCY, sessionsToScan.length || 1) }, () => worker()),
   )
 
-  index.previousSessionsChecked = Math.max(index.previousSessionsChecked, checked)
+  await checkpointWrite
+  index.previousSessionsChecked = Math.max(index.previousSessionsChecked, Object.keys(index.checkedSessions).length)
   index.lastScanAt = new Date().toISOString()
   await writeIndex(index)
   updateHealth('referenced-attachments', {
@@ -419,12 +615,16 @@ export async function scanPreviousSessionsForReferencedAttachments(
     lastScanAt: index.lastScanAt,
     protectedFiles: statusFromIndex(index).protectedFiles,
     previousSessionsChecked: index.previousSessionsChecked,
+    sessionsScanned: checked,
+    totalSessions: sessions.length,
     permissionIssueKinds: Object.keys(index.permissionIssues),
   })
   writeAuditEvent('referenced-attachments', 'scan_completed', {
     reason,
     protectedFiles: statusFromIndex(index).protectedFiles,
     previousSessionsChecked: index.previousSessionsChecked,
+    sessionsScanned: checked,
+    totalSessions: sessions.length,
   })
   return statusFromIndex(index)
 }
@@ -434,7 +634,8 @@ async function backUpRawRecordReferences(
   source: Source,
   sessionUid: string,
   records: RawRecord[],
-): Promise<ReferencedAttachmentIndex> {
+): Promise<{ index: ReferencedAttachmentIndex; hadPermissionIssue: boolean }> {
+  let hadPermissionIssue = false
   for (const record of records) {
     const text = rawRecordSearchText(record)
     if (!text) continue
@@ -444,6 +645,7 @@ async function backUpRawRecordReferences(
       if (index.protected[key]) continue
       const result = await tryBackUpReferencedFile(filePath)
       if (result.permissionIssue) {
+        hadPermissionIssue = true
         index.permissionIssues[result.permissionIssue.kind] = result.permissionIssue
       }
       const saved = result.saved
@@ -464,7 +666,7 @@ async function backUpRawRecordReferences(
       }
     }
   }
-  return index
+  return { index, hadPermissionIssue }
 }
 
 function rawRecordSearchText(record: RawRecord): string {

@@ -1,11 +1,12 @@
 import { platform } from 'os'
 import * as fs from 'fs'
 import * as path from 'path'
-import { execFile, execFileSync } from 'child_process'
+import { execFile, execFileSync, spawnSync } from 'child_process'
 import { detectInstallContext } from './install-context'
 import { STATE_DIR } from './config'
 
 const SERVICE = process.env.DATAMOAT_KEYCHAIN_SERVICE?.trim() || 'DataMoat'
+const MAC_HELPER_SECRET_SERVICE = process.env.DATAMOAT_MAC_HELPER_KEYCHAIN_SERVICE?.trim() || `${SERVICE}.helper-v2`
 const VAULT_KEY_ACCOUNT = 'vaultKey'
 const BACKGROUND_CAPTURE_SECRET_ACCOUNT = 'backgroundCaptureSecret'
 const BOOTSTRAP_CAPTURE_SECRET_ACCOUNT = 'bootstrapCaptureSecret'
@@ -17,6 +18,7 @@ export const IS_MAC = platform() === 'darwin'
 const TOUCHID_HELPER_BUNDLE_EXECUTABLE = path.join('DataMoatTouchID.app', 'Contents', 'MacOS', 'DataMoatTouchID')
 const TOUCHID_DMG_ONLY_REASON = 'Touch ID + Secure Enclave is only available in the packaged DMG app.'
 const KEYCHAIN_UNAVAILABLE_REASON = 'macOS login keychain is unavailable'
+let cachedMacHelperSecretAccessIdentity: string | null | undefined
 
 export type SecureEnclaveStatus = {
   available: boolean
@@ -28,6 +30,10 @@ async function secretStore(account: string, value: string): Promise<void> {
     windowsStoreSecret(account, value)
     return
   }
+  if (IS_MAC) {
+    await macStoreSecret(account, value)
+    return
+  }
   assertDefaultKeychainAvailable()
   const keytar = await import('keytar')
   await keytar.setPassword(SERVICE, account, value)
@@ -35,6 +41,13 @@ async function secretStore(account: string, value: string): Promise<void> {
 
 async function secretLoad(account: string): Promise<string | null> {
   if (platform() === 'win32') return windowsLoadSecret(account)
+  if (IS_MAC) {
+    try {
+      return await macLoadSecret(account)
+    } catch {
+      return null
+    }
+  }
   try {
     assertDefaultKeychainAvailable()
     const keytar = await import('keytar')
@@ -47,6 +60,10 @@ async function secretLoad(account: string): Promise<string | null> {
 async function secretDelete(account: string): Promise<void> {
   if (platform() === 'win32') {
     windowsDeleteSecret(account)
+    return
+  }
+  if (IS_MAC) {
+    try { await macDeleteSecret(account) } catch { /* ignore */ }
     return
   }
   try {
@@ -114,6 +131,23 @@ function windowsLoadSecret(account: string): string | null {
 
 function windowsDeleteSecret(account: string): void {
   try { fs.rmSync(windowsSecretFileForAccount(account), { force: true }) } catch { /* ignore */ }
+}
+
+async function macStoreSecret(account: string, secret: string): Promise<void> {
+  await execTouchId(['--secret-store', '--service', MAC_HELPER_SECRET_SERVICE, '--account', account], secret)
+}
+
+async function macLoadSecret(account: string): Promise<string | null> {
+  try {
+    const value = await execTouchId(['--secret-load', '--service', MAC_HELPER_SECRET_SERVICE, '--account', account])
+    return value || null
+  } catch {
+    return null
+  }
+}
+
+async function macDeleteSecret(account: string): Promise<void> {
+  await execTouchId(['--secret-delete', '--service', MAC_HELPER_SECRET_SERVICE, '--account', account])
 }
 
 function linuxShouldUseBootstrapFileSecret(): boolean {
@@ -241,10 +275,14 @@ export async function bootstrapCaptureSecretDelete(): Promise<void> {
   }
 }
 
-function execTouchId(args: string[]): Promise<string> {
+function touchIdHelperTimeoutMs(args: string[]): number {
+  return args.includes('--secret-load') ? 5000 : 30000
+}
+
+function execTouchId(args: string[], input?: string): Promise<string> {
   const helperPath = resolveTouchIdHelperPath()
   return new Promise((resolve, reject) => {
-    execFile(helperPath, args, { timeout: 30000 }, (err, stdout, stderr) => {
+    const child = execFile(helperPath, args, { timeout: touchIdHelperTimeoutMs(args) }, (err, stdout, stderr) => {
       if (err) {
         const detail = stderr?.trim()
           || [err.message, (err as NodeJS.ErrnoException & { signal?: string }).signal ? `signal ${(err as NodeJS.ErrnoException & { signal?: string }).signal}` : '']
@@ -257,6 +295,7 @@ function execTouchId(args: string[]): Promise<string> {
       }
       resolve(String(stdout || '').trim())
     })
+    if (input !== undefined) child.stdin?.end(input)
   })
 }
 
@@ -276,6 +315,43 @@ function resolveTouchIdHelperPath(): string {
     if (candidate && fs.existsSync(candidate)) return candidate
   }
   return bareCandidate
+}
+
+export function macHelperSecretAccessRequesterPath(): string | null {
+  if (!IS_MAC) return null
+  const helperPath = resolveTouchIdHelperPath()
+  return fs.existsSync(helperPath) ? path.resolve(helperPath) : null
+}
+
+export function macHelperSecretAccessRequesterIdentity(): string | null {
+  if (!IS_MAC) return null
+  if (cachedMacHelperSecretAccessIdentity !== undefined) return cachedMacHelperSecretAccessIdentity
+
+  const helperPath = macHelperSecretAccessRequesterPath()
+  if (!helperPath) {
+    cachedMacHelperSecretAccessIdentity = null
+    return cachedMacHelperSecretAccessIdentity
+  }
+
+  try {
+    const result = spawnSync('/usr/bin/codesign', ['-dv', '--verbose=4', helperPath], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 3000,
+    })
+    const output = `${result.stdout || ''}\n${result.stderr || ''}`
+    const identifier = output.match(/^Identifier=(.+)$/m)?.[1]?.trim() || ''
+    const teamId = output.match(/^TeamIdentifier=(.+)$/m)?.[1]?.trim() || ''
+    const cdHash = output.match(/^CDHash=(.+)$/m)?.[1]?.trim()
+      || output.match(/^CandidateCDHash\w* sha256=(.+)$/m)?.[1]?.trim()
+      || ''
+    cachedMacHelperSecretAccessIdentity = identifier && teamId && teamId !== 'not set' && cdHash
+      ? `darwin-touchid-helper-codesign-v1:${teamId}:${identifier}:${cdHash}`
+      : null
+  } catch {
+    cachedMacHelperSecretAccessIdentity = null
+  }
+  return cachedMacHelperSecretAccessIdentity
 }
 
 export async function secureEnclaveAvailable(): Promise<boolean> {

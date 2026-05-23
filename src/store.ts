@@ -180,6 +180,10 @@ const EXT_MIME: Record<string, string> = Object.fromEntries(
   Object.entries(EXT_MAP).map(([mime, ext]) => [ext, mime]),
 ) as Record<string, string>
 
+function validAttachmentId(id: string): boolean {
+  return /^[a-f0-9]{64}$/i.test(id)
+}
+
 export async function saveAttachment(base64Data: string, mediaType: string): Promise<string> {
   const sessionId = requireWriteSession()
   const buf = Buffer.from(base64Data, 'base64')
@@ -194,14 +198,16 @@ export async function saveAttachment(base64Data: string, mediaType: string): Pro
 }
 
 function attachmentFileInfo(id: string): { path: string; ext: string; encrypted: boolean } | null {
+  if (!validAttachmentId(id)) return null
+  const normalizedId = id.toLowerCase()
   try {
     const files = fs.readdirSync(ATTACHMENTS_DIR)
     for (const file of files) {
-      const encryptedMatch = file.match(new RegExp(`^${id}\\.([^.]+)\\.dmenc$`))
+      const encryptedMatch = file.match(new RegExp(`^${normalizedId}\\.([^.]+)\\.dmenc$`, 'i'))
       if (encryptedMatch) {
         return { path: path.join(ATTACHMENTS_DIR, file), ext: encryptedMatch[1], encrypted: true }
       }
-      const legacyMatch = file.match(new RegExp(`^${id}\\.([^.]+)$`))
+      const legacyMatch = file.match(new RegExp(`^${normalizedId}\\.([^.]+)$`, 'i'))
       if (legacyMatch) {
         return { path: path.join(ATTACHMENTS_DIR, file), ext: legacyMatch[1], encrypted: false }
       }
@@ -464,6 +470,73 @@ export async function readSessionMessagesPage(session: Session, offset: number, 
   return await parseSessionMessageLines(lines)
 }
 
+export async function forEachSessionMessageBatch(
+  session: Session,
+  batchSize: number,
+  visitor: (messages: Message[]) => boolean | Promise<boolean>,
+): Promise<void> {
+  const filePath = path.join(VAULT_DIR, session.vaultPath)
+  if (!fs.existsSync(filePath)) return
+  const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
+  const reader = readline.createInterface({ input: stream, crlfDelay: Infinity })
+  const size = Math.max(1, Math.floor(batchSize))
+  let batch: string[] = []
+
+  const flush = async (): Promise<boolean> => {
+    if (batch.length === 0) return true
+    const current = batch
+    batch = []
+    return await visitor(await parseSessionMessageLines(current))
+  }
+
+  try {
+    for await (const line of reader) {
+      if (!line) continue
+      batch.push(line)
+      if (batch.length >= size && !await flush()) break
+    }
+    await flush()
+  } finally {
+    reader.close()
+    stream.destroy()
+  }
+}
+
+export async function forEachSessionMessageLineBatch(
+  session: Session,
+  batchSize: number,
+  visitor: (lines: string[]) => boolean | Promise<boolean>,
+): Promise<void> {
+  const filePath = path.join(VAULT_DIR, session.vaultPath)
+  if (!fs.existsSync(filePath)) return
+  const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
+  const reader = readline.createInterface({ input: stream, crlfDelay: Infinity })
+  const size = Math.max(1, Math.floor(batchSize))
+  let batch: string[] = []
+
+  const flush = async (): Promise<boolean> => {
+    if (batch.length === 0) return true
+    const current = batch
+    batch = []
+    const decrypted = hasVaultSession() && !current[0].startsWith('{')
+      ? await decryptLinesForSession(requireReadSession(), current)
+      : current
+    return await visitor(decrypted)
+  }
+
+  try {
+    for await (const line of reader) {
+      if (!line) continue
+      batch.push(line)
+      if (batch.length >= size && !await flush()) break
+    }
+    await flush()
+  } finally {
+    reader.close()
+    stream.destroy()
+  }
+}
+
 async function parseSessionMessageLines(lines: string[]): Promise<Message[]> {
   if (lines.length === 0) return []
   const decrypted = hasVaultSession() && !lines[0].startsWith('{')
@@ -497,18 +570,40 @@ async function readNonEmptyLinePage(filePath: string, offset: number, limit: num
   return selected
 }
 
+function fileStartsWithPlaintextJsonLine(filePath: string): boolean {
+  const fd = fs.openSync(filePath, 'r')
+  try {
+    const buffer = Buffer.alloc(8192)
+    let position = 0
+    while (true) {
+      const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, position)
+      if (bytesRead <= 0) return false
+      for (let i = 0; i < bytesRead; i += 1) {
+        const byte = buffer[i]
+        if (byte === 10 || byte === 13 || byte === 32 || byte === 9) continue
+        return byte === 123 // "{"
+      }
+      position += bytesRead
+    }
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
 export async function encryptVaultFiles(): Promise<void> {
   if (!hasVaultSession()) return
   for (const source of ALL_SOURCES) {
     const dir = path.join(VAULT_DIR, source)
     if (!fs.existsSync(dir)) continue
     for (const file of fs.readdirSync(dir)) {
+      if (file === '.DS_Store' || file.startsWith('._')) continue
       if (!file.endsWith('.jsonl')) continue
       const filePath = path.join(dir, file)
       try {
+        if (!fileStartsWithPlaintextJsonLine(filePath)) continue
         const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean)
-        if (!lines.some(line => line.startsWith('{'))) continue
         const plaintext = lines.filter(line => line.startsWith('{'))
+        if (plaintext.length === 0) continue
         const encryptedPlaintext = await encryptLinesForSession(requireReadSession(), plaintext)
         let index = 0
         const rewritten = lines.map(line => (
@@ -527,6 +622,7 @@ export async function encryptAttachmentFiles(): Promise<void> {
   if (!fs.existsSync(ATTACHMENTS_DIR)) return
 
   for (const file of fs.readdirSync(ATTACHMENTS_DIR)) {
+    if (file === '.DS_Store' || file.startsWith('._')) continue
     if (file.endsWith('.dmenc')) continue
     const filePath = path.join(ATTACHMENTS_DIR, file)
     try {

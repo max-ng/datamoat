@@ -8,7 +8,9 @@ type SessionState = {
 }
 
 const sessions = new Map<string, SessionState>()
-const WRAP_ITERATIONS = 600_000
+const WRAP_LEGACY_ITERATIONS = 600_000
+const WRAP_V2_ITERATIONS = 1_200_000
+const WRAP_V2_PREFIX = 'pbkdf2:v2'
 const STATE_KEY_LABEL = Buffer.from('datamoat-state-v1', 'utf8')
 
 function randomHex(bytes: number): string {
@@ -41,8 +43,20 @@ function stateKeyFor(key: Buffer): Buffer {
   return crypto.createHash('sha256').update(STATE_KEY_LABEL).update(key).digest()
 }
 
-function deriveWrapKey(secret: string, saltHex: string, iterations = WRAP_ITERATIONS): Buffer {
-  return crypto.pbkdf2Sync(secret, Buffer.from(saltHex, 'hex'), iterations, 32, 'sha256')
+function parseWrapSalt(saltDescriptor: string, fallbackIterations = WRAP_LEGACY_ITERATIONS): { saltHex: string; iterations: number } {
+  const parts = saltDescriptor.split(':')
+  if (parts.length === 4 && `${parts[0]}:${parts[1]}` === WRAP_V2_PREFIX) {
+    const iterations = Number(parts[2])
+    if (!Number.isSafeInteger(iterations) || iterations <= 0) throw new Error('invalid wrap iterations')
+    if (!/^[a-f0-9]{32,}$/i.test(parts[3])) throw new Error('invalid salt hex')
+    return { saltHex: parts[3], iterations }
+  }
+  return { saltHex: saltDescriptor, iterations: fallbackIterations }
+}
+
+function deriveWrapKey(secret: string, saltDescriptor: string, iterations = WRAP_LEGACY_ITERATIONS): Buffer {
+  const parsed = parseWrapSalt(saltDescriptor, iterations)
+  return crypto.pbkdf2Sync(secret, Buffer.from(parsed.saltHex, 'hex'), parsed.iterations, 32, 'sha256')
 }
 
 function encryptData(plaintext: Buffer, key: Buffer): Buffer {
@@ -82,16 +96,16 @@ function handleRequest(payload: Record<string, unknown>): Record<string, unknown
         const sessionId = String(payload.sessionId ?? '')
         const secret = String(payload.secret ?? '')
         if (!sessionId || !secret) throw new Error('wrap_secret missing parameters')
-        const salt = randomHex(16)
+        const salt = `${WRAP_V2_PREFIX}:${WRAP_V2_ITERATIONS}:${randomHex(16)}`
         const derived = deriveWrapKey(secret, salt)
         const blob = encryptData(requireFullSession(sessionId), derived).toString('base64')
-        return { id, ok: true, salt, blob, iterations: WRAP_ITERATIONS }
+        return { id, ok: true, salt, blob, iterations: WRAP_V2_ITERATIONS }
       }
       case 'unwrap_secret': {
         const secret = String(payload.secret ?? '')
         const salt = String(payload.salt ?? '')
         const blob = String(payload.blob ?? '')
-        const iterations = typeof payload.iterations === 'number' ? payload.iterations : WRAP_ITERATIONS
+        const iterations = typeof payload.iterations === 'number' ? payload.iterations : WRAP_LEGACY_ITERATIONS
         if (!secret || !salt || !blob) throw new Error('unwrap_secret missing parameters')
         const derived = deriveWrapKey(secret, salt, iterations)
         const key = decryptData(Buffer.from(blob, 'base64'), derived)
@@ -102,7 +116,7 @@ function handleRequest(payload: Record<string, unknown>): Record<string, unknown
         const secret = String(payload.secret ?? '')
         const salt = String(payload.salt ?? '')
         const blob = String(payload.blob ?? '')
-        const iterations = typeof payload.iterations === 'number' ? payload.iterations : WRAP_ITERATIONS
+        const iterations = typeof payload.iterations === 'number' ? payload.iterations : WRAP_LEGACY_ITERATIONS
         if (!secret || !salt || !blob) throw new Error('unwrap_secret_capture missing parameters')
         const derived = deriveWrapKey(secret, salt, iterations)
         const key = decryptData(Buffer.from(blob, 'base64'), derived)
@@ -111,6 +125,7 @@ function handleRequest(payload: Record<string, unknown>): Record<string, unknown
       }
       case 'wrap_touchid':
       case 'unwrap_touchid':
+      case 'reset_touchid_key':
         throw new Error('touch id unavailable on this platform')
       case 'lock_session': {
         const sessionId = String(payload.sessionId ?? '')

@@ -1,8 +1,8 @@
-import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Menu, Tray, dialog, nativeImage, screen, session, shell, ipcMain } from 'electron'
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Menu, Tray, dialog, nativeImage, screen, session, shell, ipcMain, type OpenDialogOptions } from 'electron'
 import * as child_process from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
-import { ensureDaemonRunning, findDaemonPids, stopDaemonPids } from '../runtime'
+import { diskRuntimeBuildId, currentRuntimeBuildId, ensureDaemonRunning, findDaemonPids, resolveActivePort, stopDaemonPids } from '../runtime'
 import { HEALTH_FILE, PUBLIC_STATUS_FILE } from '../config'
 import { isSetupDone } from '../auth'
 import { disableBootstrapCapture, enableBootstrapCapture, preflightBootstrapCaptureDetailed } from '../bootstrap-capture'
@@ -29,6 +29,8 @@ let tray: Tray | null = null
 let allowedOrigin: string | null = null
 let quitRequested = false
 let trayRefreshTimer: NodeJS.Timeout | null = null
+let daemonWatchdogTimer: NodeJS.Timeout | null = null
+let runtimeRecoveryInFlight: Promise<{ pid: number | null; port: number; url: string; recovered: boolean }> | null = null
 const REMOTE_NO_SCREEN_FLAGS = new Set([
   '--datamoat-remote-no-screen',
   '--datamoat-capture-before-setup',
@@ -87,6 +89,29 @@ function rejectWindowsSystemLaunchIfNeeded(): boolean {
   console.error('DataMoat refused to start from the Windows SYSTEM/session-0 profile.')
   console.error('Start DataMoat from the real Windows desktop user so it can use that user vault, folders, and OS secrets.')
   app.exit(1)
+  return true
+}
+
+function relaunchIfRunningFromReplacedBundle(reason: string): boolean {
+  if (detectInstallContext().mode !== 'packaged') return false
+  const processBuildId = currentRuntimeBuildId()
+  const diskBuildId = diskRuntimeBuildId()
+  if (processBuildId === diskBuildId) return false
+
+  writeLog('warn', 'electron', 'packaged_bundle_replaced_relaunching', {
+    reason,
+    processBuildId,
+    diskBuildId,
+  })
+  updateHealth('electron', {
+    bundleReplacedDetectedAt: new Date().toISOString(),
+    bundleReplacedReason: reason,
+    processBuildId,
+    diskBuildId,
+  })
+  quitRequested = true
+  app.relaunch()
+  app.exit(0)
   return true
 }
 
@@ -184,24 +209,103 @@ function windowPresetForUrl(targetUrl: string): { width: number; height: number;
   return { width: 1180, height: 860, minWidth: 980, minHeight: 760, resizable: true }
 }
 
-function applyWindowPreset(win: BrowserWindow, targetUrl: string): void {
+function destroyedObjectMessage(error: unknown): boolean {
+  return error instanceof Error && /Object has been destroyed/i.test(error.message)
+}
+
+function windowIsUsable(win: BrowserWindow | null | undefined): win is BrowserWindow {
+  if (!win) return false
+  try {
+    return !win.isDestroyed() && !win.webContents.isDestroyed()
+  } catch {
+    return false
+  }
+}
+
+function safeWindowUrl(win: BrowserWindow): string | null {
+  if (!windowIsUsable(win)) return null
+  try {
+    return win.webContents.getURL()
+  } catch (error) {
+    if (destroyedObjectMessage(error)) return null
+    throw error
+  }
+}
+
+function applyWindowPreset(win: BrowserWindow, targetUrl: string): boolean {
+  if (!windowIsUsable(win)) return false
   const preset = windowPresetForUrl(targetUrl)
   const workArea = screen.getPrimaryDisplay().workAreaSize
   const width = Math.min(preset.width, Math.max(720, workArea.width - 32))
   const height = Math.min(preset.height, Math.max(720, workArea.height - 32))
-  win.setResizable(preset.resizable)
-  win.setMinimumSize(Math.min(preset.minWidth, width), Math.min(preset.minHeight, height))
-  win.setSize(width, height)
-  win.center()
+  try {
+    win.setResizable(preset.resizable)
+    win.setMinimumSize(Math.min(preset.minWidth, width), Math.min(preset.minHeight, height))
+    win.setSize(width, height)
+    win.center()
+    return true
+  } catch (error) {
+    if (destroyedObjectMessage(error)) return false
+    throw error
+  }
 }
 
-function ensureWindowUsable(win: BrowserWindow): void {
-  const targetUrl = win.webContents.getURL() || allowedOrigin || 'http://localhost'
+function ensureWindowUsable(win: BrowserWindow): boolean {
+  const targetUrl = safeWindowUrl(win) || allowedOrigin || 'http://localhost'
+  if (!windowIsUsable(win)) return false
   const preset = windowPresetForUrl(targetUrl)
-  const [width, height] = win.getSize()
-  if (width < preset.minWidth || height < preset.minHeight) {
-    applyWindowPreset(win, targetUrl)
+  try {
+    const [width, height] = win.getSize()
+    if (width < preset.minWidth || height < preset.minHeight) {
+      return applyWindowPreset(win, targetUrl)
+    }
+    return true
+  } catch (error) {
+    if (destroyedObjectMessage(error)) return false
+    throw error
   }
+}
+
+function recoverableRuntimeLoadError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_ABORTED|ERR_EMPTY_RESPONSE|ERR_FAILED/i.test(error.message)
+}
+
+async function loadRuntimeUrl(win: BrowserWindow, targetUrl: string, reason: string): Promise<boolean> {
+  let nextUrl = targetUrl
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    if (!windowIsUsable(win)) return false
+    try {
+      await win.loadURL(nextUrl)
+      return true
+    } catch (error) {
+      if (destroyedObjectMessage(error)) return false
+      const recoverable = recoverableRuntimeLoadError(error)
+      writeLog(recoverable ? 'warn' : 'error', 'electron', 'window_load_failed', {
+        reason,
+        attempt,
+        recoverable,
+        targetUrl: nextUrl,
+        error,
+      })
+      updateHealth('electron', {
+        windowLoadFailedAt: new Date().toISOString(),
+        windowLoadFailedReason: reason,
+        windowLoadFailedAttempt: attempt,
+        windowLoadRecoverable: recoverable,
+        windowLoadError: error instanceof Error ? error.message : String(error),
+      })
+      if (!recoverable || attempt === 4) {
+        if (recoverable) return false
+        throw error
+      }
+      await sleep(350 * attempt)
+      const runtime = await ensureHealthyRuntime(`${reason}:load-retry-${attempt}`)
+      nextUrl = runtime.url
+      applyWindowPreset(win, nextUrl)
+    }
+  }
+  return false
 }
 
 function nudgeLinuxWindowToFront(): void {
@@ -232,6 +336,113 @@ function nudgeLinuxWindowToFront(): void {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function findSiblingMainAppPids(): number[] {
+  const currentExec = path.resolve(process.execPath)
+  if (process.platform === 'win32') {
+    const escaped = currentExec.replace(/'/g, "''")
+    const script = [
+      'Get-CimInstance Win32_Process',
+      `| Where-Object { $_.ProcessId -ne ${process.pid} -and $_.ExecutablePath -eq '${escaped}' }`,
+      '| Select-Object -ExpandProperty ProcessId',
+    ].join(' ')
+    try {
+      return child_process.execFileSync('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        script,
+      ], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        windowsHide: true,
+      })
+        .split(/\r?\n/)
+        .map(line => Number(line.trim()))
+        .filter(pid => Number.isFinite(pid) && pid > 0 && pid !== process.pid)
+    } catch {
+      return []
+    }
+  }
+
+  try {
+    const out = child_process.execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' })
+    return out
+      .split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+      .flatMap(line => {
+        const match = line.match(/^(\d+)\s+(.*)$/)
+        if (!match) return []
+        const pid = Number(match[1])
+        const command = match[2]
+        if (!Number.isFinite(pid) || pid === process.pid) return []
+        if (!command.includes(currentExec)) return []
+        if (command.includes('/dist/daemon.js') || command.includes('\\dist\\daemon.js')) return []
+        return [pid]
+      })
+  } catch {
+    return []
+  }
+}
+
+async function terminatePids(pids: number[], graceMs = 1200): Promise<void> {
+  const unique = [...new Set(pids)].filter(pid => pid > 0 && pid !== process.pid)
+  if (unique.length === 0) return
+  for (const pid of unique) {
+    try { process.kill(pid, 'SIGTERM') } catch { /* ignore */ }
+  }
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < graceMs) {
+    const alive = unique.filter(pid => {
+      try { process.kill(pid, 0); return true } catch { return false }
+    })
+    if (alive.length === 0) return
+    await sleep(100)
+  }
+  for (const pid of unique) {
+    try { process.kill(pid, 'SIGKILL') } catch { /* ignore */ }
+  }
+}
+
+async function takeOverStalePackagedInstanceAfterLockFailure(): Promise<void> {
+  if (detectInstallContext().mode !== 'packaged') {
+    app.quit()
+    return
+  }
+
+  let activePort: number | null = null
+  const startedAt = Date.now()
+  while (Date.now() - startedAt < 2200) {
+    activePort = await resolveActivePort()
+    if (activePort) break
+    await sleep(250)
+  }
+  if (activePort) {
+    app.quit()
+    return
+  }
+
+  const daemonPids = findDaemonPids()
+  const mainPids = findSiblingMainAppPids()
+  writeLog('warn', 'electron', 'single_instance_lock_stale_takeover', {
+    daemonPids,
+    mainPids,
+    buildId: currentRuntimeBuildId(),
+  })
+  updateHealth('electron', {
+    staleInstanceTakeoverAt: new Date().toISOString(),
+    staleInstanceTakeoverDaemonPids: daemonPids,
+    staleInstanceTakeoverMainPids: mainPids,
+    buildId: currentRuntimeBuildId(),
+  })
+  await terminatePids([...daemonPids, ...mainPids])
+  quitRequested = true
+  app.relaunch()
+  app.exit(0)
 }
 
 function reportRemoteNoScreenDaemonFailure(error: unknown, reason: string): void {
@@ -757,11 +968,112 @@ function enforceTrayOnlyPresentation(): void {
 
 function usableWindow(): BrowserWindow | null {
   if (!mainWindow) return null
-  if (mainWindow.isDestroyed()) {
+  if (!windowIsUsable(mainWindow)) {
     mainWindow = null
     return null
   }
   return mainWindow
+}
+
+function originPort(origin: string | null): number | null {
+  if (!origin) return null
+  try {
+    const port = Number(new URL(origin).port)
+    return Number.isFinite(port) && port > 0 ? port : null
+  } catch {
+    return null
+  }
+}
+
+function urlOrigin(targetUrl: string): string | null {
+  try {
+    return new URL(targetUrl).origin
+  } catch {
+    return null
+  }
+}
+
+async function ensureHealthyRuntime(reason: string): Promise<{ pid: number | null; port: number; url: string; recovered: boolean }> {
+  if (runtimeRecoveryInFlight) return runtimeRecoveryInFlight
+
+  runtimeRecoveryInFlight = (async () => {
+    const previousOrigin = allowedOrigin
+    const previousPort = originPort(previousOrigin)
+    const activePortBefore = await resolveActivePort()
+    const runtime = await ensureDaemonRunning()
+    const nextOrigin = `http://localhost:${runtime.port}`
+    const recovered = !activePortBefore || activePortBefore !== runtime.port || previousPort !== runtime.port
+    allowedOrigin = nextOrigin
+    updateHealth('electron', {
+      running: true,
+      port: runtime.port,
+      lastDaemonEnsureAt: new Date().toISOString(),
+      lastDaemonEnsureReason: reason,
+      ...(recovered
+        ? {
+            daemonRecoveredAt: new Date().toISOString(),
+            daemonRecoveredReason: reason,
+            previousPort: previousPort ?? null,
+            activePortBeforeRecovery: activePortBefore ?? null,
+          }
+        : {}),
+    })
+    return { ...runtime, recovered }
+  })().finally(() => {
+    runtimeRecoveryInFlight = null
+  })
+
+  return runtimeRecoveryInFlight
+}
+
+async function ensureExistingWindowRuntime(win: BrowserWindow, reason: string, forceReload = false): Promise<void> {
+  const currentUrl = safeWindowUrl(win)
+  if (!currentUrl && !windowIsUsable(win)) return
+  const currentOrigin = currentUrl ? urlOrigin(currentUrl) : null
+  const runtime = await ensureHealthyRuntime(reason)
+  if (!windowIsUsable(win)) {
+    updateHealth('electron', {
+      windowRuntimeSkippedAt: new Date().toISOString(),
+      windowRuntimeSkippedReason: reason,
+      windowRuntimeSkippedCause: 'window-destroyed-after-runtime',
+    })
+    return
+  }
+  const nextOrigin = `http://localhost:${runtime.port}`
+  const needsReload = forceReload || runtime.recovered || currentOrigin !== nextOrigin || !currentUrl || currentUrl === 'about:blank'
+  if (!needsReload) return
+
+  if (!applyWindowPreset(win, runtime.url) || !windowIsUsable(win)) return
+  const loaded = await loadRuntimeUrl(win, runtime.url, reason)
+  if (!loaded) {
+    updateHealth('electron', {
+      windowRuntimeSkippedAt: new Date().toISOString(),
+      windowRuntimeSkippedReason: reason,
+      windowRuntimeSkippedCause: windowIsUsable(win) ? 'runtime-load-failed' : 'window-destroyed-during-load',
+    })
+  }
+}
+
+function ensureDaemonRecoveredInBackground(reason: string): void {
+  if (quitRequested) return
+  void (async () => {
+    try {
+      const runtime = await ensureHealthyRuntime(reason)
+      const win = usableWindow()
+      if (win && runtime.recovered) {
+        await ensureExistingWindowRuntime(win, `${reason}:reload`, true)
+      }
+    } catch (error) {
+      writeLog('warn', 'electron', 'daemon_recovery_failed', { reason, error })
+      updateHealth('electron', {
+        daemonRecoveryFailedAt: new Date().toISOString(),
+        daemonRecoveryFailedReason: reason,
+        daemonRecoveryError: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      updateTray()
+    }
+  })()
 }
 
 async function revealMainWindow(): Promise<void> {
@@ -775,22 +1087,36 @@ async function revealMainWindow(): Promise<void> {
 
   setMacActivation('regular')
   setDockVisibility(true)
+  await ensureExistingWindowRuntime(win, 'reveal-main-window')
+  if (!windowIsUsable(win)) return
   ensureWindowUsable(win)
-  if (win.isMinimized()) win.restore()
-  if (!win.isVisible()) win.show()
-  if (process.platform === 'linux') {
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  if (!windowIsUsable(win)) return
+  try {
+    if (win.isMinimized()) win.restore()
+    if (!win.isVisible()) win.show()
+    if (process.platform === 'linux') {
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    }
+    win.setAlwaysOnTop(true, 'screen-saver')
+    win.moveTop()
+    win.focus()
+    app.focus({ steal: true })
+    nudgeLinuxWindowToFront()
+  } catch (error) {
+    if (destroyedObjectMessage(error)) return
+    throw error
   }
-  win.setAlwaysOnTop(true, 'screen-saver')
-  win.moveTop()
-  win.focus()
-  app.focus({ steal: true })
-  nudgeLinuxWindowToFront()
   setTimeout(() => {
-    if (!win.isDestroyed()) {
-      win.setAlwaysOnTop(false)
-      if (process.platform === 'linux') {
-        win.setVisibleOnAllWorkspaces(false, { visibleOnFullScreen: true })
+    if (windowIsUsable(win)) {
+      try {
+        win.setAlwaysOnTop(false)
+        if (process.platform === 'linux') {
+          win.setVisibleOnAllWorkspaces(false, { visibleOnFullScreen: true })
+        }
+      } catch (error) {
+        if (!destroyedObjectMessage(error)) {
+          writeLog('warn', 'electron', 'window_topmost_reset_failed', { error })
+        }
       }
     }
   }, 250)
@@ -827,6 +1153,7 @@ function installWindowPolicy(win: BrowserWindow): void {
 }
 
 async function createMainWindow(showOnReady = true): Promise<void> {
+  if (relaunchIfRunningFromReplacedBundle('create-window')) return
   if (showOnReady) revealAfterWindowCreation = true
 
   const existing = usableWindow()
@@ -834,10 +1161,18 @@ async function createMainWindow(showOnReady = true): Promise<void> {
     if (showOnReady) {
       setMacActivation('regular')
       setDockVisibility(true)
+      await ensureExistingWindowRuntime(existing, 'create-window-existing')
+      if (!windowIsUsable(existing)) return
       ensureWindowUsable(existing)
-      if (existing.isMinimized()) existing.restore()
-      if (!existing.isVisible()) existing.show()
-      existing.focus()
+      if (!windowIsUsable(existing)) return
+      try {
+        if (existing.isMinimized()) existing.restore()
+        if (!existing.isVisible()) existing.show()
+        existing.focus()
+      } catch (error) {
+        if (destroyedObjectMessage(error)) return
+        throw error
+      }
     }
     return
   }
@@ -852,8 +1187,7 @@ async function createMainWindow(showOnReady = true): Promise<void> {
 }
 
 async function createMainWindowInner(showOnReady = true): Promise<void> {
-  const runtime = await ensureDaemonRunning()
-  allowedOrigin = `http://localhost:${runtime.port}`
+  const runtime = await ensureHealthyRuntime('create-window')
   updateHealth('electron', { running: true, port: runtime.port, startedAt: new Date().toISOString() })
   if (process.platform === 'darwin') {
     app.dock?.setIcon(runtimeIcon)
@@ -890,22 +1224,35 @@ async function createMainWindowInner(showOnReady = true): Promise<void> {
   })
 
   win.once('ready-to-show', () => {
+    if (!windowIsUsable(win)) return
     if (showOnReady || revealAfterWindowCreation) {
       setDockVisibility(true)
-      win.show()
-      if (process.platform === 'linux') {
-        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+      try {
+        win.show()
+        if (process.platform === 'linux') {
+          win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+        }
+        win.setAlwaysOnTop(true, 'screen-saver')
+        win.moveTop()
+        win.focus()
+        app.focus({ steal: true })
+        nudgeLinuxWindowToFront()
+      } catch (error) {
+        if (!destroyedObjectMessage(error)) {
+          writeLog('warn', 'electron', 'window_ready_show_failed', { error })
+        }
       }
-      win.setAlwaysOnTop(true, 'screen-saver')
-      win.moveTop()
-      win.focus()
-      app.focus({ steal: true })
-      nudgeLinuxWindowToFront()
       setTimeout(() => {
-        if (!win.isDestroyed()) {
-          win.setAlwaysOnTop(false)
-          if (process.platform === 'linux') {
-            win.setVisibleOnAllWorkspaces(false, { visibleOnFullScreen: true })
+        if (windowIsUsable(win)) {
+          try {
+            win.setAlwaysOnTop(false)
+            if (process.platform === 'linux') {
+              win.setVisibleOnAllWorkspaces(false, { visibleOnFullScreen: true })
+            }
+          } catch (error) {
+            if (!destroyedObjectMessage(error)) {
+              writeLog('warn', 'electron', 'window_ready_topmost_reset_failed', { error })
+            }
           }
         }
       }, 250)
@@ -917,7 +1264,15 @@ async function createMainWindowInner(showOnReady = true): Promise<void> {
   win.on('close', event => {
     if (quitRequested) return
     event.preventDefault()
-    win.hide()
+    if (windowIsUsable(win)) {
+      try {
+        win.hide()
+      } catch (error) {
+        if (!destroyedObjectMessage(error)) {
+          writeLog('warn', 'electron', 'window_close_hide_failed', { error })
+        }
+      }
+    }
     setDockVisibility(false)
     updateTray()
   })
@@ -925,7 +1280,7 @@ async function createMainWindowInner(showOnReady = true): Promise<void> {
     if (mainWindow === win) mainWindow = null
   })
 
-  await win.loadURL(runtime.url)
+  await loadRuntimeUrl(win, runtime.url, 'create-window')
   if (electronRealUiSmokeEnabled()) {
     void runElectronRealUiSmoke(win, runtime.url)
   }
@@ -1090,12 +1445,9 @@ async function runElectronRealUiSmoke(win: BrowserWindow, baseUrl: string): Prom
   const mode = process.env.DATAMOAT_UI_MODE || 'recovery-and-password'
   try {
     const password = requiredSmokeEnv('DATAMOAT_UI_PASSWORD')
-    const phrase = mode === 'password-only' ? '' : requiredSmokeEnv('DATAMOAT_UI_RECOVERY_PHRASE')
-    const recoveryCodes = String(process.env.DATAMOAT_UI_RECOVERY_CODES || '')
-      .split(/[,\s]+/)
-      .map(code => code.trim())
-      .filter(Boolean)
-    if (mode !== 'password-only' && recoveryCodes.length === 0) throw new Error('DATAMOAT_UI_RECOVERY_CODES must contain at least one code')
+    const phrase = mode === 'password-only' || mode === 'manual-update'
+      ? ''
+      : requiredSmokeEnv('DATAMOAT_UI_RECOVERY_PHRASE')
 
     let flow: Record<string, unknown>
     if (mode === 'password-only') {
@@ -1107,12 +1459,10 @@ async function runElectronRealUiSmoke(win: BrowserWindow, baseUrl: string): Prom
       const manualUpdate = await clickManualUpdateSmokeWindow(win)
       flow = { settings, manualUpdate }
     } else {
-      await recoverAndResetSmokeWindow(win, baseUrl, 'recovery-code', recoveryCodes[0], password)
-      await relockSmokeWindow(win, baseUrl)
       await recoverAndResetSmokeWindow(win, baseUrl, 'recovery-phrase', phrase, password)
       await relockSmokeWindow(win, baseUrl)
       await passwordUnlockSmokeWindow(win, baseUrl, password, arch)
-      flow = { usedRecoveryCode: recoveryCodes[0], settings: await settingsSmokeWindow(win) }
+      flow = { settings: await settingsSmokeWindow(win) }
     }
 
     const screenshots = fs.readdirSync(smokeScreenshotDir())
@@ -1162,12 +1512,21 @@ function toggleMainWindow(): void {
     void revealMainWindow()
     return
   }
-  if (win.isVisible()) {
-    win.hide()
-    setDockVisibility(false)
-    setMacActivation('accessory')
-    updateTray()
-    return
+  try {
+    if (win.isVisible()) {
+      win.hide()
+      setDockVisibility(false)
+      setMacActivation('accessory')
+      updateTray()
+      return
+    }
+  } catch (error) {
+    if (destroyedObjectMessage(error)) {
+      if (mainWindow === win) mainWindow = null
+      void revealMainWindow()
+      return
+    }
+    throw error
   }
   if (trayOnlyLaunch) {
     trayOnlyLaunch = false
@@ -1293,41 +1652,80 @@ function resolveInstallChoiceOnStartup(): 'continue' | 'quit' {
   return applyInstallPreferenceFromStartup(chosen)
 }
 
+function usableTray(): Tray | null {
+  if (!tray) return null
+  try {
+    const isDestroyed = (tray as unknown as { isDestroyed?: () => boolean }).isDestroyed
+    if (typeof isDestroyed === 'function' && isDestroyed.call(tray)) {
+      tray = null
+      return null
+    }
+    return tray
+  } catch {
+    tray = null
+    return null
+  }
+}
+
 function updateTray(): void {
-  if (!tray) return
+  const activeTray = usableTray()
+  if (!activeTray) return
   const status = currentTrayStatus()
   const macIcon = macTrayTemplateIcon()
-  if (macIcon) tray.setImage(macIcon)
-  else if (process.platform === 'win32' && resolveWindowsTrayIcon(status.mode)) tray.setImage(resolveWindowsTrayIcon(status.mode)!)
-  else if (process.platform === 'linux' && resolveLinuxTrayAsset(status.mode)) tray.setImage(resolveLinuxTrayAsset(status.mode)!)
-  else tray.setImage(professionalFortressTrayIcon(status.mode))
-  tray.setToolTip(
-    status.mode === 'active'
-      ? 'DataMoat: background capture active'
-      : status.mode === 'idle'
-        ? 'DataMoat: running, waiting for full capture'
-        : 'DataMoat: daemon unavailable',
-  )
+  try {
+    if (macIcon) activeTray.setImage(macIcon)
+    else if (process.platform === 'win32' && resolveWindowsTrayIcon(status.mode)) activeTray.setImage(resolveWindowsTrayIcon(status.mode)!)
+    else if (process.platform === 'linux' && resolveLinuxTrayAsset(status.mode)) activeTray.setImage(resolveLinuxTrayAsset(status.mode)!)
+    else activeTray.setImage(professionalFortressTrayIcon(status.mode))
+    activeTray.setToolTip(
+      status.mode === 'active'
+        ? 'DataMoat: background capture active'
+        : status.mode === 'idle'
+          ? 'DataMoat: running, waiting for full capture'
+          : 'DataMoat: daemon unavailable',
+    )
+  } catch (error) {
+    if (destroyedObjectMessage(error)) {
+      tray = null
+      return
+    }
+    throw error
+  }
 
   const win = usableWindow()
+  let windowVisible = false
+  try {
+    windowVisible = !!win?.isVisible()
+  } catch (error) {
+    if (!destroyedObjectMessage(error)) throw error
+    if (mainWindow === win) mainWindow = null
+  }
   const menu = Menu.buildFromTemplate([
     { label: status.mode === 'active' ? 'Background capture active' : status.mode === 'idle' ? 'Running, waiting for capture' : 'Daemon unavailable', enabled: false },
     { label: `Vault: ${status.locked === null ? 'unknown' : status.locked ? 'locked' : 'unlocked'}`, enabled: false },
     { label: `Sessions: ${status.sessionCount ?? 'unavailable'}`, enabled: false },
     { type: 'separator' },
-    { label: win?.isVisible() ? 'Hide DataMoat' : 'Open DataMoat', click: () => toggleMainWindow() },
+    { label: windowVisible ? 'Hide DataMoat' : 'Open DataMoat', click: () => toggleMainWindow() },
     { label: 'Quit DataMoat', click: () => { quitRequested = true; app.quit() } },
   ])
-  tray.setContextMenu(menu)
-  updateHealth('electron', {
-    trayVisible: true,
-    trayMode: status.mode,
-    trayBounds: tray.getBounds(),
-  })
+  try {
+    activeTray.setContextMenu(menu)
+    updateHealth('electron', {
+      trayVisible: true,
+      trayMode: status.mode,
+      trayBounds: activeTray.getBounds(),
+    })
+  } catch (error) {
+    if (destroyedObjectMessage(error)) {
+      tray = null
+      return
+    }
+    throw error
+  }
 }
 
 function createTray(): void {
-  if (tray) return
+  if (usableTray()) return
   const macIcon = macTrayTemplateIcon()
   const initialIcon =
     macIcon
@@ -1342,10 +1740,21 @@ function createTray(): void {
   tray.on('double-click', () => void revealMainWindow())
   updateTray()
   trayRefreshTimer = setInterval(() => updateTray(), 5000)
+  if (process.env.DATAMOAT_ENABLE_DAEMON_WATCHDOG === '1') {
+    daemonWatchdogTimer = setInterval(() => ensureDaemonRecoveredInBackground('tray-watchdog'), 15000)
+  }
+  let trayBounds: Electron.Rectangle | null = null
+  try {
+    trayBounds = usableTray()?.getBounds() ?? null
+  } catch (error) {
+    if (!destroyedObjectMessage(error)) {
+      writeLog('warn', 'electron', 'tray_bounds_failed', { error })
+    }
+  }
   updateHealth('electron', {
     trayCreatedAt: new Date().toISOString(),
     trayVisible: true,
-    trayBounds: tray.getBounds(),
+    trayBounds,
   })
 }
 
@@ -1363,18 +1772,32 @@ function installDesktopIpc(): void {
   ipcMain.handle('datamoat:update:openLatest', async () => {
     return await openPackagedReleasePage()
   })
+  ipcMain.handle('datamoat:transfer:selectFolder', async () => {
+    const owner = usableWindow()
+    const options: OpenDialogOptions = {
+      title: 'Choose DataMoat data folder',
+      buttonLabel: 'Choose Folder',
+      properties: ['openDirectory'],
+    }
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) return { canceled: true }
+    return { canceled: false, path: result.filePaths[0] }
+  })
 }
 
 if (rejectWindowsSystemLaunchIfNeeded()) {
   // Do not create a systemprofile vault or bind the local UI port.
 } else if (!app.requestSingleInstanceLock()) {
-  app.quit()
+  void takeOverStalePackagedInstanceAfterLockFailure()
 } else {
   try { ensureDirs() } catch { /* non-fatal: whenReady will retry and crash logging stays defensive */ }
   app.enableSandbox()
   installDesktopIpc()
 
   app.on('second-instance', (_event, argv) => {
+    if (relaunchIfRunningFromReplacedBundle('second-instance')) return
     if (argvRequestsRemoteNoScreen(argv)) {
       trayOnlyLaunch = true
       void (async () => {
@@ -1394,6 +1817,7 @@ if (rejectWindowsSystemLaunchIfNeeded()) {
   })
 
   app.whenReady().then(async () => {
+    if (relaunchIfRunningFromReplacedBundle('startup')) return
     try { ensureDirs() } catch { /* non-fatal: crash handler is defensive */ }
     installCrashHandlers('electron')
     installSessionPolicy()
@@ -1452,6 +1876,7 @@ if (rejectWindowsSystemLaunchIfNeeded()) {
     }
 
     app.on('activate', async () => {
+      if (relaunchIfRunningFromReplacedBundle('activate')) return
       trayOnlyLaunch = false
       if (resolveInstallChoiceOnStartup() === 'quit') {
         app.quit()
@@ -1480,6 +1905,7 @@ if (rejectWindowsSystemLaunchIfNeeded()) {
 
   app.on('quit', () => {
     if (trayRefreshTimer) clearInterval(trayRefreshTimer)
+    if (daemonWatchdogTimer) clearInterval(daemonWatchdogTimer)
     updateHealth('electron', { running: false, stoppedAt: new Date().toISOString() })
   })
 }

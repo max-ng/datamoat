@@ -4,10 +4,74 @@ import { Message, ContentBlock, TokenUsage } from '../types'
 import type { RawImageData } from './claude'
 
 export const CODEX_EXTRACTOR_VERSION = 2
+export const CODEX_EXTRACTOR_COMPATIBILITY_VERSION = 1
+export const CODEX_VERIFIED_SOURCE_VERSION_LABELS: Record<string, string> = {
+  darwin: 'macOS <= 0.131.x (sampled through 0.131.0-alpha.9)',
+  linux: 'Linux <= 0.130.x',
+  win32: 'Windows not yet recorded',
+}
+
+type VersionParts = readonly [number, number, number]
+const CODEX_NEXT_UNVERIFIED_SOURCE_VERSION: Partial<Record<NodeJS.Platform, VersionParts>> = {
+  darwin: [0, 132, 0],
+  linux: [0, 131, 0],
+  win32: [0, 0, 0],
+}
+
+const CODEX_SOURCE_FORMATS: Array<{ minVersion: VersionParts; key: string }> = [
+  // Keep newest-first so a future incompatible upstream family can override the
+  // broad legacy bucket below.
+  // Verified compatible for the current response_item JSONL family. Local
+  // release evidence covers macOS through 0.131.0-alpha.9 and Linux through
+  // 0.130.x. Add a higher minVersion here when upstream introduces a format
+  // that needs a different reparse pass.
+  { minVersion: [0, 0, 0], key: 'response-items' },
+]
+
+export function codexParserCompatibilityKey(appVersion: string | undefined): string {
+  const sourceFormat = codexSourceFormatKey(appVersion)
+  return `codex-cli:${sourceFormat}:${CODEX_EXTRACTOR_COMPATIBILITY_VERSION}`
+}
+
+export function codexVersionNeedsParserReview(appVersion: string | undefined): boolean {
+  const version = parseVersionParts(appVersion)
+  const nextUnverified = CODEX_NEXT_UNVERIFIED_SOURCE_VERSION[process.platform]
+  return !!version && !!nextUnverified && versionGte(version, nextUnverified)
+}
+
+export function codexVerifiedSourceVersionLabel(platform: NodeJS.Platform = process.platform): string {
+  return CODEX_VERIFIED_SOURCE_VERSION_LABELS[platform] || `${platform} not yet recorded`
+}
 
 // Codex top-level keys the extractor binds to typed columns. Anything else
 // is preserved as unknownAttrs so the UI can still render it.
 const CODEX_KNOWN_FIELDS = new Set(['type', 'timestamp', 'payload'])
+
+function codexSourceFormatKey(appVersion: string | undefined): string {
+  const version = parseVersionParts(appVersion)
+  for (const format of CODEX_SOURCE_FORMATS) {
+    if (!version || versionGte(version, format.minVersion)) return format.key
+  }
+  return 'unknown'
+}
+
+function parseVersionParts(value: string | undefined): VersionParts | null {
+  const match = value?.match(/(\d+)\.(\d+)(?:\.(\d+))?/)
+  if (!match) return null
+  return [
+    Number(match[1]),
+    Number(match[2]),
+    Number(match[3] || 0),
+  ]
+}
+
+function versionGte(left: VersionParts, right: VersionParts): boolean {
+  for (let i = 0; i < 3; i += 1) {
+    if (left[i] > right[i]) return true
+    if (left[i] < right[i]) return false
+  }
+  return true
+}
 
 function codexUnknownAttrs(obj: Record<string, unknown>): Record<string, unknown> | undefined {
   const extras: Record<string, unknown> = {}

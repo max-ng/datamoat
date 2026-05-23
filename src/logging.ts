@@ -56,7 +56,70 @@ function readHealth(): HealthState {
 
 function writeHealth(state: HealthState): void {
   ensureStateDirFor(HEALTH_FILE)
-  fs.writeFileSync(HEALTH_FILE, JSON.stringify(state, null, 2), { mode: 0o600 })
+  const tmpPath = `${HEALTH_FILE}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(state, null, 2), { mode: 0o600 })
+    replaceHealthFile(tmpPath)
+  } finally {
+    try { fs.rmSync(tmpPath, { force: true }) } catch { /* ignore */ }
+  }
+}
+
+function transientHealthReplaceError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const code = (error as NodeJS.ErrnoException).code
+  return code === 'EPERM' || code === 'EACCES' || code === 'EBUSY'
+}
+
+function replaceHealthFile(tmpPath: string): void {
+  const delays = process.platform === 'win32' ? [0, 25, 75, 150, 300] : [0]
+  let lastError: unknown = null
+  for (const delay of delays) {
+    if (delay > 0) sleepSync(delay)
+    try {
+      fs.renameSync(tmpPath, HEALTH_FILE)
+      return
+    } catch (error) {
+      lastError = error
+      if (!transientHealthReplaceError(error)) throw error
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(String(lastError))
+}
+
+function sleepSync(ms: number): void {
+  try {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+  } catch {
+    const end = Date.now() + ms
+    while (Date.now() < end) {
+      // best-effort fallback for runtimes without Atomics.wait
+    }
+  }
+}
+
+function withHealthLock<T>(fn: () => T): T {
+  const lockPath = `${HEALTH_FILE}.lock`
+  const startedAt = Date.now()
+  let fd: number | null = null
+  while (fd === null) {
+    try {
+      ensureStateDirFor(lockPath)
+      fd = fs.openSync(lockPath, 'wx', 0o600)
+    } catch {
+      if (Date.now() - startedAt > 2000) {
+        try { fs.rmSync(lockPath, { force: true }) } catch { /* ignore */ }
+      }
+      sleepSync(20)
+    }
+  }
+
+  try {
+    return fn()
+  } finally {
+    try { fs.closeSync(fd) } catch { /* ignore */ }
+    try { fs.rmSync(lockPath, { force: true }) } catch { /* ignore */ }
+  }
 }
 
 function redactString(value: string): string {
@@ -204,16 +267,22 @@ export function verifyAuditChain(): { ok: boolean; entries: number; lastHash: st
 }
 
 export function updateHealth(component: string, patch: Record<string, unknown>): void {
-  const health = readHealth()
-  health.updatedAt = new Date().toISOString()
-  health.version = packageVersion()
-  health.platform = process.platform
-  health.mode = installMode()
-  health.components[component] = {
-    ...(health.components[component] || {}),
-    ...sanitize(patch) as Record<string, unknown>,
+  try {
+    withHealthLock(() => {
+      const health = readHealth()
+      health.updatedAt = new Date().toISOString()
+      health.version = packageVersion()
+      health.platform = process.platform
+      health.mode = installMode()
+      health.components[component] = {
+        ...(health.components[component] || {}),
+        ...sanitize(patch) as Record<string, unknown>,
+      }
+      writeHealth(health)
+    })
+  } catch {
+    /* non-fatal: health status must never crash the app */
   }
-  writeHealth(health)
 }
 
 export function recordCrash(component: string, error: unknown, extra: Record<string, unknown> = {}): void {
@@ -249,7 +318,36 @@ export function recordCrash(component: string, error: unknown, extra: Record<str
 }
 
 export function installCrashHandlers(component: string): void {
+  const isIgnorableBrokenPipe = (error: unknown): boolean => {
+    const err = error as NodeJS.ErrnoException | undefined
+    const message = error instanceof Error ? error.message : String(error)
+    return err?.code === 'EPIPE' || message.includes('write EPIPE')
+  }
+  const ignoreBrokenPipe = (error: unknown): void => {
+    if (!isIgnorableBrokenPipe(error)) throw error
+    try {
+      updateHealth(component, {
+        ignoredBrokenPipeAt: new Date().toISOString(),
+      })
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  try { process.stdout?.on('error', ignoreBrokenPipe) } catch { /* ignore */ }
+  try { process.stderr?.on('error', ignoreBrokenPipe) } catch { /* ignore */ }
+
   process.on('uncaughtException', error => {
+    if (isIgnorableBrokenPipe(error)) {
+      try {
+        updateHealth(component, {
+          ignoredBrokenPipeAt: new Date().toISOString(),
+        })
+      } catch {
+        /* non-fatal */
+      }
+      return
+    }
     recordCrash(component, error, { source: 'uncaughtException' })
     process.exit(1)
   })

@@ -1,6 +1,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as http from 'http'
+import * as crypto from 'crypto'
 import * as child_process from 'child_process'
 import { DATAMOAT_ROOT, PID_FILE, STATE_DIR, UI_PORT_RANGE } from './config'
 import { ensureDirs } from './store'
@@ -10,8 +11,12 @@ import { loadInstallInfo } from './install-context'
 type DaemonMeta = {
   pid: number
   version?: string
+  buildId?: string
   dataRoot?: string
 }
+
+const SWIFT_HELPER_BUNDLE_EXECUTABLE = path.join('DataMoatTouchID.app', 'Contents', 'MacOS', 'DataMoatTouchID')
+const PROCESS_RUNTIME_BUILD_ID = computeRuntimeBuildId()
 
 function packageVersion(): string {
   try {
@@ -20,6 +25,69 @@ function packageVersion(): string {
   } catch {
     return '0.0.0'
   }
+}
+
+function buildIdFileCandidates(): string[] {
+  const candidates = new Set<string>([
+    path.join(__dirname, '..', 'package.json'),
+    __filename,
+    path.join(__dirname, 'daemon.js'),
+    path.join(__dirname, 'ui', 'server.js'),
+    path.join(__dirname, 'vault-helper.js'),
+    path.join(__dirname, 'helpers', 'session-helper.js'),
+    path.join(__dirname, '..', 'src', 'runtime.ts'),
+    path.join(__dirname, '..', 'src', 'daemon.ts'),
+    path.join(__dirname, '..', 'src', 'ui', 'server.ts'),
+    path.join(__dirname, '..', 'src', 'vault-helper.ts'),
+    path.join(__dirname, '..', 'src', 'helpers', 'session-helper.ts'),
+  ])
+
+  const helperCandidates = [
+    process.resourcesPath
+      ? path.join(process.resourcesPath, '..', 'Helpers', SWIFT_HELPER_BUNDLE_EXECUTABLE)
+      : '',
+    path.resolve(__dirname, '..', '..', '..', 'Helpers', SWIFT_HELPER_BUNDLE_EXECUTABLE),
+    path.join(__dirname, '..', 'Helpers', SWIFT_HELPER_BUNDLE_EXECUTABLE),
+    path.join(__dirname, 'helpers', SWIFT_HELPER_BUNDLE_EXECUTABLE),
+    path.join(__dirname, 'helpers', 'touchid'),
+  ]
+  for (const candidate of helperCandidates) {
+    if (candidate) candidates.add(candidate)
+  }
+
+  return [...candidates].filter(candidate => {
+    try { return fs.existsSync(candidate) && fs.statSync(candidate).isFile() } catch { return false }
+  }).sort()
+}
+
+function computeRuntimeBuildId(): string {
+  const hash = crypto.createHash('sha256')
+  hash.update(`datamoat-runtime-build:${packageVersion()}\n`)
+  const files = buildIdFileCandidates()
+  if (files.length === 0) hash.update('no-build-files\n')
+  for (const file of files) {
+    try {
+      const stat = fs.statSync(file)
+      hash.update(`${path.relative(path.resolve(__dirname, '..'), file)}:${stat.size}\n`)
+      hash.update(fs.readFileSync(file))
+      hash.update('\n')
+    } catch (error) {
+      hash.update(`${file}:unreadable:${error instanceof Error ? error.message : String(error)}\n`)
+    }
+  }
+  return hash.digest('hex')
+}
+
+export function currentRuntimeBuildId(): string {
+  return PROCESS_RUNTIME_BUILD_ID
+}
+
+export function diskRuntimeBuildId(): string {
+  return computeRuntimeBuildId()
+}
+
+export function runtimeBuildMatchesDisk(): boolean {
+  return currentRuntimeBuildId() === diskRuntimeBuildId()
 }
 
 function linuxUserServiceFile(): string {
@@ -61,10 +129,11 @@ function canUseLinuxUserService(): boolean {
 }
 
 export function launcherBinaryForScripts(): string {
-  const macLauncher = macScriptLauncherBinary()
-  if (macLauncher) return macLauncher
-
-  if (process.versions.electron) return process.execPath
+  if (process.versions.electron) {
+    const macLauncher = macScriptLauncherBinary()
+    if (macLauncher) return macLauncher
+    return process.execPath
+  }
 
   return nodeBinaryForBuildTasks()
 }
@@ -180,6 +249,10 @@ function positiveIntegerFromEnv(name: string, fallback: number): number {
 
 const DAEMON_START_TIMEOUT_MS = positiveIntegerFromEnv('DATAMOAT_DAEMON_START_TIMEOUT_MS', 20000)
 const DAEMON_START_POLL_MS = positiveIntegerFromEnv('DATAMOAT_DAEMON_START_POLL_MS', 250)
+const DAEMON_EXISTING_PORT_RECOVERY_TIMEOUT_MS = positiveIntegerFromEnv(
+  'DATAMOAT_DAEMON_EXISTING_PORT_RECOVERY_TIMEOUT_MS',
+  30000,
+)
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -366,6 +439,7 @@ export function probePort(port: number): Promise<boolean> {
 
 function daemonMetaMatchesCurrentApp(meta: DaemonMeta): boolean {
   if (meta.version !== packageVersion()) return false
+  if (meta.buildId !== currentRuntimeBuildId()) return false
   if (meta.dataRoot) return rootMatchesCurrentApp(meta.dataRoot)
 
   const command = commandForPid(meta.pid)
@@ -406,11 +480,12 @@ async function daemonMetaForPort(port: number): Promise<DaemonMeta | null> {
       res.on('data', chunk => { body += chunk })
       res.on('end', () => {
         try {
-          const parsed = JSON.parse(body) as { pid?: number; version?: unknown; dataRoot?: unknown }
+          const parsed = JSON.parse(body) as { pid?: number; version?: unknown; buildId?: unknown; dataRoot?: unknown }
           if (typeof parsed.pid === 'number' && Number.isFinite(parsed.pid)) {
             resolve({
               pid: parsed.pid,
               version: typeof parsed.version === 'string' ? parsed.version : undefined,
+              buildId: typeof parsed.buildId === 'string' ? parsed.buildId : undefined,
               dataRoot: typeof parsed.dataRoot === 'string' ? parsed.dataRoot : undefined,
             })
             return
@@ -504,8 +579,19 @@ export async function ensureDaemonRunning(): Promise<{ pid: number | null; port:
   }
 
   if (pid) {
-    const existingPort = await waitForActivePort(pid, Math.min(DAEMON_START_TIMEOUT_MS, 5000))
+    const existingPort = await waitForActivePort(pid, Math.max(
+      DAEMON_START_TIMEOUT_MS,
+      DAEMON_EXISTING_PORT_RECOVERY_TIMEOUT_MS,
+    ))
     if (existingPort) return { pid: isDaemonRunning() ?? pid, port: existingPort, url: buildUiUrl(existingPort) }
+
+    const filePort = getPort()
+    if (filePort) {
+      const command = commandForPid(pid)
+      if (command && isKnownDaemonCommand(command)) {
+        return { pid, port: filePort, url: buildUiUrl(filePort) }
+      }
+    }
 
     stopDaemonPids([pid])
     try { fs.unlinkSync(PID_FILE) } catch { /* ignore */ }

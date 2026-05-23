@@ -12,7 +12,6 @@ import { ALL_SOURCES } from './config'
 import { bootstrapCaptureSummary } from './bootstrap-capture'
 import { importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from './watcher'
 import { scanAndBackupSkills } from './skills-backup'
-import { runParserReparseIfNeeded } from './parser-reparse'
 import { isWindowsSystemContext } from './windows-context'
 
 function allowWindowsSystemContextForTest(): boolean {
@@ -68,7 +67,19 @@ async function main() {
   fs.writeFileSync(path.join(STATE_DIR, 'port'), String(port))
   updateHealth('daemon', { running: true, pid: process.pid, port, url })
   writeLog('info', 'daemon', 'ui_ready', { port })
-  const captureStarted = await startBackgroundCapture()
+  let captureStarted = false
+  try {
+    // Daemon startup must keep the unlock API stable. Parser reparse can be
+    // heavy on real vaults, so it must not run before the user can unlock.
+    captureStarted = await startBackgroundCapture({ parserReparse: 'skip' })
+  } catch (error) {
+    writeLog('warn', 'daemon', 'background_capture_start_failed_nonfatal', { error })
+    updateHealth('capture', {
+      running: false,
+      lastErrorAt: new Date().toISOString(),
+      lastError: error instanceof Error ? error.message : String(error),
+    })
+  }
   await startBootstrapCaptureBeforeSetup(captureStarted)
   await retryBootstrapImportAfterStartup(captureStarted)
   if (captureStarted) await scanAndBackupSkills('daemon_start')
@@ -136,7 +147,7 @@ async function retryBootstrapImportAfterStartup(captureStarted: boolean): Promis
     bootstrapRemainingFiles: result.remainingFiles,
   })
   writeLog('info', 'daemon', 'bootstrap_retry_done', result)
-  await runParserReparseIfNeeded('bootstrap_retry')
+  writeLog('info', 'parser-reparse', 'bootstrap_retry_reparse_deferred')
   await startWatchers('vault')
   await scanAndBackupSkills('bootstrap_retry')
 }

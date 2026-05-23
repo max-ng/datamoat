@@ -341,6 +341,9 @@
     background: rgba(3, 8, 12, 0.72);
     backdrop-filter: blur(8px);
   }
+  #transfer-replace-backdrop {
+    z-index: 240;
+  }
   .recovery-reset-panel {
     width: min(520px, 100%);
     background: #0d141b;
@@ -1439,6 +1442,12 @@
     display: grid;
     gap: 8px;
   }
+  .source-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+  }
   .source-label {
     font-family: var(--font-mono);
     font-size: 11px;
@@ -1458,10 +1467,33 @@
   .source-input:focus {
     border-color: var(--accent);
   }
+  textarea.source-input {
+    min-height: 86px;
+    line-height: 1.5;
+    resize: vertical;
+  }
   .source-help {
     font-size: 11px;
     color: var(--muted);
     line-height: 1.6;
+  }
+  .transfer-import-auth-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .transfer-import-auth-tab.active {
+    border-color: rgba(0, 200, 160, 0.5);
+    background: rgba(0, 200, 160, 0.12);
+    color: var(--accent);
+  }
+  .transfer-import-auth-pane[hidden] {
+    display: none;
+  }
+  @media (max-width: 640px) {
+    .source-row {
+      grid-template-columns: 1fr;
+    }
   }
   .backup-paths {
     display: grid;
@@ -1734,6 +1766,33 @@
   </div>
 </div>
 
+<div id="transfer-replace-backdrop" class="recovery-reset-backdrop" hidden>
+  <div class="recovery-reset-panel" role="dialog" aria-modal="true" aria-labelledby="transfer-replace-title">
+    <div class="recovery-reset-head">
+      <div class="recovery-reset-title" id="transfer-replace-title">Delete Current Data And Use Backup</div>
+    </div>
+    <div class="recovery-reset-body">
+      <div class="recovery-reset-copy">
+        This will DELETE the current DataMoat data on this computer and replace it with the selected backup folder.
+        DataMoat will make a safety copy first. Use Add backup data if you want to keep this computer's current data.
+      </div>
+      <div>
+        <div class="recovery-reset-label">Current Master Password</div>
+        <input id="transfer-replace-current-password" class="recovery-reset-input" type="password" placeholder="Current master password" autocomplete="current-password">
+      </div>
+      <div>
+        <div class="recovery-reset-label">Type DELETE CURRENT DATA</div>
+        <input id="transfer-replace-confirm-text" class="recovery-reset-input" type="text" placeholder="DELETE CURRENT DATA" autocomplete="off">
+      </div>
+      <div id="transfer-replace-error" class="recovery-reset-error"></div>
+      <div class="recovery-reset-actions">
+        <button id="transfer-replace-cancel" class="recovery-reset-btn" type="button">Cancel</button>
+        <button id="transfer-replace-confirm" class="recovery-reset-btn primary" type="button">Delete current data and use backup</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="layout">
   <div class="session-list" id="session-list">
     <div class="empty">
@@ -1841,6 +1900,77 @@
         </div>
       </div>
 
+      <div class="settings-card wide referenced-backup-card" id="transfer-export-card">
+        <div class="referenced-backup-head">
+          <div>
+            <div class="settings-label">Transfer to another computer</div>
+            <div class="settings-value" id="transfer-export-state">checking…</div>
+          </div>
+          <div class="referenced-backup-badge" id="transfer-export-badge">checking</div>
+        </div>
+        <div class="settings-message referenced-backup-copy" id="transfer-export-message"></div>
+        <div class="referenced-backup-progress" id="transfer-export-progress" hidden>
+          <div class="referenced-progress-row">
+            <span id="transfer-export-progress-label">Checking files</span>
+            <span id="transfer-export-progress-count"></span>
+          </div>
+          <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="transfer-export-progress-fill"></div></div>
+        </div>
+        <div class="referenced-backup-permission" id="transfer-export-warning" hidden></div>
+        <div class="referenced-attachment-stats" id="transfer-export-stats"></div>
+        <div class="referenced-folder-list" id="transfer-export-folder-list" hidden></div>
+        <div class="settings-actions">
+          <button id="transfer-export-check-btn" class="settings-btn" type="button">Check again</button>
+          <button id="transfer-export-open-btn" class="settings-btn primary" type="button">Open DataMoat folder</button>
+        </div>
+      </div>
+
+      <div class="settings-card wide referenced-backup-card" id="transfer-import-card">
+        <div class="referenced-backup-head">
+          <div>
+            <div class="settings-label">Transfer from another computer</div>
+            <div class="settings-value" id="transfer-import-state">waiting for folder</div>
+          </div>
+          <div class="referenced-backup-badge off" id="transfer-import-badge">waiting</div>
+        </div>
+        <div class="settings-message referenced-backup-copy" id="transfer-import-message">Choose the copied whole .datamoat folder, unlock the old vault, then add backup data or delete current data and use the backup.</div>
+        <div class="source-field">
+          <label class="source-label" for="transfer-import-path">Transfer folder</label>
+          <div class="source-row">
+            <input id="transfer-import-path" class="source-input" type="text" placeholder="/path/to/copied/.datamoat">
+            <button id="transfer-import-select-btn" class="settings-btn" type="button">Choose folder</button>
+          </div>
+          <div class="source-help">The selected folder is checked automatically before import.</div>
+        </div>
+        <div class="source-field" style="margin-top:10px;">
+          <label class="source-label">Old vault unlock</label>
+          <div class="source-help">Use the old password or the old 24-word phrase that belongs to this copied folder.</div>
+          <div class="transfer-import-auth-tabs">
+            <button id="transfer-import-auth-password" class="settings-btn transfer-import-auth-tab active" type="button">Old password</button>
+            <button id="transfer-import-auth-phrase" class="settings-btn transfer-import-auth-tab" type="button">Old 24-word phrase</button>
+          </div>
+          <div class="transfer-import-auth-pane" id="transfer-import-password-pane">
+            <input id="transfer-import-password" class="source-input" type="password" placeholder="Old master password">
+          </div>
+          <div class="transfer-import-auth-pane" id="transfer-import-phrase-pane" hidden>
+            <textarea id="transfer-import-mnemonic" class="source-input" placeholder="Old 24-word recovery phrase"></textarea>
+          </div>
+        </div>
+        <div class="referenced-backup-progress" id="transfer-import-progress" hidden>
+          <div class="referenced-progress-row">
+            <span id="transfer-import-progress-label">Checking transfer</span>
+            <span id="transfer-import-progress-count"></span>
+          </div>
+          <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="transfer-import-progress-fill"></div></div>
+        </div>
+        <div class="referenced-backup-permission" id="transfer-import-warning" hidden></div>
+        <div class="referenced-attachment-stats" id="transfer-import-stats"></div>
+        <div class="settings-actions">
+          <button id="transfer-import-merge-btn" class="settings-btn primary" type="button">Add backup data to this vault</button>
+          <button id="transfer-import-replace-btn" class="settings-btn warn" type="button">Delete current data and use backup</button>
+        </div>
+      </div>
+
       <div class="source-field" id="reinstall-source-field" hidden>
         <label class="source-label" for="reinstall-source-path">Source Folder</label>
         <input id="reinstall-source-path" class="source-input" type="text" placeholder="/path/to/live/git/checkout">
@@ -1883,6 +2013,12 @@ let referencedAttachmentStatus = null
 let referencedAttachmentBusy = false
 let referencedAttachmentPollTimer = null
 let referencedAttachmentPollTail = 0
+let transferExportData = null
+let transferImportData = null
+let transferBusy = false
+let transferImportPollTimer = null
+let transferImportPreflightTimer = null
+let transferImportAuthMode = 'password'
 let releasesUrl = ''
 let settingsAppVersion = ''
 let noticeActionHandler = null
@@ -2111,9 +2247,6 @@ function recoveryPasswordResetCopy(flow) {
   if (flow === 'mnemonic') {
     return 'You unlocked this vault with the 24-word recovery phrase. Set a new master password now so future unlocks can use a normal password again.'
   }
-  if (flow === 'recovery_code') {
-    return 'You unlocked this vault with a recovery code. Set a new master password now so future unlocks can use a normal password again.'
-  }
   return 'You unlocked this vault with recovery access. Set a new master password now so future unlocks can use a normal password again.'
 }
 
@@ -2319,11 +2452,7 @@ function renderList() {
     if (filterSrc !== 'all' && s.source !== filterSrc) return false
     if (searchQ) {
       const sessionKey = s.uid || s.id
-      const q = searchQ.toLowerCase()
-      const metaMatch = s.model.toLowerCase().includes(q) ||
-                        s.cwd.toLowerCase().includes(q) ||
-                        s.id.toLowerCase().includes(q)
-      if (metaMatch) return true
+      if (sessionMatchesSearchMetadata(s, searchQ)) return true
       if (hasContentMatches) return sessionKey in contentMatches
       return false
     }
@@ -2338,8 +2467,9 @@ function renderList() {
     return (b.messageCount || 0) - (a.messageCount || 0)
   })
 
+  const filteredCount = searchQ && contentSearchPending ? `${filtered.length}+` : String(filtered.length)
   document.getElementById('stat').innerHTML =
-    `<strong>${filtered.length}</strong> / ${sessions.length} sessions`
+    `<strong>${filteredCount}</strong> / ${sessions.length} sessions`
 
   if (filtered.length === 0) {
     const emptyTitle = searchQ
@@ -2384,6 +2514,14 @@ function renderList() {
     }).join('')
   }
   list.scrollTop = preservedScrollTop
+}
+
+function sessionMatchesSearchMetadata(session, query) {
+  const q = String(query || '').toLowerCase()
+  if (!q) return false
+  return String(session.model || '').toLowerCase().includes(q) ||
+         String(session.cwd || '').toLowerCase().includes(q) ||
+         String(session.id || session.uid || '').toLowerCase().includes(q)
 }
 
 function renderOverview() {
@@ -3505,7 +3643,7 @@ function renderReferencedAttachmentPanel() {
   const status = referencedAttachmentStatus
   const loading = referencedAttachmentBusy && !status
   const enabled = status?.enabled === true
-  const running = status?.running === true
+  const running = enabled && status?.running === true
   const progress = status?.scanProgress || null
   const isMac = status?.platform === 'darwin'
 
@@ -3526,6 +3664,7 @@ function renderReferencedAttachmentPanel() {
         : 'off'
   badgeEl.classList.toggle('off', !enabled && !running && !loading)
 
+  const protectedFiles = status?.protectedFiles || 0
   if (!status) {
     messageEl.textContent = 'Checking referenced file backup status...'
   } else if (enabled && running) {
@@ -3534,6 +3673,8 @@ function renderReferencedAttachmentPanel() {
       : 'Referenced file backup is enabled. DataMoat is processing previous conversations now and will also protect future path-referenced files automatically when those files are readable by this user account.'
   } else if (enabled) {
     messageEl.textContent = 'Referenced file backup is enabled. DataMoat protects future path-referenced files automatically and keeps embedded files and images protected as before.'
+  } else if (protectedFiles > 0) {
+    messageEl.textContent = 'Referenced file backup is off. Files already protected inside this vault stay available; enable only if you want DataMoat to copy future path-only local files too.'
   } else {
     messageEl.textContent = isMac
       ? 'DataMoat already protects embedded files and images saved inside supported sessions. Some conversations only mention files by path, such as files in Downloads, Desktop, or Documents. Enable this to copy those originals into your encrypted vault; macOS only asks when DataMoat actually reaches a folder that needs permission.'
@@ -3565,7 +3706,6 @@ function renderReferencedAttachmentPanel() {
     permissionEl.textContent = ''
   }
 
-  const protectedFiles = status?.protectedFiles || 0
   const checked = running ? 0 : status?.previousSessionsChecked || 0
   const coveredApps = referencedAttachmentAppsText(status)
   const stats = []
@@ -3628,6 +3768,420 @@ async function enableReferencedAttachmentBackup() {
     referencedAttachmentBusy = false
     renderReferencedAttachmentPanel()
     scheduleReferencedAttachmentPoll()
+  }
+}
+
+function formatBytes(value) {
+  const bytes = Number(value) || 0
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${fmtNumber(bytes)} B`
+}
+
+function transferStatsHtml(counts) {
+  if (!counts) return ''
+  return [
+    `<div class="referenced-attachment-stat"><strong>${fmtNumber(counts.sessions || 0)}</strong><span>sessions</span></div>`,
+    `<div class="referenced-attachment-stat"><strong>${fmtNumber(counts.attachments || 0)}</strong><span>attachments</span></div>`,
+    `<div class="referenced-attachment-stat"><strong>${formatBytes(counts.totalBytes || 0)}</strong><span>folder size</span></div>`,
+  ].join('')
+}
+
+function renderTransferExportPanel() {
+  const stateEl = document.getElementById('transfer-export-state')
+  const badgeEl = document.getElementById('transfer-export-badge')
+  const messageEl = document.getElementById('transfer-export-message')
+  const warningEl = document.getElementById('transfer-export-warning')
+  const statsEl = document.getElementById('transfer-export-stats')
+  const foldersEl = document.getElementById('transfer-export-folder-list')
+  const progressEl = document.getElementById('transfer-export-progress')
+  const progressFillEl = document.getElementById('transfer-export-progress-fill')
+  const progressCountEl = document.getElementById('transfer-export-progress-count')
+  const checkBtn = document.getElementById('transfer-export-check-btn')
+  const openBtn = document.getElementById('transfer-export-open-btn')
+  if (!stateEl || !badgeEl || !messageEl || !warningEl || !statsEl || !foldersEl || !progressEl || !progressFillEl || !progressCountEl || !checkBtn || !openBtn) return
+
+  const data = transferExportData
+  const loading = transferBusy && !data
+  stateEl.textContent = loading ? 'checking…' : (data?.status || 'not checked')
+  badgeEl.textContent = loading ? 'checking' : data?.status === 'ready' ? 'ready' : data?.status === 'needs attention' ? 'attention' : 'blocked'
+  badgeEl.classList.toggle('off', !loading && data?.status !== 'ready')
+  messageEl.textContent = data
+    ? 'Copy this whole DataMoat folder to the new computer. Do not copy only vault/ or only sessions.json.'
+    : 'Check the current DataMoat data folder before copying it to another computer.'
+
+  const warnings = Array.isArray(data?.warnings) ? data.warnings : []
+  if (warnings.length > 0) {
+    warningEl.hidden = false
+    warningEl.textContent = warnings.includes('touch-id-not-portable')
+      ? 'Touch ID cannot be transferred. Make sure you know the old master password or 24-word phrase before copying this folder.'
+      : warnings.join(' · ')
+  } else {
+    warningEl.hidden = true
+    warningEl.textContent = ''
+  }
+
+  statsEl.innerHTML = transferStatsHtml(data?.counts)
+  foldersEl.hidden = !data?.root
+  foldersEl.innerHTML = data?.root ? `<div class="referenced-folder-chip"><strong>DataMoat folder</strong><span>${esc(data.root)}</span></div>` : ''
+  progressEl.hidden = !transferBusy
+  progressFillEl.style.width = transferBusy ? '45%' : '0'
+  progressCountEl.textContent = transferBusy ? 'checking' : ''
+  checkBtn.disabled = transferBusy
+  openBtn.disabled = transferBusy || !data?.root
+}
+
+function renderTransferImportPanel() {
+  const stateEl = document.getElementById('transfer-import-state')
+  const badgeEl = document.getElementById('transfer-import-badge')
+  const messageEl = document.getElementById('transfer-import-message')
+  const warningEl = document.getElementById('transfer-import-warning')
+  const statsEl = document.getElementById('transfer-import-stats')
+  const progressEl = document.getElementById('transfer-import-progress')
+  const progressLabelEl = document.getElementById('transfer-import-progress-label')
+  const progressCountEl = document.getElementById('transfer-import-progress-count')
+  const progressFillEl = document.getElementById('transfer-import-progress-fill')
+  const selectBtn = document.getElementById('transfer-import-select-btn')
+  const mergeBtn = document.getElementById('transfer-import-merge-btn')
+  const replaceBtn = document.getElementById('transfer-import-replace-btn')
+  const passwordTab = document.getElementById('transfer-import-auth-password')
+  const phraseTab = document.getElementById('transfer-import-auth-phrase')
+  if (!stateEl || !badgeEl || !messageEl || !warningEl || !statsEl || !progressEl || !progressLabelEl || !progressCountEl || !progressFillEl || !selectBtn || !mergeBtn || !replaceBtn || !passwordTab || !phraseTab) return
+
+  const data = transferImportData
+  const job = data?.job || (data?.version ? data : null)
+  const status = job?.phase || data?.status || 'waiting for folder'
+  const running = transferBusy || (job && !job.done && job.phase !== 'failed')
+  stateEl.textContent = status
+  badgeEl.textContent = running ? 'working' : job?.phase === 'completed' ? 'ready' : data?.ok ? 'ready' : status === 'failed' ? 'failed' : 'waiting'
+  badgeEl.classList.toggle('off', !(data?.ok || job?.phase === 'completed') || status === 'failed')
+  messageEl.textContent = job?.phase === 'completed'
+    ? 'Transfer completed. Session list and search are available from the imported vault data.'
+    : data?.ok
+      ? 'Transfer folder passed preflight. Unlock the selected backup with its old password or old 24-word phrase.'
+      : data?.error || data?.errors?.join(' · ') || 'Choose the copied whole .datamoat folder, unlock the old vault, then add backup data or delete current data and use the backup.'
+
+  const auth = data?.auth
+  const passwordUnavailable = auth && auth.hasPassword === false
+  const phraseUnavailable = auth && auth.hasMnemonic === false
+  if (passwordUnavailable && transferImportAuthMode === 'password' && !phraseUnavailable) {
+    setTransferImportAuthMode('phrase')
+  }
+  if (phraseUnavailable && transferImportAuthMode === 'phrase' && !passwordUnavailable) {
+    setTransferImportAuthMode('password')
+  }
+  passwordTab.disabled = transferBusy || !!passwordUnavailable
+  phraseTab.disabled = transferBusy || !!phraseUnavailable
+
+  const warnings = Array.isArray(data?.warnings) ? data.warnings : []
+  if (warnings.length > 0 || data?.error) {
+    warningEl.hidden = false
+    warningEl.textContent = data?.error || warnings.join(' · ')
+  } else {
+    warningEl.hidden = true
+    warningEl.textContent = ''
+  }
+
+  const counts = job?.counts || data?.counts
+  const imported = job?.imported
+  const skipped = job?.skipped
+  statsEl.innerHTML = job
+    ? [
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(imported?.sessions || 0)}</strong><span>sessions imported</span></div>`,
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(skipped?.duplicates || 0)}</strong><span>duplicates skipped</span></div>`,
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(imported?.attachments || 0)}</strong><span>attachments imported</span></div>`,
+      ].join('')
+    : transferStatsHtml(counts)
+
+  if (running || job) {
+    const sessionTotal = Number(job?.counts?.sessions || 0)
+    const sessionDone = Number(job?.imported?.sessions || 0) + Number(job?.skipped?.sessions || 0) + Number(job?.failed?.sessions || 0)
+    const pct = sessionTotal > 0 ? Math.max(6, Math.min(100, Math.round((sessionDone / sessionTotal) * 100))) : (job?.phase === 'completed' ? 100 : 18)
+    progressEl.hidden = false
+    progressLabelEl.textContent = job?.phase || 'checking transfer'
+    progressCountEl.textContent = sessionTotal > 0 ? `${fmtNumber(sessionDone)} / ${fmtNumber(sessionTotal)}` : (running ? 'working' : '')
+    progressFillEl.style.width = `${pct}%`
+  } else {
+    progressEl.hidden = true
+    progressFillEl.style.width = '0'
+    progressCountEl.textContent = ''
+  }
+
+  const ready = data?.ok || job?.phase === 'completed'
+  selectBtn.disabled = transferBusy
+  mergeBtn.disabled = transferBusy || !ready
+  replaceBtn.disabled = transferBusy || !ready
+}
+
+function confirmTransferReplace() {
+  const backdrop = document.getElementById('transfer-replace-backdrop')
+  const passwordInput = document.getElementById('transfer-replace-current-password')
+  const confirmInput = document.getElementById('transfer-replace-confirm-text')
+  const errorEl = document.getElementById('transfer-replace-error')
+  const cancelBtn = document.getElementById('transfer-replace-cancel')
+  const confirmBtn = document.getElementById('transfer-replace-confirm')
+  if (!(backdrop instanceof HTMLElement)
+    || !(passwordInput instanceof HTMLInputElement)
+    || !(confirmInput instanceof HTMLInputElement)
+    || !(errorEl instanceof HTMLElement)
+    || !(cancelBtn instanceof HTMLButtonElement)
+    || !(confirmBtn instanceof HTMLButtonElement)) {
+    return Promise.resolve(null)
+  }
+
+  passwordInput.value = ''
+  confirmInput.value = ''
+  errorEl.textContent = ''
+  backdrop.hidden = false
+  window.setTimeout(() => passwordInput.focus(), 0)
+
+  return new Promise(resolve => {
+    const cleanup = result => {
+      backdrop.hidden = true
+      cancelBtn.removeEventListener('click', cancel)
+      confirmBtn.removeEventListener('click', submit)
+      passwordInput.removeEventListener('keydown', passwordKeydown)
+      confirmInput.removeEventListener('keydown', confirmKeydown)
+      resolve(result)
+    }
+    const cancel = () => cleanup(null)
+    const passwordKeydown = event => {
+      if (event.key === 'Enter') confirmInput.focus()
+      if (event.key === 'Escape') cancel()
+    }
+    const confirmKeydown = event => {
+      if (event.key === 'Enter') submit()
+      if (event.key === 'Escape') cancel()
+    }
+    const submit = () => {
+      const currentPassword = passwordInput.value
+      const replaceConfirmText = confirmInput.value.trim()
+      if (!currentPassword) {
+        errorEl.textContent = 'Current master password is required before deleting current data.'
+        passwordInput.focus()
+        return
+      }
+      if (replaceConfirmText !== 'DELETE CURRENT DATA') {
+        errorEl.textContent = 'Type DELETE CURRENT DATA exactly to continue.'
+        confirmInput.focus()
+        return
+      }
+      cleanup({ currentPassword, replaceConfirmText })
+    }
+
+    cancelBtn.addEventListener('click', cancel)
+    confirmBtn.addEventListener('click', submit)
+    passwordInput.addEventListener('keydown', passwordKeydown)
+    confirmInput.addEventListener('keydown', confirmKeydown)
+  })
+}
+
+async function loadTransferPanels() {
+  transferBusy = true
+  renderTransferExportPanel()
+  renderTransferImportPanel()
+  try {
+    transferExportData = await jsonOrThrow(await apiFetch('/api/transfer/export/status'))
+    try {
+      transferImportData = await jsonOrThrow(await apiFetch('/api/transfer/import/status'))
+      scheduleTransferImportPollIfRunning()
+    } catch {
+      transferImportData = null
+    }
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    transferBusy = false
+    renderTransferExportPanel()
+    renderTransferImportPanel()
+  }
+}
+
+function currentTransferImportJob() {
+  const data = transferImportData
+  return data?.job || (data?.version ? data : null)
+}
+
+function transferImportJobIsRunning(job = currentTransferImportJob()) {
+  return !!job && !job.done && job.phase !== 'failed' && job.phase !== 'completed' && job.phase !== 'cancelled'
+}
+
+function scheduleTransferImportPollIfRunning(delay = 900) {
+  if (transferImportPollTimer) {
+    window.clearTimeout(transferImportPollTimer)
+    transferImportPollTimer = null
+  }
+  if (!settingsOpen) return
+  const job = currentTransferImportJob()
+  if (!transferImportJobIsRunning(job)) return
+  transferImportPollTimer = window.setTimeout(async () => {
+    transferImportPollTimer = null
+    try {
+      transferImportData = await jsonOrThrow(await apiFetch('/api/transfer/import/status'))
+      renderTransferImportPanel()
+    } catch {
+      // Keep the last visible progress; the start request will surface errors.
+    }
+    scheduleTransferImportPollIfRunning()
+  }, delay)
+}
+
+async function checkTransferExport() {
+  transferBusy = true
+  renderTransferExportPanel()
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/transfer/export/check', { method: 'POST' }))
+    transferExportData = data.status || data
+    setUpdatePanelMessage('Transfer manifest written. Copy the whole DataMoat folder to the new computer.', false)
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    transferBusy = false
+    renderTransferExportPanel()
+  }
+}
+
+async function openTransferExportFolder() {
+  transferBusy = true
+  renderTransferExportPanel()
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/transfer/export/open-folder', { method: 'POST' }))
+    setUpdatePanelMessage(data.ok ? `Opened ${data.path}` : (data.error || data.path), !data.ok)
+  } catch (error) {
+    setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
+  } finally {
+    transferBusy = false
+    renderTransferExportPanel()
+  }
+}
+
+function setTransferImportAuthMode(mode) {
+  transferImportAuthMode = mode === 'phrase' ? 'phrase' : 'password'
+  const passwordTab = document.getElementById('transfer-import-auth-password')
+  const phraseTab = document.getElementById('transfer-import-auth-phrase')
+  const passwordPane = document.getElementById('transfer-import-password-pane')
+  const phrasePane = document.getElementById('transfer-import-phrase-pane')
+  passwordTab?.classList.toggle('active', transferImportAuthMode === 'password')
+  phraseTab?.classList.toggle('active', transferImportAuthMode === 'phrase')
+  if (passwordPane) passwordPane.hidden = transferImportAuthMode !== 'password'
+  if (phrasePane) phrasePane.hidden = transferImportAuthMode !== 'phrase'
+}
+
+async function selectTransferImportFolder() {
+  const selector = window.datamoatDesktop?.transfer?.selectFolder
+  if (!selector) {
+    transferImportData = { error: 'Folder picker is unavailable here. Paste the copied DataMoat folder path.' }
+    renderTransferImportPanel()
+    return
+  }
+  transferBusy = true
+  renderTransferImportPanel()
+  try {
+    const selected = await selector()
+    if (!selected || selected.canceled || !selected.path) return
+    const input = document.getElementById('transfer-import-path')
+    if (input) input.value = selected.path
+    await preflightTransferImport()
+  } catch (error) {
+    transferImportData = { error: error instanceof Error ? error.message : String(error) }
+  } finally {
+    transferBusy = false
+    renderTransferImportPanel()
+  }
+}
+
+function transferImportInputs() {
+  const sourceRoot = document.getElementById('transfer-import-path')?.value.trim() || ''
+  const password = document.getElementById('transfer-import-password')?.value || ''
+  const mnemonic = document.getElementById('transfer-import-mnemonic')?.value.trim() || ''
+  return { sourceRoot, password, mnemonic, authMode: transferImportAuthMode }
+}
+
+async function preflightTransferImport() {
+  const input = transferImportInputs()
+  if (!input.sourceRoot) {
+    transferImportData = { error: 'Transfer folder path required' }
+    renderTransferImportPanel()
+    return
+  }
+  transferBusy = true
+  renderTransferImportPanel()
+  try {
+    transferImportData = await jsonOrThrow(await apiFetch('/api/transfer/import/preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourceRoot: input.sourceRoot }),
+    }))
+  } catch (error) {
+    transferImportData = { error: error instanceof Error ? error.message : String(error) }
+  } finally {
+    transferBusy = false
+    renderTransferImportPanel()
+  }
+}
+
+function scheduleTransferImportPreflight() {
+  if (transferImportPreflightTimer) {
+    window.clearTimeout(transferImportPreflightTimer)
+    transferImportPreflightTimer = null
+  }
+  const input = transferImportInputs()
+  if (!input.sourceRoot) {
+    transferImportData = null
+    renderTransferImportPanel()
+    return
+  }
+  transferImportData = { status: 'checking', warnings: [], counts: null }
+  renderTransferImportPanel()
+  transferImportPreflightTimer = window.setTimeout(() => {
+    transferImportPreflightTimer = null
+    void preflightTransferImport()
+  }, 450)
+}
+
+async function startTransferImport(mode) {
+  const input = transferImportInputs()
+  const missingUnlock = input.authMode === 'phrase' ? !input.mnemonic : !input.password
+  if (!input.sourceRoot || missingUnlock) {
+    transferImportData = {
+      error: input.authMode === 'phrase'
+        ? 'Transfer folder and old 24-word phrase are required'
+        : 'Transfer folder and old vault password are required',
+    }
+    renderTransferImportPanel()
+    return
+  }
+  if (mode === 'replace') {
+    const replaceConfirmation = await confirmTransferReplace()
+    if (!replaceConfirmation) {
+      transferImportData = { error: 'Replace cancelled. Current data was not deleted.' }
+      renderTransferImportPanel()
+      return
+    }
+    input.currentPassword = replaceConfirmation.currentPassword
+    input.replaceConfirmText = replaceConfirmation.replaceConfirmText
+  }
+  transferBusy = true
+  transferImportData = { job: { phase: 'unlocking-source', done: false, counts: {}, imported: {}, skipped: {}, failed: {} } }
+  renderTransferImportPanel()
+  scheduleTransferImportPollIfRunning(500)
+  try {
+    transferImportData = await jsonOrThrow(await apiFetch('/api/transfer/import/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input.authMode === 'phrase'
+        ? { sourceRoot: input.sourceRoot, mode, mnemonic: input.mnemonic, currentPassword: input.currentPassword, replaceConfirmText: input.replaceConfirmText }
+        : { sourceRoot: input.sourceRoot, mode, password: input.password, currentPassword: input.currentPassword, replaceConfirmText: input.replaceConfirmText }),
+    }))
+    scheduleTransferImportPollIfRunning()
+    await loadSessions()
+    setUpdatePanelMessage(mode === 'replace' ? 'Current data was deleted after a safety copy was made, then the selected backup became this vault.' : 'Backup data added to this vault. Duplicates were skipped.', false)
+  } catch (error) {
+    transferImportData = { error: error instanceof Error ? error.message : String(error) }
+  } finally {
+    transferBusy = false
+    renderTransferImportPanel()
   }
 }
 
@@ -4072,6 +4626,7 @@ function openSettings() {
   document.getElementById('settings-backdrop').hidden = false
   void loadUpdatePanel()
   void loadReferencedAttachmentPanel()
+  void loadTransferPanels()
 }
 
 function closeSettings() {
@@ -4079,6 +4634,10 @@ function closeSettings() {
   if (referencedAttachmentPollTimer) {
     window.clearTimeout(referencedAttachmentPollTimer)
     referencedAttachmentPollTimer = null
+  }
+  if (transferImportPollTimer) {
+    window.clearTimeout(transferImportPollTimer)
+    transferImportPollTimer = null
   }
   document.getElementById('settings-backdrop').hidden = true
 }
@@ -4297,6 +4856,21 @@ document.getElementById('update-apply-btn').addEventListener('click', () => { vo
 document.getElementById('update-install-latest-btn').addEventListener('click', () => { void installLatestVersion() })
 document.getElementById('update-reinstall-btn').addEventListener('click', () => { void reinstallFromSource() })
 document.getElementById('referenced-attachments-enable-btn').addEventListener('click', () => { void enableReferencedAttachmentBackup() })
+document.getElementById('transfer-export-check-btn').addEventListener('click', () => { void checkTransferExport() })
+document.getElementById('transfer-export-open-btn').addEventListener('click', () => { void openTransferExportFolder() })
+document.getElementById('transfer-import-select-btn').addEventListener('click', () => { void selectTransferImportFolder() })
+document.getElementById('transfer-import-path').addEventListener('input', () => scheduleTransferImportPreflight())
+document.getElementById('transfer-import-path').addEventListener('change', () => { void preflightTransferImport() })
+document.getElementById('transfer-import-path').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    void preflightTransferImport()
+  }
+})
+document.getElementById('transfer-import-auth-password').addEventListener('click', () => setTransferImportAuthMode('password'))
+document.getElementById('transfer-import-auth-phrase').addEventListener('click', () => setTransferImportAuthMode('phrase'))
+document.getElementById('transfer-import-merge-btn').addEventListener('click', () => { void startTransferImport('merge') })
+document.getElementById('transfer-import-replace-btn').addEventListener('click', () => { void startTransferImport('replace') })
 document.getElementById('reinstall-source-path').addEventListener('input', e => {
   const input = e.target
   if (!(input instanceof HTMLInputElement)) return

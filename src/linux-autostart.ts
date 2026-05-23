@@ -33,6 +33,10 @@ function systemdQuote(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 }
 
+function systemdPath(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/ /g, '\\x20')
+}
+
 function remoteNoScreenCliLauncher(): string | null {
   const cliPath = path.join(os.homedir(), '.local', 'bin', 'datamoat')
   if (fs.existsSync(cliPath)) return cliPath
@@ -71,7 +75,7 @@ function writeDaemonSystemdService(servicePath: string): void {
     'Environment=DATAMOAT_DAEMON=1',
     ...(launcherEnv.ELECTRON_RUN_AS_NODE ? ['Environment=ELECTRON_RUN_AS_NODE=1'] : []),
     `ExecStart=${systemdQuote(launcher)} ${systemdQuote(daemonScript)}`,
-    `WorkingDirectory=${systemdQuote(appRoot)}`,
+    `WorkingDirectory=${systemdPath(appRoot)}`,
     'Restart=on-failure',
     'RestartSec=10',
     '',

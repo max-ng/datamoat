@@ -1,10 +1,9 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as crypto from 'crypto'
-import chokidar from 'chokidar'
 import { Source, Session, Message, OffsetState, RawRecord } from './types'
 import { ALL_SOURCES, GLOB_PATTERNS, HEALTH_FILE, resolveWatchPaths } from './config'
-import { loadOffsets, saveOffsets, upsertSession, appendMessages, appendRawRecords, makeVaultPath, saveAttachment, loadSessions } from './store'
+import { clearCaptureSession, hasVaultSession, loadOffsets, saveOffsets, upsertSession, appendMessages, appendRawRecords, makeVaultPath, saveAttachment, loadSessions } from './store'
 import {
   appendBootstrapCapture,
   clearBootstrapCaptureData,
@@ -87,11 +86,98 @@ function fallbackRawSessionId(source: Source, filePath: string): string {
   return `raw-${crypto.createHash('sha256').update(`${source}:${path.resolve(filePath)}`).digest('hex').slice(0, 16)}`
 }
 
+const CLAUDE_EVENT_TYPES = [
+  'user',
+  'assistant',
+  'system',
+  'summary',
+  'result',
+  'rate_limit_event',
+  'ai-title',
+  'tool_use_summary',
+  'queue-operation',
+  'last-prompt',
+  'permission-mode',
+  'attachment',
+  'file-history-snapshot',
+  'progress',
+]
+
+const CLAUDE_TOPLEVEL_KEYS = [
+  'type',
+  'uuid',
+  'sessionId',
+  'session_id',
+  'version',
+  'claude_code_version',
+  'timestamp',
+  '_audit_timestamp',
+  '_audit_hmac',
+  'message',
+  'aiTitle',
+  'content',
+  'operation',
+  'model',
+  'cwd',
+  'parent_tool_use_id',
+  'client_platform',
+  'subtype',
+  'duration_ms',
+  'duration_api_ms',
+  'num_turns',
+  'result',
+  'stop_reason',
+  'total_cost_usd',
+  'usage',
+  'is_error',
+  'api_error_status',
+  'error',
+  'error_status',
+  'attempt',
+  'max_retries',
+  'retry_delay_ms',
+  'terminal_reason',
+  'rate_limit_info',
+  'fast_mode_state',
+  'skills',
+  'plugins',
+  'agents',
+  'tools',
+  'mcp_servers',
+  'permissionMode',
+  'permission_denials',
+  'output_style',
+  'slash_commands',
+  'apiKeySource',
+  'modelUsage',
+  'isReplay',
+  'status',
+  'leafUuid',
+  'parentUuid',
+  'isSidechain',
+  'attachment',
+  'userType',
+  'entrypoint',
+  'gitBranch',
+  'messageId',
+  'snapshot',
+  'isSnapshotUpdate',
+  'promptId',
+  'agentId',
+  'data',
+  'parentToolUseID',
+  'parentUuid',
+  'slug',
+  'toolUseID',
+  'preceding_tool_use_ids',
+  'summary',
+]
+
 // Known event types per source — anything outside this set is counted as an
 // "unknown event type" for drift observability. Keep in sync with extractors.
-const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
-  'claude-cli': new Set(['user', 'assistant', 'system', 'summary']),
-  'claude-app': new Set(['user', 'assistant', 'system', 'summary']),
+export const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
+  'claude-cli': new Set(CLAUDE_EVENT_TYPES),
+  'claude-app': new Set(CLAUDE_EVENT_TYPES),
   'codex-cli': new Set([
     'session_meta',
     'turn_context',
@@ -168,9 +254,9 @@ const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
 // Known top-level keys per source — same as above but for attribute drift.
 // Kept intentionally narrow: only the keys the current extractor actually
 // reads. Everything else bumps unknownTopLevelKeys counters.
-const KNOWN_TOPLEVEL_KEYS: Record<Source, Set<string>> = {
-  'claude-cli': new Set(['type', 'uuid', 'sessionId', 'session_id', 'version', 'claude_code_version', 'timestamp', '_audit_timestamp', 'message', 'cwd', 'parent_tool_use_id', 'model']),
-  'claude-app': new Set(['type', 'uuid', 'sessionId', 'session_id', 'version', 'claude_code_version', 'timestamp', '_audit_timestamp', '_audit_hmac', 'message', 'cwd', 'parent_tool_use_id', 'model', 'client_platform']),
+export const KNOWN_TOPLEVEL_KEYS: Record<Source, Set<string>> = {
+  'claude-cli': new Set(CLAUDE_TOPLEVEL_KEYS),
+  'claude-app': new Set(CLAUDE_TOPLEVEL_KEYS),
   'codex-cli': new Set(['type', 'timestamp', 'payload']),
   'openclaw': new Set(['type', 'id', 'timestamp', 'cwd', 'message', 'customType', 'data']),
   'cursor': new Set(['type', 'id', 'sessionId', 'session_id', 'conversationId', 'composerId', 'chatId', 'role', 'message', 'content', 'text', 'timestamp', 'createdAt', 'updatedAt', 'model', 'usage', 'cwd', 'sourceClient', 'appVersion', 'cursorVersion']),
@@ -224,7 +310,7 @@ function observeDrift(source: Source, obj: unknown, buckets: DriftBuckets): void
   }
 }
 
-function normalizedEventType(source: Source, obj: Record<string, unknown>): string | null {
+export function normalizedEventType(source: Source, obj: Record<string, unknown>): string | null {
   const type = typeof obj.type === 'string' ? obj.type : null
   if (!type) return null
   if (source !== 'codex-cli') return type
@@ -283,10 +369,25 @@ interface FileState {
 }
 
 const fileStates = new Map<string, FileState>()
+type WatchHandle = {
+  close(): Promise<void> | void
+}
+
+type ChokidarWatcher = WatchHandle & {
+  once(event: 'ready', callback: () => void): ChokidarWatcher
+  on(event: 'add' | 'change', callback: (filePath: string) => void): ChokidarWatcher
+  on(event: 'error', callback: (error: unknown) => void): ChokidarWatcher
+}
+
+type ChokidarModule = {
+  watch(path: string, options: Record<string, unknown>): ChokidarWatcher
+}
+
 let watchersStarted = false
-const activeWatchers: chokidar.FSWatcher[] = []
+const activeWatchers: WatchHandle[] = []
 let offsetsPromise: Promise<OffsetState> | null = null
 let processQueue = Promise.resolve()
+let processQueueRunning = false
 type WatcherMode = 'vault' | 'bootstrap'
 let watcherMode: WatcherMode = 'vault'
 let watcherStartupProgress: WatcherStartupProgress = {
@@ -309,6 +410,19 @@ let watcherStartupProgress: WatcherStartupProgress = {
 }
 const watcherStartupQueuedFiles = new Map<string, { size: number; processed: boolean; sessionKey: string }>()
 const watcherStartupQueuedSessions = new Map<string, { label: string; queuedFiles: number; processedFiles: number; processed: boolean }>()
+
+type ProcessJob = {
+  filePath: string
+  source: Source
+  event: 'add' | 'change'
+  mode: WatcherMode
+  offsetsPromise: Promise<OffsetState> | null
+  startupCount: { counted: boolean; key: string | null; size: number }
+  modifiedMs: number
+  queuedAt: number
+}
+
+const pendingProcessJobs: ProcessJob[] = []
 
 const WATCHER_READY_TIMEOUT_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_READY_TIMEOUT_MS, 10_000)
 const WATCHER_INITIAL_QUEUE_TIMEOUT_MS = nonNegativeTimeoutMs(process.env.DATAMOAT_WATCHER_INITIAL_QUEUE_TIMEOUT_MS, 0)
@@ -385,7 +499,7 @@ function markWatcherStartupQueued(filePath: string, source: Source, mode: Watche
   if (!watcherStartupProgress.running || watcherStartupProgress.mode !== mode) return { counted: false, key: null, size: 0 }
   const key = `${source}:${filePath}`
   const existing = watcherStartupQueuedFiles.get(key)
-  if (existing) return { counted: !existing.processed, key, size: existing.size }
+  if (existing) return { counted: false, key, size: existing.size }
   const sessionKey = watcherStartupSessionKey(filePath, source)
   const sessionLabel = watcherStartupSessionLabel(source, filePath)
   const existingSession = watcherStartupQueuedSessions.get(sessionKey)
@@ -487,6 +601,112 @@ function countExistingWatchFiles(watchPaths: Record<Source, string[]>): void {
       countExistingWatchFilesForSource(src, basePath)
     }
   }
+}
+
+function listWatchFilesForSource(source: Source, root: string): string[] {
+  const out: string[] = []
+  const stack = [root]
+  while (stack.length > 0) {
+    const current = stack.pop()
+    if (!current) continue
+    let entries: fs.Dirent[]
+    try {
+      entries = fs.readdirSync(current, { withFileTypes: true })
+    } catch {
+      continue
+    }
+    for (const entry of entries) {
+      const fullPath = path.join(current, entry.name)
+      if (entry.isDirectory()) {
+        stack.push(fullPath)
+        continue
+      }
+      if (!entry.isFile() || !watchPatternMatches(source, fullPath)) continue
+      out.push(fullPath)
+    }
+  }
+  return out.sort((a, b) => {
+    const aModified = safeMtimeMs(a)
+    const bModified = safeMtimeMs(b)
+    if (aModified !== bModified) return bModified - aModified
+    return a.localeCompare(b)
+  })
+}
+
+function safeMtimeMs(filePath: string): number {
+  try {
+    return fs.statSync(filePath).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
+function pollingSignature(filePath: string): string | null {
+  try {
+    const stat = fs.statSync(filePath)
+    if (!stat.isFile()) return null
+    return `${stat.size}:${Math.floor(stat.mtimeMs)}`
+  } catch {
+    return null
+  }
+}
+
+function createPollingWatcher(source: Source, basePath: string): { handle: WatchHandle; ready: Promise<void> } {
+  let closed = false
+  const seen = new Map<string, string>()
+
+  const scan = (eventForNewFiles: 'add' | 'change'): void => {
+    if (closed) return
+    const currentFiles = new Set<string>()
+    for (const filePath of listWatchFilesForSource(source, basePath)) {
+      currentFiles.add(filePath)
+      const signature = pollingSignature(filePath)
+      if (!signature) continue
+      const previous = seen.get(filePath)
+      if (previous === signature) continue
+      seen.set(filePath, signature)
+      queueProcessFile(filePath, source, previous ? 'change' : eventForNewFiles)
+    }
+    for (const filePath of [...seen.keys()]) {
+      if (!currentFiles.has(filePath)) seen.delete(filePath)
+    }
+  }
+
+  const ready = new Promise<void>(resolve => {
+    setImmediate(() => {
+      scan('add')
+      resolve()
+    })
+  })
+
+  const timer = setInterval(() => scan('change'), WATCHER_POLL_INTERVAL_MS)
+  const handle: WatchHandle = {
+    close() {
+      closed = true
+      clearInterval(timer)
+    },
+  }
+  return { handle, ready }
+}
+
+function createNativeWatcher(
+  watchPath: string,
+  source: Source,
+  options: Record<string, unknown>,
+): { handle: WatchHandle; ready: Promise<void> } {
+  const chokidar = require('chokidar') as ChokidarModule
+  const watcher = chokidar.watch(watchPath, options)
+  const ready = new Promise<void>(resolve => {
+    watcher.once('ready', () => resolve())
+  })
+  watcher
+    .on('add', filePath => queueProcessFile(filePath, source, 'add'))
+    .on('change', filePath => queueProcessFile(filePath, source, 'change'))
+    .on('error', err => {
+      writeLog('error', 'watcher', 'watcher_error', { source, error: safeError(err) })
+      updateHealth(`watcher:${source}`, { lastErrorAt: new Date().toISOString(), lastError: safeError(err) })
+    })
+  return { handle: watcher, ready }
 }
 
 export function countExistingWatchSessions(): { totalSessions: number; bySource: Record<Source, number> } {
@@ -827,30 +1047,23 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
           : {}),
       })
 
-      const watcher = chokidar.watch(watchPath, {
-        persistent: true,
-        ignoreInitial: false,   // process existing files on startup
-        followSymlinks: false,
-        usePolling: WATCHER_USE_POLLING,
-        interval: WATCHER_POLL_INTERVAL_MS,
-        binaryInterval: WATCHER_BINARY_POLL_INTERVAL_MS,
-        alwaysStat: true,
-        awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
-      })
-      activeWatchers.push(watcher)
+      const watcher = WATCHER_USE_POLLING
+        ? createPollingWatcher(src, basePath)
+        : createNativeWatcher(watchPath, src, {
+            persistent: true,
+            ignoreInitial: false,   // process existing files on startup
+            followSymlinks: false,
+            usePolling: false,
+            useFsEvents: true,
+            interval: WATCHER_POLL_INTERVAL_MS,
+            binaryInterval: WATCHER_BINARY_POLL_INTERVAL_MS,
+            alwaysStat: true,
+            awaitWriteFinish: { stabilityThreshold: 300, pollInterval: 100 },
+          })
+      activeWatchers.push(watcher.handle)
       updateWatcherStartupProgress({ watcherCount: activeWatchers.length })
 
-      readyPromises.push(new Promise<void>(resolve => {
-        watcher.once('ready', () => resolve())
-      }))
-
-      watcher
-        .on('add', filePath => queueProcessFile(filePath, src, 'add'))
-        .on('change', filePath => queueProcessFile(filePath, src, 'change'))
-        .on('error', err => {
-          writeLog('error', 'watcher', 'watcher_error', { source: src, error: safeError(err) })
-          updateHealth(`watcher:${src}`, { lastErrorAt: new Date().toISOString(), lastError: safeError(err) })
-        })
+      readyPromises.push(watcher.ready)
     }
   }
 
@@ -933,24 +1146,89 @@ function queueProcessFile(filePath: string, source: Source, event: 'add' | 'chan
     lastEventFile: path.basename(filePath),
   })
 
-  processQueue = processQueue
-    .then(async () => {
-      await yieldToEventLoop()
-      const offsets = offsetsAtEnqueue ? await offsetsAtEnqueue : await loadWatcherOffsets(modeAtEnqueue)
-      await processFile(filePath, source, offsets, modeAtEnqueue)
-      markWatcherStartupProcessed(filePath, source, modeAtEnqueue, startupCount.counted, startupCount.key, startupCount.size)
-      await yieldToEventLoop()
-    })
-    .catch(err => {
-      writeLog('error', 'watcher', 'process_file_failed', {
-        source,
-        file: path.basename(filePath),
-        error: safeError(err),
-      })
-    })
+  pendingProcessJobs.push({
+    filePath,
+    source,
+    event,
+    mode: modeAtEnqueue,
+    offsetsPromise: offsetsAtEnqueue,
+    startupCount,
+    modifiedMs: safeMtimeMs(filePath),
+    queuedAt: Date.now(),
+  })
+  startProcessQueue()
 }
 
-async function processFile(filePath: string, source: Source, offsets: Awaited<ReturnType<typeof loadOffsets>>, mode: WatcherMode): Promise<void> {
+function startProcessQueue(): void {
+  if (processQueueRunning) return
+  processQueueRunning = true
+  processQueue = drainProcessQueue()
+}
+
+function nextProcessJob(): ProcessJob | undefined {
+  if (pendingProcessJobs.length === 0) return undefined
+  let bestIndex = 0
+  for (let index = 1; index < pendingProcessJobs.length; index += 1) {
+    const candidate = pendingProcessJobs[index]
+    const best = pendingProcessJobs[bestIndex]
+    if (processJobSort(candidate, best) < 0) bestIndex = index
+  }
+  const [job] = pendingProcessJobs.splice(bestIndex, 1)
+  return job
+}
+
+function processJobSort(a: ProcessJob, b: ProcessJob): number {
+  const aPriority = a.event === 'change' ? 0 : 1
+  const bPriority = b.event === 'change' ? 0 : 1
+  if (aPriority !== bPriority) return aPriority - bPriority
+  if (a.modifiedMs !== b.modifiedMs) return b.modifiedMs - a.modifiedMs
+  return a.queuedAt - b.queuedAt
+}
+
+async function drainProcessQueue(): Promise<void> {
+  try {
+    while (pendingProcessJobs.length > 0) {
+      const job = nextProcessJob()
+      if (!job) break
+      try {
+        await yieldToEventLoop()
+        const offsets = job.offsetsPromise ? await job.offsetsPromise : await loadWatcherOffsets(job.mode)
+        await processFile(job.filePath, job.source, offsets, job.mode)
+        markWatcherStartupProcessed(
+          job.filePath,
+          job.source,
+          job.mode,
+          job.startupCount.counted,
+          job.startupCount.key,
+          job.startupCount.size,
+        )
+        await yieldToEventLoop()
+      } catch (err) {
+        writeLog('error', 'watcher', 'process_file_failed', {
+          source: job.source,
+          file: path.basename(job.filePath),
+          error: safeError(err),
+        })
+      }
+    }
+  } finally {
+    processQueueRunning = false
+    if (pendingProcessJobs.length > 0) startProcessQueue()
+  }
+}
+
+function isVaultSessionMissingError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.includes('vault session missing')
+}
+
+async function processFile(
+  filePath: string,
+  source: Source,
+  offsets: Awaited<ReturnType<typeof loadOffsets>>,
+  mode: WatcherMode,
+  retryStaleCaptureSession = true,
+): Promise<void> {
   try {
     const stat = fs.statSync(filePath)
     const offsetKey = filePath
@@ -1202,6 +1480,20 @@ async function processFile(filePath: string, source: Source, offsets: Awaited<Re
     fileStates.set(filePath, state)
     await continueFileIfPending(filePath, source, offsets, mode, batch.endOffset, fileSize)
   } catch (err) {
+    if (retryStaleCaptureSession && isVaultSessionMissingError(err) && hasVaultSession()) {
+      clearCaptureSession()
+      writeLog('warn', 'watcher', 'stale_capture_session_recovered', {
+        source,
+        file: path.basename(filePath),
+      })
+      updateHealth(`watcher:${source}`, {
+        lastRecoveredAt: new Date().toISOString(),
+        lastRecoveredReason: 'stale_capture_session',
+        lastRecoveredFile: path.basename(filePath),
+      })
+      await processFile(filePath, source, offsets, mode, false)
+      return
+    }
     if (isTransientFileError(err)) {
       writeLog('warn', 'watcher', 'process_file_skipped', {
         source,

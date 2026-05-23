@@ -3,6 +3,13 @@ import * as path from 'path'
 import { ContentBlock, Message, TokenUsage } from '../types'
 import type { RawImageData } from './claude'
 
+export const CURSOR_EXTRACTOR_VERSION = 1
+export const CURSOR_EXTRACTOR_COMPATIBILITY_VERSION = 1
+
+export function cursorParserCompatibilityKey(appVersion: string | undefined): string {
+  return `cursor:agent-transcripts:${CURSOR_EXTRACTOR_COMPATIBILITY_VERSION}`
+}
+
 // Cursor writes readable agent transcripts at:
 // ~/.cursor/projects/<project>/agent-transcripts/<conversation-id>/<conversation-id>.jsonl
 // Observed records are Anthropic-style message blocks:

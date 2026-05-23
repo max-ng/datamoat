@@ -6,7 +6,9 @@ import CommonCrypto
 
 let keyTag = "com.datamoat.secureenclave.vault".data(using: .utf8)!
 let algorithm: SecKeyAlgorithm = .eciesEncryptionCofactorVariableIVX963SHA256AESGCM
-let wrapIterations = 600000
+let wrapLegacyIterations = 600000
+let wrapV2Iterations = 1200000
+let wrapV2Prefix = "pbkdf2:v2"
 
 let stateKeyLabel = Data("datamoat-state-v1".utf8)
 
@@ -259,6 +261,25 @@ func pbkdf2(secret: String, saltHex: String, iterations: Int) throws -> Data {
     return derived
 }
 
+func parseWrapSalt(_ saltDescriptor: String, fallbackIterations: Int) throws -> (saltHex: String, iterations: Int) {
+    let parts = saltDescriptor.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+    if parts.count == 4 && "\(parts[0]):\(parts[1])" == wrapV2Prefix {
+        guard let iterations = Int(parts[2]), iterations > 0 else {
+            throw HelperError.message("invalid wrap iterations")
+        }
+        guard hexData(parts[3]) != nil else {
+            throw HelperError.message("invalid salt hex")
+        }
+        return (parts[3], iterations)
+    }
+    return (saltDescriptor, fallbackIterations)
+}
+
+func deriveWrapKey(secret: String, saltDescriptor: String, iterations: Int) throws -> Data {
+    let parsed = try parseWrapSalt(saltDescriptor, fallbackIterations: iterations)
+    return try pbkdf2(secret: secret, saltHex: parsed.saltHex, iterations: parsed.iterations)
+}
+
 func encryptData(_ plaintext: Data, keyData: Data) throws -> Data {
     let key = SymmetricKey(data: keyData)
     let nonce = AES.GCM.Nonce()
@@ -326,13 +347,13 @@ func promptOnly() throws {
 
 func wrapSecretForSession(sessionId: String, secret: String) throws -> [String: Any] {
     let vaultKey = try requireFullSession(sessionId)
-    let salt = randomHex(bytes: 16)
-    let derived = try pbkdf2(secret: secret, saltHex: salt, iterations: wrapIterations)
+    let salt = "\(wrapV2Prefix):\(wrapV2Iterations):\(randomHex(bytes: 16))"
+    let derived = try deriveWrapKey(secret: secret, saltDescriptor: salt, iterations: wrapLegacyIterations)
     let blob = try encryptData(vaultKey, keyData: derived).base64EncodedString()
     return [
         "salt": salt,
         "blob": blob,
-        "iterations": wrapIterations
+        "iterations": wrapV2Iterations
     ]
 }
 
@@ -340,7 +361,7 @@ func unwrapSecretToSession(secret: String, salt: String, blob: String, iteration
     guard let encrypted = Data(base64Encoded: blob) else {
         throw HelperError.message("invalid wrapped blob")
     }
-    let derived = try pbkdf2(secret: secret, saltHex: salt, iterations: iterations ?? wrapIterations)
+    let derived = try deriveWrapKey(secret: secret, saltDescriptor: salt, iterations: iterations ?? wrapLegacyIterations)
     let keyData = try decryptData(encrypted, keyData: derived)
     guard keyData.count == 32 else {
         throw HelperError.message("invalid vault key length")
@@ -352,7 +373,7 @@ func unwrapSecretToCaptureSession(secret: String, salt: String, blob: String, it
     guard let encrypted = Data(base64Encoded: blob) else {
         throw HelperError.message("invalid wrapped blob")
     }
-    let derived = try pbkdf2(secret: secret, saltHex: salt, iterations: iterations ?? wrapIterations)
+    let derived = try deriveWrapKey(secret: secret, saltDescriptor: salt, iterations: iterations ?? wrapLegacyIterations)
     let keyData = try decryptData(encrypted, keyData: derived)
     guard keyData.count == 32 else {
         throw HelperError.message("invalid vault key length")
@@ -363,6 +384,77 @@ func unwrapSecretToCaptureSession(secret: String, salt: String, blob: String, it
 func wrapTouchIdForSession(sessionId: String) throws -> String {
     let keyData = try requireFullSession(sessionId)
     return try wrapKey(dataHex(keyData))
+}
+
+func resetTouchIdKey() throws {
+    try deletePrivateKey()
+}
+
+func storeGenericSecret(service: String, account: String, secret: String) throws {
+    guard let secretData = secret.data(using: .utf8) else {
+        throw HelperError.message("invalid secret utf8")
+    }
+    let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account
+    ]
+    let attributes: [String: Any] = [
+        kSecValueData as String: secretData,
+        kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+    ]
+    let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+    if updateStatus == errSecSuccess { return }
+    if updateStatus != errSecItemNotFound {
+        throw HelperError.message("keychain secret update failed: \(updateStatus)")
+    }
+
+    var addQuery = query
+    addQuery[kSecValueData as String] = secretData
+    addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+    let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+    guard addStatus == errSecSuccess else {
+        throw HelperError.message("keychain secret store failed: \(addStatus)")
+    }
+}
+
+func loadGenericSecret(service: String, account: String) throws -> String {
+    let context = LAContext()
+    context.interactionNotAllowed = true
+    let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+        kSecReturnData as String: true,
+        kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
+        kSecUseAuthenticationContext as String: context
+    ]
+    var item: CFTypeRef?
+    let status = SecItemCopyMatching(query as CFDictionary, &item)
+    guard status == errSecSuccess else {
+        if status == errSecItemNotFound {
+            throw HelperError.message("keychain secret missing")
+        }
+        throw HelperError.message("keychain secret load failed: \(status)")
+    }
+    guard let data = item as? Data,
+          let value = String(data: data, encoding: .utf8) else {
+        throw HelperError.message("invalid keychain secret data")
+    }
+    return value
+}
+
+func deleteGenericSecret(service: String, account: String) throws {
+    let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account
+    ]
+    let status = SecItemDelete(query as CFDictionary)
+    guard status == errSecSuccess || status == errSecItemNotFound else {
+        throw HelperError.message("keychain secret delete failed: \(status)")
+    }
 }
 
 func unwrapTouchIdToSession(blob: String) throws -> String {
@@ -488,6 +580,9 @@ func handleRequest(_ request: [String: Any]) -> [String: Any] {
                 throw HelperError.message("wrap_touchid missing sessionId")
             }
             return ["id": id, "ok": true, "blob": try wrapTouchIdForSession(sessionId: sessionId)]
+        case "reset_touchid_key":
+            try resetTouchIdKey()
+            return ["id": id, "ok": true]
         case "unwrap_touchid":
             guard let blob = request["blob"] as? String else {
                 throw HelperError.message("unwrap_touchid missing blob")
@@ -559,6 +654,55 @@ func serve() {
             respond(handleRequest(request))
         }
     }
+}
+
+func argumentValue(after flag: String) -> String? {
+    guard let index = CommandLine.arguments.firstIndex(of: flag) else { return nil }
+    let next = CommandLine.arguments.index(after: index)
+    guard next < CommandLine.arguments.endIndex else { return nil }
+    return CommandLine.arguments[next]
+}
+
+func runSecretCommand(_ mode: String) {
+    guard let service = argumentValue(after: "--service"),
+          let account = argumentValue(after: "--account"),
+          !service.isEmpty,
+          !account.isEmpty else {
+        fail("missing keychain service or account", code: 5)
+    }
+    do {
+        switch mode {
+        case "store":
+            let input = FileHandle.standardInput.readDataToEndOfFile()
+            guard let secret = String(data: input, encoding: .utf8), !secret.isEmpty else {
+                throw HelperError.message("missing secret input")
+            }
+            try storeGenericSecret(service: service, account: account, secret: secret)
+            print("ok", terminator: "")
+        case "load":
+            print(try loadGenericSecret(service: service, account: account), terminator: "")
+        case "delete":
+            try deleteGenericSecret(service: service, account: account)
+            print("ok", terminator: "")
+        default:
+            throw HelperError.message("unknown secret command")
+        }
+        exit(0)
+    } catch {
+        fail(stringError(error), code: 6)
+    }
+}
+
+if CommandLine.arguments.contains("--secret-store") {
+    runSecretCommand("store")
+}
+
+if CommandLine.arguments.contains("--secret-load") {
+    runSecretCommand("load")
+}
+
+if CommandLine.arguments.contains("--secret-delete") {
+    runSecretCommand("delete")
 }
 
 if CommandLine.arguments.contains("--serve") {
