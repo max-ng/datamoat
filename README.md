@@ -16,9 +16,11 @@
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Capture everything you build with Claude, Codex, Cursor, and OpenClaw, and turn it into the most valuable private data asset of your life." width="100%">
+![DataMoat protects and backs up Claude, Codex, Cursor data, skills, and attachments](.github/assets/readme-social-preview.png)
 
-> **Capture everything you build with Claude, Codex, Cursor, and OpenClaw, and turn it into the most valuable private data asset of your life.**
+<img src=".github/assets/readme-brand-hero.svg" alt="Protect and backup all your Claude, Codex, and Cursor data, skills, and attachments." width="100%">
+
+> **Protect and backup all your Claude / Codex / Cursor data + skills + attachments.**
 > DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
 >
 > **Your most valuable future AI data is already disappearing.**
@@ -50,9 +52,6 @@ DataMoat keeps two layers:
 - **Search past prompts, solutions, tool output, and thinking-token context.** Find previous fixes, workflows, timestamps, and attachments without depending on a live service view.
 - **Protect continuity for individuals and teams.** Each protected machine can keep its own encrypted local archive for later review, handoff, and audit.
 - **Keep records encrypted and under local control.** Other software or services cannot read the vault directly; only approved unlock and recovery paths can decrypt it.
-
-![DataMoat first-run setup flow](.github/assets/datamoat-setup-flow.png)
-*First-run setup flow: choose an unlock method, save the 24-word recovery phrase, optionally add authenticator verification, then activate DataMoat.*
 
 ## Highlights
 
