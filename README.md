@@ -9,6 +9,8 @@
 [![Windows](https://img.shields.io/badge/Windows-ZIP%20%2B%20EXE%20preview-2563EB?style=flat-square&logo=windows&logoColor=white)](#install)
 [![Claude CLI](https://img.shields.io/badge/Claude%20CLI-supported-16A34A?style=flat-square)](#supported-today)
 [![Claude Desktop Agent](https://img.shields.io/badge/Claude%20Desktop%20agent-supported-0F766E?style=flat-square)](#supported-today)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-supported-4F7CFF?style=flat-square)](#supported-today)
+[![Qwen](https://img.shields.io/badge/Qwen-supported-5B4BDB?style=flat-square)](#supported-today)
 [![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
@@ -16,21 +18,21 @@
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-![DataMoat protects and backs up Claude, Codex, Cursor data, skills, and attachments](.github/assets/readme-social-preview.png)
+![DataMoat protects and backs up Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments](.github/assets/readme-social-preview.png)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Protect and backup all your Claude, Codex, and Cursor data, skills, and attachments." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Protect and backup all your Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
-> **Protect and backup all your Claude / Codex / Cursor data + skills + attachments.**
+> **Protect and backup all your Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
 > DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
 >
 > **Your most valuable future AI data is already disappearing.**
-> Download DataMoat now to see how much Claude, Codex, Cursor, and OpenClaw work history you can still capture.
+> Download DataMoat now to see how much Claude, Codex, Cursor, OpenClaw, DeepSeek, and Qwen work history you can still capture.
 
 **Core backup scope:** DataMoat backs up supported **skills + sessions + attachments** into the same encrypted local vault. Skills are saved as full folder snapshots, not just names.
 
 **The people and companies that own their AI data will win the future.**
 
-DataMoat is an AI work history vault for people and teams working across Claude CLI, Claude Desktop, Codex CLI, Codex app, Cursor, OpenClaw, and other AI tools. It preserves the full working record: sessions, locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, skills folder contents, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
+DataMoat is an AI work history vault for people and teams working across Claude CLI, Claude Desktop, DeepSeek and Qwen through Claude Code GUI workflows, Codex CLI, Codex app, Cursor, OpenClaw, and other AI tools. It preserves the full working record: sessions, locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, skills folder contents, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
 
 ![DataMoat sessions, skills backup, and encrypted local vault UI](.github/assets/screenshot.png)
 
@@ -41,7 +43,7 @@ DataMoat keeps two layers:
 - **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots, and any locally stored thinking tokens or reasoning blocks are preserved as close to the source format as possible.
 - **Normalized index:** records from different tools are converted into a common schema so you can search, review, export, analyze, reuse, and hand off work across tools.
 
-**Supported sources today:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local OpenClaw session records, and supported local Cursor agent transcripts.
+**Supported sources today:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, DeepSeek and Qwen sessions when written locally by Claude Code GUI workflows, supported local OpenClaw session records, and supported local Cursor agent transcripts.
 **More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
 
 ## Why Install DataMoat
@@ -84,6 +86,8 @@ DataMoat keeps two layers:
 | **Codex CLI** | ✅ | Captures supported local Codex CLI session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
 | **Codex app** | ✅ | Captures supported local Codex app session records; transcript text, tool output, timestamps, metadata, and stable image attachments are preserved |
 | **Claude Desktop local-agent sessions (macOS)** | ✅ | Supported local Claude Desktop agent session records when present |
+| **DeepSeek via Claude Code GUI** | ✅ | When Claude Code GUI writes local records for DeepSeek-backed sessions, transcript text, tool output, timestamps, metadata, skills folder snapshots, images, and supported attachments are preserved |
+| **Qwen via Claude Code GUI** | ✅ | When Claude Code GUI writes local records for Qwen-backed sessions, transcript text, tool output, timestamps, metadata, skills folder snapshots, images, and supported attachments are preserved |
 | **OpenClaw** | ✅ | Supported local OpenClaw session transcripts and metadata |
 | **Cursor** | ✅ | Captures readable local Cursor `agent-transcripts` JSONL records, including text and tool blocks when present |
 | **Attachments** | ✅ | Encrypted image and supported file/PDF blocks, linked back to their source sessions |
@@ -274,7 +278,7 @@ Live git source installs support in-place source updates. Packaged macOS install
 
 DataMoat backs up supported local transcript files that are already present on your device and already accessible to you.
 
-It does not grant additional rights to content or source services. You remain responsible for complying with the terms, policies, plan restrictions, and internal rules that apply to Claude, Codex, OpenClaw, Cursor, and any other source service you use.
+It does not grant additional rights to content or source services. You remain responsible for complying with the terms, policies, plan restrictions, and internal rules that apply to Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor, and any other source service you use.
 
 ## Enterprise
 
