@@ -26,13 +26,13 @@ GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/data
 > **Your most valuable future AI data is already disappearing.**
 > Download DataMoat now to see how much Claude, Codex, Cursor, OpenClaw, DeepSeek, and Qwen work history you can still capture.
 
-**Core backup scope:** DataMoat backs up supported **skills + sessions + attachments** into the same encrypted local vault. Skills are saved as full folder snapshots, not just names.
+**Core backup scope:** DataMoat backs up supported **skills + sessions + attachments** into the same encrypted local memory archive. Skills are saved as full folder snapshots, not just names.
 
 **The people and companies that own their AI data will win the future.**
 
-DataMoat is an AI work history vault for people and teams working across Claude CLI, Claude Desktop, DeepSeek and Qwen through Claude Code GUI workflows, Codex CLI, Codex app, Cursor, OpenClaw, and other AI tools. It preserves the full working record: sessions, locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, skills folder contents, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
+DataMoat is an AI work history memory archive for people and teams working across Claude CLI, Claude Desktop, DeepSeek and Qwen through Claude Code GUI workflows, Codex CLI, Codex app, Cursor, OpenClaw, and other AI tools. It preserves the full working record: sessions, locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, skills folder contents, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
 
-![DataMoat sessions, skills backup, and encrypted local vault UI](.github/assets/screenshot.png)
+![DataMoat sessions, skills backup, and encrypted local memory archive UI](.github/assets/screenshot.png)
 
 ## How DataMoat Stores Your Work
 
@@ -48,18 +48,18 @@ DataMoat keeps two layers:
 
 - **Keep your full AI work history recoverable.** Local records can become harder to revisit after compaction, cleanup, retention changes, account downgrades, device replacement, or environment loss.
 - **Preserve the fullest local version while it is still available.** DataMoat saves the locally written transcript, including locally stored thinking tokens and reasoning blocks when the source stores them on disk.
-- **Back up the surrounding work context.** DataMoat protects supported sessions, attachments, and `SKILL.md`-based skills folder contents in the same encrypted vault.
+- **Back up the surrounding work context.** DataMoat protects supported sessions, attachments, and `SKILL.md`-based skills folder contents in the same encrypted memory archive.
 - **Search past prompts, solutions, tool output, and thinking-token context.** Find previous fixes, workflows, timestamps, and attachments without depending on a live service view.
 - **Protect continuity for individuals and teams.** Each protected machine can keep its own encrypted local archive for later review, handoff, and audit.
-- **Keep records encrypted and under local control.** Other software or services cannot read the vault directly; only approved unlock and recovery paths can decrypt it.
+- **Keep records encrypted and under local control.** Other software or services cannot read the memory archive directly; only approved unlock and recovery paths can decrypt it.
 
 ## Highlights
 
-- **Encrypted local vault** for transcripts, skills, attachments, and state using AES-256-GCM.
-- **Saved content stays local** as encrypted vault files, not plaintext transcript dumps.
+- **Encrypted local memory archive** for transcripts, skills, attachments, and state using AES-256-GCM.
+- **Saved content stays local** as encrypted memory archive files, not plaintext transcript dumps.
 - **Strong local auth** with password, optional TOTP, and a 24-word recovery phrase.
 - **Secure Enclave-backed unlock path on supported Macs** for hardware-assisted daily unlock. See Apple's overview of the [Secure Enclave](https://support.apple.com/guide/security/secure-enclave-sec59b0b31ff/web). Touch ID is part of the packaged macOS app path.
-- **Helper-owned key custody** so the main UI process does not keep the active vault key.
+- **Helper-owned key custody** so the main UI process does not keep the active memory encryption key.
 - **Tamper-evident local audit chain**: current local audit entries are hash-chained and verifiable with `datamoat audit verify`.
 - **Versioned local state** so protected storage can migrate safely over time.
 - **Electron shell by default** to reduce general-purpose browser and browser-extension exposure, with local-only UI binding to `127.0.0.1`.
@@ -93,32 +93,32 @@ DataMoat keeps two layers:
 
 ## Security At A Glance
 
-- **Vault encryption**: transcripts, skills, attachments, and local state are encrypted at rest with AES-256-GCM.
-- **Owner-only local file permissions**: protected vault files, attachment blobs, and state files are written with restrictive local filesystem modes.
+- **Memory archive encryption**: transcripts, skills, attachments, and local state are encrypted at rest with AES-256-GCM.
+- **Owner-only local file permissions**: protected memory archive files, attachment blobs, and state files are written with restrictive local filesystem modes.
 - **Password handling**: passwords are stored as `scrypt` verifiers, not plaintext.
 - **Authenticator support**: TOTP works with standard authenticator apps such as Google Authenticator, 1Password, and Authy.
-- **Recovery design**: every vault gets a 24-word BIP39 recovery phrase.
+- **Recovery design**: every memory archive gets a 24-word BIP39 recovery phrase.
 - **Local-only UI**: the UI binds to `127.0.0.1` and uses `HttpOnly` + `SameSite=Strict` cookies.
 - **Reduced browser attack surface**: the default Electron shell avoids the normal general-purpose browser path; browser fallback remains available when needed.
 - **Local API write protection**: mutating requests must come from the same origin and include a CSRF token.
 - **Unlock retry hardening**: password, Touch ID, and recovery failures back off instead of allowing unlimited rapid retries.
 - **Trusted source updates only**: in-place git updates are allowed only for allow-listed remotes / branches on a clean working tree.
 - **Redacted diagnostics**: health, crash, log, and audit artifacts scrub secrets before they are written.
-- **Key isolation**: the Electron renderer or browser fallback does not receive the raw vault key.
+- **Key isolation**: the Electron renderer or browser fallback does not receive the raw memory encryption key.
 - **Auditability**: security-relevant local events are written to a hash-chained audit log. `datamoat audit verify` detects changed or broken entries in the current local log; it is not a remote notarization service or deletion-proof ledger.
-- **Backup integrity**: the viewer reads the sealed vault copy as the source of truth, not a mutable live source transcript.
+- **Backup integrity**: the viewer reads the sealed memory archive copy as the source of truth, not a mutable live source transcript.
 
 ### Why 24 Words Instead of 12?
 
-DataMoat uses a 24-word BIP39 phrase because it is long-lived recovery material for a high-value encrypted archive. A 12-word BIP39 phrase carries 128 bits of entropy, while a 24-word phrase carries 256 bits. Twelve words are still strong, but for recovery material that may need to protect access for many years, DataMoat chooses the larger security margin.
+DataMoat uses a 24-word BIP39 phrase because it is long-lived recovery material for a high-value encrypted memory archive. A 12-word BIP39 phrase carries 128 bits of entropy, while a 24-word phrase carries 256 bits. Twelve words are still strong, but for recovery material that may need to protect access for many years, DataMoat chooses the larger security margin.
 
-### How The Vault Is Protected
+### How The Memory Archive Is Protected
 
 ```mermaid
 flowchart TD
     A["Supported local transcripts"] --> B["Realtime watcher"]
-    B --> C["Random vault key"]
-    C --> D["AES-256-GCM encrypted vault / attachments / state"]
+    B --> C["Random memory encryption key"]
+    C --> D["AES-256-GCM encrypted memory archive / attachments / state"]
 
     P["Password"] --> P2["scrypt verifier + wrapped release"]
     T["Packaged macOS app on supported Macs"] --> T2["Secure Enclave-backed release + Touch ID"]
@@ -255,7 +255,7 @@ The first setup flow shows recovery material locally:
 - authenticator enrollment secret / QR
 - 24-word recovery phrase
 
-Final vault setup should be completed on the actual desktop screen of the machine being protected, not relayed through chat apps, screenshots, or remote messaging channels.
+Final memory setup should be completed on the actual desktop screen of the machine being protected, not relayed through chat apps, screenshots, or remote messaging channels.
 
 ## Commands
 
