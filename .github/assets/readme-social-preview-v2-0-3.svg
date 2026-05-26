@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1774" height="887" viewBox="0 0 1774 887" role="img" aria-labelledby="title desc">
+  <title id="title">DataMoat protects Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw work history</title>
+  <desc id="desc">A DataMoat README preview showing supported AI sources and protected sessions, skills, images, and attachments.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#02080b"/>
+      <stop offset="54%" stop-color="#061b20"/>
+      <stop offset="100%" stop-color="#02080b"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#4bd3cc" stop-opacity="0.1"/>
+      <stop offset="42%" stop-color="#4f7cff" stop-opacity="0.65"/>
+      <stop offset="100%" stop-color="#6254e8" stop-opacity="0.16"/>
+    </linearGradient>
+    <linearGradient id="codexGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#c8d9ff"/>
+      <stop offset="42%" stop-color="#91a7ff"/>
+      <stop offset="100%" stop-color="#3548f5"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="24" result="blur"/>
+      <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.20 0 0 0 0 0.62 0 0 0 0 0.95 0 0 0 0.55 0"/>
+      <feBlend in="SourceGraphic" mode="normal"/>
+    </filter>
+  </defs>
+
+  <rect width="1774" height="887" fill="url(#bg)"/>
+  <ellipse cx="887" cy="448" rx="710" ry="250" fill="none" stroke="url(#ring)" stroke-width="34" opacity="0.92" filter="url(#glow)"/>
+  <ellipse cx="887" cy="448" rx="560" ry="190" fill="none" stroke="#4bd3cc" stroke-width="3" opacity="0.24"/>
+  <circle cx="1450" cy="160" r="230" fill="#123236" opacity="0.42" filter="url(#glow)"/>
+  <circle cx="252" cy="725" r="190" fill="#0f766e" opacity="0.2" filter="url(#glow)"/>
+
+  <text x="128" y="126" fill="#5fc9c5" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="34" font-weight="800" letter-spacing="2.4">DATAMOAT</text>
+  <text x="128" y="226" fill="#f4fbfb" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="68" font-weight="800">
+    Protect and backup your AI work history
+  </text>
+  <text x="128" y="298" fill="#cfe0e0" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="33" font-weight="700">
+    Sessions + skills + images + files/PDFs + attachments, preserved in a local encrypted vault.
+  </text>
+
+  <g font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="46" font-weight="800">
+    <rect x="128" y="388" width="330" height="94" rx="24" fill="#11191c" stroke="#294245" stroke-width="2"/>
+    <text x="166" y="450" fill="#d97757">Claude</text>
+    <rect x="494" y="388" width="330" height="94" rx="24" fill="#11191c" stroke="#294245" stroke-width="2"/>
+    <text x="532" y="450" fill="url(#codexGradient)">Codex</text>
+    <rect x="860" y="388" width="330" height="94" rx="24" fill="#11191c" stroke="#294245" stroke-width="2"/>
+    <text x="898" y="450" fill="#8a9498">Cursor</text>
+    <rect x="1226" y="388" width="420" height="94" rx="24" fill="#11191c" stroke="#294245" stroke-width="2"/>
+    <text x="1264" y="450" fill="#4f7cff">DeepSeek</text>
+
+    <rect x="128" y="520" width="330" height="94" rx="24" fill="#11191c" stroke="#294245" stroke-width="2"/>
+    <text x="166" y="582" fill="#6254e8">Qwen</text>
+    <rect x="494" y="520" width="420" height="94" rx="24" fill="#11191c" stroke="#294245" stroke-width="2"/>
+    <text x="532" y="582" fill="#d83a3a">OpenClaw</text>
+    <rect x="950" y="520" width="696" height="94" rx="24" fill="#0b2526" stroke="#4bd3cc" stroke-opacity="0.48" stroke-width="2"/>
+    <text x="990" y="581" fill="#f4fbfb">local-first, encrypted, searchable</text>
+  </g>
+
+  <text x="128" y="756" fill="#f4fbfb" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="52" font-weight="800">
+    Own the private data asset before tool histories disappear.
+  </text>
+</svg>

@@ -1,6 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="430" viewBox="0 0 1200 430" role="img" aria-labelledby="title desc">
-  <title id="title">Capture everything you build with Claude, Codex, Cursor, and OpenClaw</title>
-  <desc id="desc">DataMoat headline with Claude, Codex, Cursor, and OpenClaw shown in their brand-inspired colors.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500" role="img" aria-labelledby="title desc">
+  <title id="title">Protect and backup all your Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw data, skills, and attachments</title>
+  <desc id="desc">DataMoat README headline showing Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw support in brand-inspired colors.</desc>
   <defs>
     <linearGradient id="codexGradient" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#c8d9ff"/>
@@ -8,39 +8,44 @@
       <stop offset="100%" stop-color="#3548f5"/>
     </linearGradient>
     <filter id="softGlow" x="-10%" y="-10%" width="120%" height="120%">
-      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feGaussianBlur stdDeviation="22" result="blur"/>
       <feColorMatrix in="blur" type="matrix" values="0 0 0 0 0.32 0 0 0 0 0.76 0 0 0 0 0.74 0 0 0 0.28 0"/>
       <feBlend in="SourceGraphic" mode="normal"/>
     </filter>
   </defs>
 
-  <rect width="1200" height="430" rx="28" fill="#061516"/>
-  <rect x="1" y="1" width="1198" height="428" rx="27" fill="none" stroke="#173a3d" stroke-width="2"/>
-  <circle cx="1040" cy="84" r="180" fill="#123236" opacity="0.42" filter="url(#softGlow)"/>
-  <circle cx="150" cy="350" r="150" fill="#0f766e" opacity="0.18" filter="url(#softGlow)"/>
+  <rect width="1200" height="500" rx="28" fill="#061516"/>
+  <rect x="1" y="1" width="1198" height="498" rx="27" fill="none" stroke="#173a3d" stroke-width="2"/>
+  <circle cx="1040" cy="92" r="190" fill="#123236" opacity="0.42" filter="url(#softGlow)"/>
+  <circle cx="150" cy="410" r="165" fill="#0f766e" opacity="0.18" filter="url(#softGlow)"/>
 
-  <text x="64" y="67" fill="#5fc9c5" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="800" letter-spacing="1.8">DATAMOAT</text>
+  <text x="64" y="66" fill="#5fc9c5" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="800" letter-spacing="1.8">DATAMOAT</text>
 
-  <text x="64" y="146" fill="#f4fbfb" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="58" font-weight="800">
-    Capture everything you build with
+  <text x="64" y="136" fill="#f4fbfb" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="50" font-weight="800">
+    Protect and backup all your
   </text>
 
-  <text y="238" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="76" font-weight="800">
+  <text y="226" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="66" font-weight="800">
     <tspan x="64" fill="#d97757">Claude</tspan>
-    <tspan fill="#f4fbfb">, </tspan>
+    <tspan fill="#f4fbfb"> / </tspan>
     <tspan fill="url(#codexGradient)">Codex</tspan>
-    <tspan fill="#f4fbfb">, </tspan>
-    <tspan fill="#6f777b">Cursor</tspan>
-    <tspan fill="#f4fbfb">,</tspan>
+    <tspan fill="#f4fbfb"> / </tspan>
+    <tspan fill="#7d878b">Cursor</tspan>
   </text>
 
-  <text y="326" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="76" font-weight="800">
-    <tspan x="64" fill="#f4fbfb">and </tspan>
+  <text y="308" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="66" font-weight="800">
+    <tspan x="64" fill="#4f7cff">DeepSeek</tspan>
+    <tspan fill="#f4fbfb"> / </tspan>
+    <tspan fill="#6254e8">Qwen</tspan>
+    <tspan fill="#f4fbfb"> / </tspan>
     <tspan fill="#d83a3a">OpenClaw</tspan>
-    <tspan fill="#f4fbfb">.</tspan>
   </text>
 
-  <text x="66" y="380" fill="#cfe0e0" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="27" font-weight="700">
-    turn it into the most valuable private data asset of your life.
+  <text x="64" y="386" fill="#f4fbfb" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="46" font-weight="800">
+    data + skills + attachments.
+  </text>
+
+  <text x="66" y="444" fill="#cfe0e0" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="25" font-weight="700">
+    Local encrypted vault for sessions, images, files/PDFs, and SKILL.md folders.
   </text>
 </svg>
