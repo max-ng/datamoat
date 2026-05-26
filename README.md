@@ -18,8 +18,6 @@
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-![DataMoat protects and backs up Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw data, skills, and attachments](.github/assets/readme-social-preview-v2-0-3.svg)
-
 <img src=".github/assets/readme-brand-hero.svg" alt="Protect and backup all your Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw data, skills, and attachments." width="100%">
 
 > **Protect and backup all your Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
