@@ -18,9 +18,9 @@
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Protect and backup all your Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw data, skills, and attachments." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Export and backup all your Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw data, skills, and attachments." width="100%">
 
-> **Protect and backup all your Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
+> **Export and backup all your Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
 > DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
 >
 > **Your most valuable future AI data is already disappearing.**
