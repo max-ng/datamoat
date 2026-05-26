@@ -2,55 +2,240 @@
 
 Язык: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-HK.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
+[![Version](https://img.shields.io/badge/version-2.0.3-0F766E?style=flat-square)](#)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
+[![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
+[![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
+[![Linux](https://img.shields.io/badge/Linux-supported-F59E0B?style=flat-square&logo=linux&logoColor=white)](#supported-today)
+[![Packaged macOS App](https://img.shields.io/badge/packaged%20macOS%20app-available-0F766E?style=flat-square)](#install)
+[![Windows](https://img.shields.io/badge/Windows-ZIP%20%2B%20EXE%20preview-2563EB?style=flat-square&logo=windows&logoColor=white)](#install)
+[![Claude CLI](https://img.shields.io/badge/Claude%20CLI-supported-16A34A?style=flat-square)](#supported-today)
+[![Claude Desktop Agent](https://img.shields.io/badge/Claude%20Desktop%20agent-supported-0F766E?style=flat-square)](#supported-today)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-supported-4F7CFF?style=flat-square)](#supported-today)
+[![Qwen](https://img.shields.io/badge/Qwen-supported-5B4BDB?style=flat-square)](#supported-today)
+[![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
+[![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
+
 Официальный сайт: [https://datamoat.org](https://datamoat.org)
 GitHub репозиторий: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Экспортируйте и создавайте резервные копии данных, skills и вложений Claude, Codex, Cursor, DeepSeek, Qwen и OpenClaw." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Экспортируйте и создавайте резервные копии всех данных, skills и вложений Claude, Codex, Cursor, DeepSeek, Qwen и OpenClaw." width="100%">
 
-> **Экспортируйте и создавайте резервные копии всех данных, skills и вложений Claude / Codex / Cursor / DeepSeek / Qwen.**
-> DataMoat хранит вашу историю работы с AI локально и в зашифрованном виде, сохраняет исходные записи и создает единый индекс для поиска, экспорта, повторного использования, передачи работы и приватной AI memory.
+> **Экспортируйте и создавайте резервные копии всех данных + skills + вложений Claude / Codex / Cursor / DeepSeek / Qwen.**
+> DataMoat хранит вашу историю работы с AI локально и в зашифрованном виде, сохраняет исходные raw source records нетронутыми и создает normalized index для поиска, экспорта, повторного использования, handoff и private AI memory.
 >
-> **Самые ценные AI-данные будущего уже могут исчезать.**
-> Установите DataMoat, чтобы увидеть, сколько истории работы Claude, Codex, Cursor, OpenClaw, DeepSeek и Qwen еще можно сохранить.
+> **Ваши самые ценные будущие AI-данные уже исчезают.**
+> Скачайте DataMoat сейчас, чтобы увидеть, сколько истории работы Claude, Codex, Cursor, OpenClaw, DeepSeek и Qwen вы еще можете захватить.
 
-## Что Сохраняет DataMoat
+**Основной объем backup:** DataMoat делает backup поддерживаемых **skills + sessions + attachments** в один и тот же encrypted local memory archive. Skills сохраняются как полные snapshots папок, а не только как имена.
 
-DataMoat — это локальный зашифрованный AI work history memory archive для людей и команд, которые используют Claude CLI, Claude Desktop, Codex CLI, Codex app, Cursor, OpenClaw, DeepSeek и Qwen.
+**Люди и компании, которые владеют своими AI-данными, выиграют будущее.**
 
-Он сохраняет сессии, prompts, ответы, вывод инструментов, метаданные, вложения, изображения, поддерживаемые файлы/PDF, папки `SKILL.md` и исходные локальные записи на той же машине.
+DataMoat — это AI work history memory archive для людей и команд, работающих с Claude CLI, Claude Desktop, DeepSeek и Qwen через Claude Code GUI workflows, Codex CLI, Codex app, Cursor, OpenClaw и другие AI tools. Он сохраняет полный рабочий record: sessions, локально сохраненные thinking tokens и reasoning blocks при наличии, prompts, responses, tool output, files, attachments, metadata, содержимое skills folders и исходные source records на той же машине, чтобы ваша работа оставалась reviewable, protected, reusable и проще передавалась дальше.
 
-## Как Устроен Архив Памяти
+![DataMoat sessions, skills backup и encrypted local memory archive UI](.github/assets/screenshot.png)
 
-- **Raw archive:** JSONL, SQLite, логи, вложения, метаданные и snapshots папок skills сохраняются как можно ближе к исходному формату.
-- **Normalized index:** записи из разных инструментов переводятся в общую схему для поиска, просмотра, экспорта, анализа и повторного использования.
-- **Local control:** зашифрованный архив остается на вашей машине и читается только через утвержденные пути unlock/recovery.
+## Как DataMoat Хранит Вашу Работу
 
-## Зачем Устанавливать
+DataMoat хранит два слоя:
 
-- Восстанавливать историю AI-работы после замены устройства, очистки, context compaction или потери окружения.
-- Экспортировать и повторно использовать старые prompts, решения, решения по архитектуре, вывод инструментов и вложения.
-- Хранить skills, сессии и рабочий контекст в одном зашифрованном архиве памяти.
-- Делать важную AI work history доступной для поиска, миграции, передачи и аудита.
+- **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots и любые locally stored thinking tokens или reasoning blocks сохраняются максимально близко к source format.
+- **Normalized index:** records из разных tools переводятся в common schema, чтобы можно было искать, review, export, analyze, reuse и handoff работу между tools.
 
-## Поддерживается Сейчас
+**Поддерживаемые сегодня sources:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions на macOS, DeepSeek и Qwen sessions, когда они записываются local через Claude Code GUI workflows, поддерживаемые local OpenClaw session records и поддерживаемые local Cursor agent transcripts.
+**Больше data sources и platform releases находятся в roadmap:** поставьте star и watch этому repository, чтобы следить за новыми capture integrations и platform updates.
 
-| Источник | Статус | Что сохраняет DataMoat |
+## Зачем Устанавливать DataMoat
+
+- **Держите полную AI work history восстанавливаемой.** Local records могут стать труднее для повторного просмотра после compaction, cleanup, retention changes, account downgrades, device replacement или environment loss.
+- **Сохраните самую полную local version, пока она еще доступна.** DataMoat сохраняет locally written transcript, включая locally stored thinking tokens и reasoning blocks, когда source записывает их на диск.
+- **Делайте backup окружающего work context.** DataMoat защищает supported sessions, attachments и `SKILL.md`-based skills folder contents в одном encrypted memory archive.
+- **Ищите прошлые prompts, solutions, tool output и thinking-token context.** Находите предыдущие fixes, workflows, timestamps и attachments без зависимости от live service view.
+- **Защитите continuity для людей и команд.** Каждая protected machine может держать свой encrypted local archive для последующего review, handoff и audit.
+- **Держите records encrypted и под local control.** Другое software или services не могут напрямую прочитать memory archive; расшифровать его могут только approved unlock и recovery paths.
+
+## Highlights
+
+- **Encrypted local memory archive** для transcripts, skills, attachments и state с AES-256-GCM.
+- **Сохраненный content остается local** как encrypted memory archive files, а не plaintext transcript dumps.
+- **Strong local auth** с password, optional TOTP и 24-word recovery phrase.
+- **Secure Enclave-backed unlock path на поддерживаемых Macs** для hardware-assisted daily unlock. См. обзор Apple о [Secure Enclave](https://support.apple.com/guide/security/secure-enclave-sec59b0b31ff/web). Touch ID является частью packaged macOS app path.
+- **Helper-owned key custody**, чтобы main UI process не держал active memory encryption key.
+- **Tamper-evident local audit chain**: current local audit entries hash-chained и проверяются через `datamoat audit verify`.
+- **Versioned local state**, чтобы protected storage мог safely migrate со временем.
+- **Electron shell by default** для уменьшения exposure обычного browser и browser extensions, с local-only UI binding к `127.0.0.1`.
+- **Нет third-party font или CDN dependency** в UI.
+
+## Поддерживается Сегодня
+
+### Platforms
+
+| Platform | Status | Notes |
 |---|---|---|
-| Claude CLI | Поддерживается | Локальные transcripts и thinking/reasoning blocks, если источник пишет их на диск |
-| Codex CLI / Codex app | Поддерживается | Локальные сессии, текст, вывод инструментов, timestamps, метаданные и стабильные вложения |
-| macOS Claude Desktop local-agent | Поддерживается | Локальные agent-сессии, если они есть |
-| DeepSeek / Qwen via Claude Code GUI | Поддерживается | Локальные записи, skills, изображения и поддерживаемые вложения |
-| Cursor | Поддерживается | Читаемые локальные `agent-transcripts` |
-| OpenClaw | Поддерживается | Локальные transcripts и метаданные |
-| Skills folders | Поддерживается | Snapshots `SKILL.md` и вспомогательных файлов |
+| **macOS** | Поддерживается сегодня | Source install и signed packaged DMG доступны сейчас |
+| **Linux** | Поддерживается сегодня | Source install доступен сейчас |
+| **Packaged macOS DMG** | [Скачать DMG](https://datamoat.org/download/macos) (рекомендуется) | Signed / notarized Apple Silicon DMG с Secure Enclave + Touch ID unlock на поддерживаемых Macs |
+| **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Unsigned manual packages для Windows 11 x64 и Windows 11 on Arm; x64 прошел GitHub Actions packaged runtime smoke, ARM64 прошел real VM UI/background capture smoke; signed installer еще в работе |
 
-## Установка
+### Sources
 
-macOS: [скачать подписанный DMG](https://datamoat.org/download/macos)
-Windows x64: [скачать ZIP + EXE](https://datamoat.org/download/windows-x64)
-Windows ARM64: [скачать ZIP + EXE](https://datamoat.org/download/windows-arm64)
+| Source | Status | Что сохраняет DataMoat |
+|---|---|---|
+| **Claude CLI** | ✅ | Full local transcript, включая locally written thinking blocks при наличии |
+| **Codex CLI** | ✅ | Captures supported local Codex CLI session records; transcript text, tool output, timestamps, metadata и stable image attachments сохраняются |
+| **Codex app** | ✅ | Captures supported local Codex app session records; transcript text, tool output, timestamps, metadata и stable image attachments сохраняются |
+| **Claude Desktop local-agent sessions (macOS)** | ✅ | Supported local Claude Desktop agent session records при наличии |
+| **DeepSeek via Claude Code GUI** | ✅ | Когда Claude Code GUI записывает local records для DeepSeek-backed sessions, сохраняются transcript text, tool output, timestamps, metadata, skills folder snapshots, images и supported attachments |
+| **Qwen via Claude Code GUI** | ✅ | Когда Claude Code GUI записывает local records для Qwen-backed sessions, сохраняются transcript text, tool output, timestamps, metadata, skills folder snapshots, images и supported attachments |
+| **OpenClaw** | ✅ | Supported local OpenClaw session transcripts и metadata |
+| **Cursor** | ✅ | Captures readable local Cursor `agent-transcripts` JSONL records, включая text и tool blocks при наличии |
+| **Attachments** | ✅ | Encrypted image и supported file/PDF blocks, связанные обратно с source sessions |
+| **Skills folders** | ✅ | Global и project `SKILL.md` folder snapshots, включая `SKILL.md` и included helper files, а не только skill name |
 
-Установка из исходников:
+## Security At A Glance
+
+- **Memory archive encryption**: transcripts, skills, attachments и local state encrypted at rest с AES-256-GCM.
+- **Owner-only local file permissions**: protected memory archive files, attachment blobs и state files записываются с restrictive local filesystem modes.
+- **Password handling**: passwords хранятся как `scrypt` verifiers, не plaintext.
+- **Authenticator support**: TOTP работает со standard authenticator apps, такими как Google Authenticator, 1Password и Authy.
+- **Recovery design**: каждый memory archive получает 24-word BIP39 recovery phrase.
+- **Local-only UI**: UI bind к `127.0.0.1` и использует `HttpOnly` + `SameSite=Strict` cookies.
+- **Reduced browser attack surface**: default Electron shell избегает обычного general-purpose browser path; browser fallback остается доступен при необходимости.
+- **Local API write protection**: mutating requests должны приходить из same origin и включать CSRF token.
+- **Unlock retry hardening**: password, Touch ID и recovery failures back off вместо unlimited rapid retries.
+- **Trusted source updates only**: in-place git updates разрешены только для allow-listed remotes / branches на clean working tree.
+- **Redacted diagnostics**: health, crash, log и audit artifacts scrub secrets перед записью.
+- **Key isolation**: Electron renderer или browser fallback не получает raw memory encryption key.
+- **Auditability**: security-relevant local events записываются в hash-chained audit log. `datamoat audit verify` обнаруживает changed или broken entries в текущем local log; это не remote notarization service и не deletion-proof ledger.
+- **Backup integrity**: viewer читает sealed memory archive copy как source of truth, а не mutable live source transcript.
+
+### Почему 24 Words Вместо 12?
+
+DataMoat использует 24-word BIP39 phrase, потому что это long-lived recovery material для high-value encrypted memory archive. 12-word BIP39 phrase несет 128 bits of entropy, а 24-word phrase — 256 bits. Twelve words все еще сильны, но для recovery material, который может защищать access многие годы, DataMoat выбирает больший security margin.
+
+### Как Memory Archive Защищен
+
+```mermaid
+flowchart TD
+    A["Supported local transcripts"] --> B["Realtime watcher"]
+    B --> C["Random memory encryption key"]
+    C --> D["AES-256-GCM encrypted memory archive / attachments / state"]
+
+    P["Password"] --> P2["scrypt verifier + wrapped release"]
+    T["Packaged macOS app on supported Macs"] --> T2["Secure Enclave-backed release + Touch ID"]
+    G["TOTP authenticator"] --> G2["second-factor gate"]
+    R["24-word phrase"] --> R2["recovery release path"]
+
+    P2 --> H["Helper-owned active key session"]
+    T2 --> H
+    G2 --> H
+    R2 --> H
+
+    H --> D
+    H --> U["Local UI / Electron shell"]
+```
+
+## Install
+
+Signed / notarized macOS DMG — рекомендуемый install path для Mac users. Source install остается доступен для Linux, development и fallback cases. macOS DMG доступен в DataMoat release downloads по адресу [https://datamoat.org/download/macos](https://datamoat.org/download/macos) и включает Secure Enclave + Touch ID unlock на поддерживаемых Macs, menu-bar auto-start at login и packaged auto-update через DataMoat R2 release feed. Windows x64 и ARM64 доступны как unsigned ZIP + `DataMoat.exe` packages, пока signed installer завершается.
+
+Release downloads:
+
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://datamoat.org/download/macos)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://datamoat.org/download/windows-x64)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://datamoat.org/download/windows-arm64)
+
+Каждый Windows ZIP включает `DataMoat.exe` и необходимые app files. Распакуйте Windows package, держите содержимое folder вместе и один раз запустите `Install DataMoat.cmd`. Это launch DataMoat и регистрирует startup для current Windows user, чтобы tray/background app возвращался после login или restart. Это все еще portable ZIP package, а не signed single-file installer.
+
+### AI-Assisted Install
+
+Для Mac users сначала используйте signed и notarized packaged DMG: [Download DMG](https://datamoat.org/download/macos). Не начинайте с `git clone` на macOS, если user явно не хочет source install или packaged release недоступен.
+
+Вы можете попросить Claude CLI, Codex CLI или OpenClaw установить DataMoat, когда смотрите на target desktop.
+
+Typical prompt:
+
+```text
+Установи DataMoat на этот Mac с помощью latest signed macOS DMG из DataMoat release downloads. Скопируй DataMoat.app в Applications, launch его и скажи мне, когда появится local setup UI, чтобы я сам завершил password, authenticator, Touch ID и recovery steps на protected desktop.
+```
+
+Important:
+
+- AI agent может начать install и подготовить app
+- final recovery и unlock setup все равно должен выполнить human user на protected machine
+- если вы используете OpenClaw, Telegram, WhatsApp или другой remote chat relay без видимости target desktop, используйте dedicated remote no-screen flow ниже вместо обычного AI-assisted flow
+
+### Remote No-Screen Install
+
+Если install запускается через OpenClaw, Codex или любой remote chat relay, пока вы не видите protected desktop, сначала используйте packaged macOS DMG или Windows ZIP и launch установленный app с single no-screen flag.
+
+macOS remote prompt:
+
+```text
+Установи DataMoat на этот Mac, используя latest signed and notarized macOS DMG.
+
+Не используй git clone или source install, если DMG install не fails.
+
+Steps:
+1. Download latest macOS DMG:
+   https://datamoat.org/download/macos
+2. Mount the DMG.
+3. Copy DataMoat.app to ~/Applications.
+4. Launch exactly:
+   ~/Applications/DataMoat.app/Contents/MacOS/DataMoat --datamoat-remote-no-screen
+
+Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
+Do not complete password, authenticator, Touch ID, or recovery phrase setup in this chat.
+
+After launch, tell me:
+DataMoat was installed from the DMG and remote no-screen capture was started. I must finish setup later on the protected desktop GUI.
+```
+
+Windows remote prompt:
+
+```text
+Установи DataMoat на эту Windows machine, используя latest Windows ZIP and DataMoat.exe.
+
+Не используй git clone или source install.
+
+Steps:
+1. Download the correct latest Windows ZIP from DataMoat release downloads:
+   x64: https://datamoat.org/download/windows-x64
+   ARM64: https://datamoat.org/download/windows-arm64
+2. Extract the ZIP into Downloads.
+3. Launch exactly:
+   %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen
+
+Use DataMoat-win32-x64 for x64 or DataMoat-win32-arm64 for ARM64.
+Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
+Do not complete password, authenticator, or recovery phrase setup in this chat.
+
+After launch, tell me:
+DataMoat was installed from the Windows ZIP and remote no-screen capture was started. I must finish setup later on the protected desktop GUI.
+```
+
+Manual macOS launch command after installing the DMG:
+
+```bash
+"$HOME/Applications/DataMoat.app/Contents/MacOS/DataMoat" --datamoat-remote-no-screen
+```
+
+Используйте этот mode, чтобы password, authenticator enrollment secret, Touch ID prompt и 24-word recovery phrase никогда не появлялись в Telegram, WhatsApp, OpenClaw chat, screenshots или другом remote relay. DataMoat сразу начинает собирать supported local records с pre-setup encrypted capture, но full unlock setup все равно нужно закончить позже на protected desktop.
+
+После remote install agent должен сообщить, что DataMoat успешно установлен и уже capturing supported local records. Когда вы вернетесь к protected desktop, откройте DataMoat там и завершите setup локально. Не завершайте password, authenticator, Touch ID или recovery setup внутри bot conversation.
+
+Linux fallback when no DMG exists:
+
+```bash
+git clone <repository-url> datamoat
+cd datamoat
+bash install.sh --remote-no-screen
+```
+
+### Manual Install
+
+Рекомендуется для source installs: используйте `git clone`.
 
 ```bash
 git clone <repository-url> datamoat
@@ -59,15 +244,22 @@ bash install.sh
 datamoat
 ```
 
-## Безопасность
+Requirements:
 
-- Локальное шифрование AES-256-GCM для сессий, skills, вложений и состояния.
-- Пароли хранятся как `scrypt` verifiers, не в открытом виде.
-- Поддерживаются TOTP и 24-word BIP39 recovery phrase.
-- Локальный UI привязан к `127.0.0.1` и использует cookies `HttpOnly` + `SameSite=Strict`.
-- Локальный audit log связан hash chain и проверяется командой `datamoat audit verify`.
+- `Node.js 18+`
+- `macOS` или `Linux`
+- `macOS`: Xcode Command Line Tools for local native builds
+- `Linux`: обычная Node build environment для вашего distro
 
-## Команды
+First setup flow показывает recovery material локально:
+
+- password
+- authenticator enrollment secret / QR
+- 24-word recovery phrase
+
+Final memory setup должен быть завершен на actual desktop screen защищаемой machine, а не через chat apps, screenshots или remote messaging channels.
+
+## Commands
 
 ```bash
 datamoat
@@ -78,8 +270,42 @@ datamoat audit verify
 datamoat update check
 ```
 
-## Лицензия
+Audit verification проверяет integrity audit log, который присутствует на диске. Без external checkpoint она сама по себе не может доказать, что local audit file никогда не был deleted, truncated или полностью rewritten кем-то с write access.
 
-DataMoat распространяется по **Business Source License 1.1 (`BUSL-1.1`)** с **Additional Use Grant**. Личное использование и внутреннее использование в компании разрешены; другие сценарии могут требовать отдельной коммерческой лицензии. Проект является **source-available**, но не OSI-approved open source.
+Live git source installs поддерживают in-place source updates. Packaged macOS installs используют DataMoat R2 release downloads как packaged update source: DMG нужен для first install, а later packaged updates скачивают signed ZIP payload и применяют его через macOS app updater вместо того, чтобы просить users mount новый DMG для каждого release.
 
-Полные условия см. в [LICENSE.md](LICENSE.md).
+## Source Service Boundaries
+
+DataMoat делает backup supported local transcript files, которые уже присутствуют на вашем device и уже доступны вам.
+
+Он не дает дополнительных прав на content или source services. Вы сами отвечаете за соблюдение terms, policies, plan restrictions и internal rules, которые применяются к Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor и любому другому source service, который вы используете.
+
+## Enterprise
+
+Enterprise deployment и management features находятся в roadmap. Больше enterprise-focused capabilities появится позже; star и watch этот repository, чтобы следить за обновлениями.
+
+## Consultation and Support
+
+Вопросы или deployment help:
+
+<img src=".github/assets/contact-email.png" alt="Contact email" width="360">
+
+## License
+
+DataMoat распространяется под **Business Source License 1.1 (`BUSL-1.1`)** с **Additional Use Grant**.
+
+Это означает:
+
+- personal use разрешен
+- internal company use разрешен
+- uses вне этого grant требуют отдельной commercial license от licensor
+
+Это **source-available**, не OSI-approved open source.
+
+См. [LICENSE.md](LICENSE.md) для полных условий.
+
+---
+
+## Official Website
+
+Официальный сайт DataMoat: [https://datamoat.org](https://datamoat.org)

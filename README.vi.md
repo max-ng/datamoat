@@ -2,55 +2,240 @@
 
 Ngôn ngữ: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-HK.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
+[![Version](https://img.shields.io/badge/version-2.0.3-0F766E?style=flat-square)](#)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
+[![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
+[![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
+[![Linux](https://img.shields.io/badge/Linux-supported-F59E0B?style=flat-square&logo=linux&logoColor=white)](#supported-today)
+[![Packaged macOS App](https://img.shields.io/badge/packaged%20macOS%20app-available-0F766E?style=flat-square)](#install)
+[![Windows](https://img.shields.io/badge/Windows-ZIP%20%2B%20EXE%20preview-2563EB?style=flat-square&logo=windows&logoColor=white)](#install)
+[![Claude CLI](https://img.shields.io/badge/Claude%20CLI-supported-16A34A?style=flat-square)](#supported-today)
+[![Claude Desktop Agent](https://img.shields.io/badge/Claude%20Desktop%20agent-supported-0F766E?style=flat-square)](#supported-today)
+[![DeepSeek](https://img.shields.io/badge/DeepSeek-supported-4F7CFF?style=flat-square)](#supported-today)
+[![Qwen](https://img.shields.io/badge/Qwen-supported-5B4BDB?style=flat-square)](#supported-today)
+[![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
+[![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
+
 Website chính thức: [https://datamoat.org](https://datamoat.org)
-Kho GitHub: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
+GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export và backup dữ liệu, skills và tệp đính kèm của Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Export và backup toàn bộ dữ liệu, skills và tệp đính kèm của Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw." width="100%">
 
-> **Export và backup toàn bộ dữ liệu, skills và tệp đính kèm của Claude / Codex / Cursor / DeepSeek / Qwen.**
-> DataMoat giữ lịch sử làm việc AI của bạn ở local và được mã hóa, bảo toàn bản ghi gốc và tạo một chỉ mục thống nhất để tìm kiếm, export, tái sử dụng, bàn giao và dùng làm AI memory riêng tư.
+> **Export và backup toàn bộ dữ liệu + skills + tệp đính kèm của Claude / Codex / Cursor / DeepSeek / Qwen.**
+> DataMoat giữ AI work history của bạn ở local và được mã hóa, bảo toàn raw source records nguyên vẹn và tạo normalized index cho search, export, reuse, handoff và private AI memory.
 >
-> **Dữ liệu AI quý nhất trong tương lai của bạn có thể đang biến mất.**
-> Cài DataMoat để xem còn có thể capture được bao nhiêu lịch sử làm việc từ Claude, Codex, Cursor, OpenClaw, DeepSeek và Qwen.
+> **Dữ liệu AI quý giá nhất trong tương lai của bạn đang biến mất rồi.**
+> Tải DataMoat ngay để xem bạn còn có thể capture được bao nhiêu work history từ Claude, Codex, Cursor, OpenClaw, DeepSeek và Qwen.
 
-## DataMoat Lưu Những Gì
+**Phạm vi backup cốt lõi:** DataMoat backup **skills + sessions + attachments** được hỗ trợ vào cùng một encrypted local memory archive. Skills được lưu như full folder snapshots, không chỉ là tên.
 
-DataMoat là một AI work history memory archive được mã hóa tại local cho cá nhân và đội nhóm dùng Claude CLI, Claude Desktop, Codex CLI, Codex app, Cursor, OpenClaw, DeepSeek và Qwen.
+**Những người và công ty sở hữu dữ liệu AI của họ sẽ thắng trong tương lai.**
 
-Nó lưu session, prompt, câu trả lời, output của công cụ, metadata, tệp đính kèm, ảnh, file/PDF được hỗ trợ, thư mục `SKILL.md` và bản ghi nguồn local trên cùng máy.
+DataMoat là AI work history memory archive cho cá nhân và đội nhóm làm việc với Claude CLI, Claude Desktop, DeepSeek và Qwen qua Claude Code GUI workflows, Codex CLI, Codex app, Cursor, OpenClaw và các AI tools khác. Nó bảo toàn full working record: sessions, locally stored thinking tokens và reasoning blocks khi có, prompts, responses, tool output, files, attachments, metadata, skills folder contents và original source records trên cùng máy, để công việc của bạn vẫn reviewable, protected, reusable và dễ handoff hơn về sau.
 
-## Cách Memory Archive Hoạt Động
+![DataMoat sessions, skills backup và encrypted local memory archive UI](.github/assets/screenshot.png)
 
-- **Raw archive:** JSONL, SQLite, log, tệp đính kèm, metadata và snapshot thư mục skills được giữ gần với định dạng gốc nhất có thể.
-- **Normalized index:** bản ghi từ nhiều công cụ được chuyển thành schema chung để tìm kiếm, xem lại, export, phân tích và tái sử dụng.
-- **Local control:** archive mã hóa nằm trên máy của bạn và chỉ được đọc qua các đường unlock/recovery được chấp thuận.
+## DataMoat Lưu Công Việc Của Bạn Như Thế Nào
 
-## Vì Sao Nên Cài
+DataMoat giữ hai lớp:
 
-- Khôi phục lịch sử làm việc AI sau khi đổi máy, dọn cache, context compaction hoặc mất môi trường.
-- Export và tái sử dụng prompt cũ, giải pháp, quyết định, output công cụ và tệp đính kèm.
-- Lưu skills, session và ngữ cảnh làm việc trong cùng một memory archive mã hóa.
-- Giữ AI work history quan trọng ở dạng có thể tìm kiếm, di chuyển, bàn giao và audit.
+- **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots và mọi locally stored thinking tokens hoặc reasoning blocks được giữ gần với source format nhất có thể.
+- **Normalized index:** records từ các tools khác nhau được chuyển thành common schema để bạn có thể search, review, export, analyze, reuse và handoff work xuyên tools.
+
+**Sources được hỗ trợ hôm nay:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions trên macOS, DeepSeek và Qwen sessions khi được Claude Code GUI workflows ghi local, supported local OpenClaw session records và supported local Cursor agent transcripts.
+**Nhiều data sources và platform releases khác nằm trên roadmap:** star và watch repository này để theo dõi capture integrations và platform updates mới khi chúng ship.
+
+## Vì Sao Nên Cài DataMoat
+
+- **Giữ full AI work history có thể recover.** Local records có thể khó xem lại hơn sau compaction, cleanup, retention changes, account downgrades, device replacement hoặc environment loss.
+- **Bảo toàn local version đầy đủ nhất khi nó vẫn còn.** DataMoat lưu locally written transcript, bao gồm locally stored thinking tokens và reasoning blocks khi source lưu chúng vào disk.
+- **Backup work context xung quanh.** DataMoat bảo vệ supported sessions, attachments và `SKILL.md`-based skills folder contents trong cùng encrypted memory archive.
+- **Search prompts cũ, solutions, tool output và thinking-token context.** Tìm lại fixes, workflows, timestamps và attachments trước đây mà không phụ thuộc vào live service view.
+- **Bảo vệ continuity cho cá nhân và đội nhóm.** Mỗi protected machine có thể giữ encrypted local archive riêng cho review, handoff và audit sau này.
+- **Giữ records encrypted và dưới local control.** Software hoặc services khác không thể đọc memory archive trực tiếp; chỉ approved unlock và recovery paths mới decrypt được.
+
+## Highlights
+
+- **Encrypted local memory archive** cho transcripts, skills, attachments và state bằng AES-256-GCM.
+- **Saved content stays local** dưới dạng encrypted memory archive files, không phải plaintext transcript dumps.
+- **Strong local auth** với password, optional TOTP và 24-word recovery phrase.
+- **Secure Enclave-backed unlock path trên Macs được hỗ trợ** cho daily unlock có hardware assist. Xem tổng quan của Apple về [Secure Enclave](https://support.apple.com/guide/security/secure-enclave-sec59b0b31ff/web). Touch ID là một phần của packaged macOS app path.
+- **Helper-owned key custody** để main UI process không giữ active memory encryption key.
+- **Tamper-evident local audit chain**: current local audit entries được hash-chained và verify bằng `datamoat audit verify`.
+- **Versioned local state** để protected storage có thể migrate an toàn theo thời gian.
+- **Electron shell by default** để giảm general-purpose browser và browser-extension exposure, với local-only UI binding tới `127.0.0.1`.
+- **Không có third-party font hoặc CDN dependency** trong UI.
 
 ## Hỗ Trợ Hiện Tại
 
-| Nguồn | Trạng thái | DataMoat lưu gì |
+### Platforms
+
+| Platform | Status | Notes |
 |---|---|---|
-| Claude CLI | Hỗ trợ | Local transcript và thinking/reasoning blocks nếu nguồn ghi ra ổ đĩa |
-| Codex CLI / Codex app | Hỗ trợ | Local session, text, tool output, timestamp, metadata và attachment ổn định |
-| macOS Claude Desktop local-agent | Hỗ trợ | Local agent session nếu có |
-| DeepSeek / Qwen via Claude Code GUI | Hỗ trợ | Local record, skills, ảnh và attachment được hỗ trợ |
-| Cursor | Hỗ trợ | Local `agent-transcripts` có thể đọc |
-| OpenClaw | Hỗ trợ | Local transcript và metadata |
-| Skills folders | Hỗ trợ | Snapshot của `SKILL.md` và file hỗ trợ |
+| **macOS** | Hỗ trợ hôm nay | Source install và signed packaged DMG đã có |
+| **Linux** | Hỗ trợ hôm nay | Source install đã có |
+| **Packaged macOS DMG** | [Tải DMG](https://datamoat.org/download/macos) (khuyến nghị) | Signed / notarized Apple Silicon DMG với Secure Enclave + Touch ID unlock trên Macs được hỗ trợ |
+| **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Unsigned manual packages cho Windows 11 x64 và Windows 11 on Arm; x64 đã pass GitHub Actions packaged runtime smoke, ARM64 đã pass real VM UI/background capture smoke; signed installer vẫn đang làm |
 
-## Cài Đặt
+### Sources
 
-macOS: [tải DMG đã ký](https://datamoat.org/download/macos)
-Windows x64: [tải ZIP + EXE](https://datamoat.org/download/windows-x64)
-Windows ARM64: [tải ZIP + EXE](https://datamoat.org/download/windows-arm64)
+| Source | Status | DataMoat bảo toàn gì |
+|---|---|---|
+| **Claude CLI** | ✅ | Full local transcript, bao gồm locally written thinking blocks khi có |
+| **Codex CLI** | ✅ | Captures supported local Codex CLI session records; transcript text, tool output, timestamps, metadata và stable image attachments được bảo toàn |
+| **Codex app** | ✅ | Captures supported local Codex app session records; transcript text, tool output, timestamps, metadata và stable image attachments được bảo toàn |
+| **Claude Desktop local-agent sessions (macOS)** | ✅ | Supported local Claude Desktop agent session records khi có |
+| **DeepSeek via Claude Code GUI** | ✅ | Khi Claude Code GUI ghi local records cho DeepSeek-backed sessions, transcript text, tool output, timestamps, metadata, skills folder snapshots, images và supported attachments được bảo toàn |
+| **Qwen via Claude Code GUI** | ✅ | Khi Claude Code GUI ghi local records cho Qwen-backed sessions, transcript text, tool output, timestamps, metadata, skills folder snapshots, images và supported attachments được bảo toàn |
+| **OpenClaw** | ✅ | Supported local OpenClaw session transcripts và metadata |
+| **Cursor** | ✅ | Captures readable local Cursor `agent-transcripts` JSONL records, bao gồm text và tool blocks khi có |
+| **Attachments** | ✅ | Encrypted image và supported file/PDF blocks, linked back về source sessions |
+| **Skills folders** | ✅ | Global và project `SKILL.md` folder snapshots, gồm `SKILL.md` và included helper files, không chỉ skill name |
 
-Cài từ source:
+## Security At A Glance
+
+- **Memory archive encryption**: transcripts, skills, attachments và local state được encrypted at rest bằng AES-256-GCM.
+- **Owner-only local file permissions**: protected memory archive files, attachment blobs và state files được ghi với restrictive local filesystem modes.
+- **Password handling**: passwords được lưu như `scrypt` verifiers, không phải plaintext.
+- **Authenticator support**: TOTP hoạt động với standard authenticator apps như Google Authenticator, 1Password và Authy.
+- **Recovery design**: mỗi memory archive có 24-word BIP39 recovery phrase.
+- **Local-only UI**: UI bind tới `127.0.0.1` và dùng `HttpOnly` + `SameSite=Strict` cookies.
+- **Reduced browser attack surface**: default Electron shell tránh normal general-purpose browser path; browser fallback vẫn có khi cần.
+- **Local API write protection**: mutating requests phải đến từ same origin và có CSRF token.
+- **Unlock retry hardening**: password, Touch ID và recovery failures back off thay vì cho phép unlimited rapid retries.
+- **Trusted source updates only**: in-place git updates chỉ được cho allow-listed remotes / branches trên clean working tree.
+- **Redacted diagnostics**: health, crash, log và audit artifacts scrub secrets trước khi ghi.
+- **Key isolation**: Electron renderer hoặc browser fallback không nhận raw memory encryption key.
+- **Auditability**: security-relevant local events được ghi vào hash-chained audit log. `datamoat audit verify` phát hiện changed hoặc broken entries trong current local log; nó không phải remote notarization service hay deletion-proof ledger.
+- **Backup integrity**: viewer đọc sealed memory archive copy làm source of truth, không phải mutable live source transcript.
+
+### Vì Sao 24 Words Thay Vì 12?
+
+DataMoat dùng 24-word BIP39 phrase vì đó là long-lived recovery material cho high-value encrypted memory archive. 12-word BIP39 phrase có 128 bits of entropy, còn 24-word phrase có 256 bits. Twelve words vẫn mạnh, nhưng với recovery material có thể cần bảo vệ access nhiều năm, DataMoat chọn security margin lớn hơn.
+
+### Memory Archive Được Bảo Vệ Như Thế Nào
+
+```mermaid
+flowchart TD
+    A["Supported local transcripts"] --> B["Realtime watcher"]
+    B --> C["Random memory encryption key"]
+    C --> D["AES-256-GCM encrypted memory archive / attachments / state"]
+
+    P["Password"] --> P2["scrypt verifier + wrapped release"]
+    T["Packaged macOS app trên Macs được hỗ trợ"] --> T2["Secure Enclave-backed release + Touch ID"]
+    G["TOTP authenticator"] --> G2["second-factor gate"]
+    R["24-word phrase"] --> R2["recovery release path"]
+
+    P2 --> H["Helper-owned active key session"]
+    T2 --> H
+    G2 --> H
+    R2 --> H
+
+    H --> D
+    H --> U["Local UI / Electron shell"]
+```
+
+## Install
+
+Signed / notarized macOS DMG là install path được khuyến nghị cho Mac users. Source install vẫn có cho Linux, development và fallback cases. macOS DMG có trong DataMoat release downloads tại [https://datamoat.org/download/macos](https://datamoat.org/download/macos) và gồm Secure Enclave + Touch ID unlock trên Macs được hỗ trợ, menu-bar auto-start at login, và packaged auto-update qua DataMoat R2 release feed. Windows x64 và ARM64 có dưới dạng unsigned ZIP + `DataMoat.exe` packages trong khi signed installer được hoàn thiện.
+
+Release downloads:
+
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://datamoat.org/download/macos)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://datamoat.org/download/windows-x64)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://datamoat.org/download/windows-arm64)
+
+Mỗi Windows ZIP gồm `DataMoat.exe` và app files cần thiết. Unzip Windows package, giữ folder contents cùng nhau, và chạy `Install DataMoat.cmd` một lần. Việc đó launch DataMoat và register startup cho current Windows user để tray/background app quay lại sau login hoặc restart. Đây vẫn là portable ZIP package, chưa phải signed single-file installer.
+
+### AI-Assisted Install
+
+Với Mac users, dùng signed và notarized packaged DMG trước: [Download DMG](https://datamoat.org/download/macos). Đừng bắt đầu bằng `git clone` trên macOS trừ khi user rõ ràng muốn source install hoặc packaged release không khả dụng.
+
+Bạn có thể nhờ Claude CLI, Codex CLI hoặc OpenClaw cài DataMoat khi bạn đang nhìn target desktop.
+
+Typical prompt:
+
+```text
+Cài DataMoat trên Mac này bằng latest signed macOS DMG từ DataMoat release downloads. Copy DataMoat.app vào Applications, launch nó, và báo tôi khi local setup UI xuất hiện để tôi tự hoàn tất password, authenticator, Touch ID và recovery steps trên protected desktop.
+```
+
+Important:
+
+- AI agent có thể bắt đầu install và chuẩn bị app
+- final recovery và unlock setup vẫn nên được human user hoàn tất trên protected machine
+- nếu bạn dùng OpenClaw, Telegram, WhatsApp hoặc remote chat relay khác mà không thấy target desktop, hãy dùng dedicated remote no-screen flow bên dưới thay vì normal AI-assisted flow
+
+### Remote No-Screen Install
+
+Nếu install được bắt đầu qua OpenClaw, Codex hoặc remote chat relay trong khi bạn không thấy protected desktop, hãy dùng packaged macOS DMG hoặc Windows ZIP trước và launch installed app với single no-screen flag.
+
+macOS remote prompt:
+
+```text
+Cài DataMoat trên Mac này bằng latest signed and notarized macOS DMG.
+
+Không dùng git clone hoặc source install trừ khi DMG install fails.
+
+Steps:
+1. Download latest macOS DMG:
+   https://datamoat.org/download/macos
+2. Mount the DMG.
+3. Copy DataMoat.app to ~/Applications.
+4. Launch exactly:
+   ~/Applications/DataMoat.app/Contents/MacOS/DataMoat --datamoat-remote-no-screen
+
+Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
+Do not complete password, authenticator, Touch ID, or recovery phrase setup in this chat.
+
+After launch, tell me:
+DataMoat was installed from the DMG and remote no-screen capture was started. I must finish setup later on the protected desktop GUI.
+```
+
+Windows remote prompt:
+
+```text
+Cài DataMoat trên Windows machine này bằng latest Windows ZIP và DataMoat.exe.
+
+Không dùng git clone hoặc source install.
+
+Steps:
+1. Download đúng latest Windows ZIP từ DataMoat release downloads:
+   x64: https://datamoat.org/download/windows-x64
+   ARM64: https://datamoat.org/download/windows-arm64
+2. Extract ZIP vào Downloads.
+3. Launch exactly:
+   %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen
+
+Use DataMoat-win32-x64 for x64 or DataMoat-win32-arm64 for ARM64.
+Use only --datamoat-remote-no-screen for remote no-screen pre-setup capture.
+Do not complete password, authenticator, or recovery phrase setup in this chat.
+
+After launch, tell me:
+DataMoat was installed from the Windows ZIP and remote no-screen capture was started. I must finish setup later on the protected desktop GUI.
+```
+
+Manual macOS launch command after installing the DMG:
+
+```bash
+"$HOME/Applications/DataMoat.app/Contents/MacOS/DataMoat" --datamoat-remote-no-screen
+```
+
+Dùng mode này để ngăn password, authenticator enrollment secret, Touch ID prompt và 24-word recovery phrase xuất hiện trong Telegram, WhatsApp, OpenClaw chat, screenshots hoặc remote relay khác. DataMoat bắt đầu thu supported local records ngay bằng pre-setup encrypted capture, nhưng full unlock setup vẫn phải được hoàn tất sau trên protected desktop.
+
+Sau khi remote install xong, agent nên báo DataMoat đã được cài thành công và đang capture supported local records. Khi bạn quay lại protected desktop, mở DataMoat ở đó và hoàn tất setup locally. Đừng hoàn tất password, authenticator, Touch ID hoặc recovery setup trong bot conversation.
+
+Linux fallback when no DMG exists:
+
+```bash
+git clone <repository-url> datamoat
+cd datamoat
+bash install.sh --remote-no-screen
+```
+
+### Manual Install
+
+Khuyến nghị cho source installs: dùng `git clone`.
 
 ```bash
 git clone <repository-url> datamoat
@@ -59,15 +244,22 @@ bash install.sh
 datamoat
 ```
 
-## Bảo Mật
+Requirements:
 
-- Mã hóa local AES-256-GCM cho session, skills, attachment và state.
-- Mật khẩu được lưu dưới dạng `scrypt` verifier, không phải plaintext.
-- Hỗ trợ TOTP và 24-word BIP39 recovery phrase.
-- UI local bind vào `127.0.0.1` và dùng cookie `HttpOnly` + `SameSite=Strict`.
-- Audit log local dùng hash chain và có thể kiểm tra bằng `datamoat audit verify`.
+- `Node.js 18+`
+- `macOS` hoặc `Linux`
+- `macOS`: Xcode Command Line Tools for local native builds
+- `Linux`: normal Node build environment cho distro của bạn
 
-## Lệnh
+First setup flow hiển thị recovery material locally:
+
+- password
+- authenticator enrollment secret / QR
+- 24-word recovery phrase
+
+Final memory setup nên được hoàn tất trên actual desktop screen của machine được bảo vệ, không relay qua chat apps, screenshots hoặc remote messaging channels.
+
+## Commands
 
 ```bash
 datamoat
@@ -78,8 +270,42 @@ datamoat audit verify
 datamoat update check
 ```
 
-## Giấy Phép
+Audit verification kiểm tra integrity của audit log đang có trên disk. Nếu không có external checkpoint, nó không thể tự chứng minh local audit file chưa từng bị delete, truncate hoặc rewrite hoàn toàn bởi người có write access.
 
-DataMoat được phát hành theo **Business Source License 1.1 (`BUSL-1.1`)** cùng **Additional Use Grant**. Cho phép sử dụng cá nhân và sử dụng nội bộ công ty; các trường hợp khác có thể cần giấy phép thương mại riêng. Dự án này là **source-available**, không phải open source được OSI phê duyệt.
+Live git source installs hỗ trợ in-place source updates. Packaged macOS installs dùng DataMoat R2 release downloads làm packaged update source: DMG dành cho first install, còn packaged updates sau đó download signed ZIP payload và apply qua macOS app updater thay vì yêu cầu users mount DMG mới cho mỗi release.
+
+## Source Service Boundaries
+
+DataMoat backup supported local transcript files đã có trên device của bạn và bạn đã có quyền truy cập.
+
+Nó không cấp thêm quyền với content hoặc source services. Bạn vẫn chịu trách nhiệm tuân thủ terms, policies, plan restrictions và internal rules áp dụng cho Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor và bất kỳ source service nào bạn dùng.
+
+## Enterprise
+
+Enterprise deployment và management features nằm trên roadmap. Nhiều enterprise-focused capabilities khác sẽ đến; star và watch repository này để theo dõi updates.
+
+## Consultation and Support
+
+Câu hỏi hoặc deployment help:
+
+<img src=".github/assets/contact-email.png" alt="Contact email" width="360">
+
+## License
+
+DataMoat được phân phối theo **Business Source License 1.1 (`BUSL-1.1`)** với **Additional Use Grant**.
+
+Điều này nghĩa là:
+
+- personal use được phép
+- internal company use được phép
+- uses ngoài grant này cần separate commercial license từ licensor
+
+Đây là **source-available**, không phải OSI-approved open source.
 
 Xem [LICENSE.md](LICENSE.md) để biết đầy đủ điều khoản.
+
+---
+
+## Official Website
+
+Website DataMoat chính thức: [https://datamoat.org](https://datamoat.org)
