@@ -135,6 +135,30 @@ function packagedUpdateStatePatch(patch: Partial<UpdateState>): UpdateState {
   })
 }
 
+function packagedUpdateErrorMessage(error: unknown): string {
+  return error instanceof Error && error.message ? error.message : String(error)
+}
+
+function packagedUpdateErrorState(error: unknown, message?: string): UpdateState {
+  return packagedUpdateStatePatch({
+    running: false,
+    supported: true,
+    lastResult: 'error',
+    message: message || packagedUpdateErrorMessage(error),
+  })
+}
+
+function observePackagedDownload(downloadPromise: Promise<Array<string>> | null | undefined): void {
+  if (!downloadPromise) return
+  void downloadPromise.catch(error => {
+    writeLog('warn', 'packaged-update', 'packaged_update_download_failed_handled', {
+      error: packagedUpdateErrorMessage(error),
+    })
+    packagedUpdateErrorState(error)
+    return []
+  })
+}
+
 function showPackagedUpdateNotification(version: string, kind: 'downloaded' | 'updated'): void {
   if (!Notification.isSupported()) return
 
@@ -288,12 +312,7 @@ function onUpdaterError(error: Error, message?: string): void {
     error: error.message,
     detail: message || null,
   })
-  packagedUpdateStatePatch({
-    running: false,
-    supported: true,
-    lastResult: 'error',
-    message: message || error.message,
-  })
+  packagedUpdateErrorState(error, message)
 }
 
 function configureAutoUpdater(): void {
@@ -377,7 +396,15 @@ export async function checkForPackagedUpdates(mode: 'auto' | 'manual' = 'manual'
     return loadUpdateState()
   }
 
-  await autoUpdater.checkForUpdates()
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    observePackagedDownload(result?.downloadPromise)
+  } catch (error) {
+    writeLog('warn', 'packaged-update', 'packaged_update_check_failed_handled', {
+      error: packagedUpdateErrorMessage(error),
+    })
+    packagedUpdateErrorState(error)
+  }
   return loadUpdateState()
 }
 

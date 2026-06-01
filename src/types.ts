@@ -1,4 +1,33 @@
-export type Source = 'claude-cli' | 'codex-cli' | 'claude-app' | 'openclaw' | 'cursor'
+export type Source = 'claude-cli' | 'codex-cli' | 'claude-app' | 'openclaw' | 'cursor' | 'chatgpt-export'
+export type WatchedSource = Exclude<Source, 'chatgpt-export'>
+
+export interface ConversationBranchSummary {
+  id: string
+  label: string
+  parentMessageId: string | null
+  startMessageId: string
+  leafMessageId: string | null
+  messageCount: number
+  pathMessageCount: number
+  attachmentCount: number
+  firstTimestamp: string | null
+  lastTimestamp: string | null
+  role?: string
+  isCurrent?: boolean
+}
+
+export interface ConversationGraphSummary {
+  kind: 'chatgpt-tree' | 'claude-parent-graph' | 'codex-related-threads'
+  currentPathMessageCount?: number
+  totalNodeCount?: number
+  branchParentCount?: number
+  branchCount?: number
+  offPathMessageCount?: number
+  offPathAttachmentCount?: number
+  sidechainCount?: number
+  relatedThreadCount?: number
+  branches?: ConversationBranchSummary[]
+}
 
 export interface ContentBlock {
   type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'image' | 'file' | 'other'
@@ -87,6 +116,7 @@ export interface Session {
   hasThinking: boolean
   vaultPath: string        // relative path inside vault dir
   originalPath: string     // original source file path
+  graph?: ConversationGraphSummary
 }
 
 export interface SessionsIndex {

@@ -1,7 +1,7 @@
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
-import type { Source } from './types'
+import type { Source, WatchedSource } from './types'
 
 const USER_HOME = os.homedir()
 export const DATAMOAT_ROOT = process.env.DATAMOAT_HOME?.trim()
@@ -21,6 +21,7 @@ function envRoots(name: string, fallback: string[]): string[] {
 export const VAULT_DIR        = path.join(DATAMOAT_ROOT, 'vault')
 export const ATTACHMENTS_DIR  = path.join(DATAMOAT_ROOT, 'vault', 'attachments')
 export const RAW_DIR          = path.join(DATAMOAT_ROOT, 'vault', 'raw')
+export const RAW_ARCHIVE_DIR  = path.join(DATAMOAT_ROOT, 'vault', 'raw-archive')
 export const SKILLS_BACKUP_DIR = path.join(DATAMOAT_ROOT, 'vault', 'skills')
 export const SKILLS_BLOBS_DIR = path.join(SKILLS_BACKUP_DIR, 'blobs')
 export const SKILLS_MANIFESTS_DIR = path.join(SKILLS_BACKUP_DIR, 'manifests')
@@ -40,13 +41,16 @@ export const UPDATE_STATUS_FILE = path.join(STATE_DIR, 'update-status.json')
 export const UPDATE_LOCK_FILE = path.join(STATE_DIR, 'update.lock')
 export const REFERENCED_ATTACHMENTS_FILE = path.join(STATE_DIR, 'referenced-attachments.json')
 export const PARSER_REPARSE_FILE = path.join(STATE_DIR, 'parser-reparse.json')
+export const VAULT_MAINTENANCE_FILE = path.join(STATE_DIR, 'vault-maintenance.json')
 export const BOOTSTRAP_CAPTURE_FILE = path.join(STATE_DIR, 'bootstrap-capture.json')
 export const BOOTSTRAP_CAPTURE_INDEX_FILE = path.join(STATE_DIR, 'bootstrap-capture-index.json')
+export const UI_PREFERENCES_FILE = path.join(STATE_DIR, 'ui-preferences.json')
 export const CONFIG_FILE  = path.join(DATAMOAT_ROOT, 'config.json')
 export const AUTH_FILE    = path.join(DATAMOAT_ROOT, 'auth.json')
 export const BOOTSTRAP_CAPTURE_DIR = path.join(DATAMOAT_ROOT, 'bootstrap-capture')
 
-export const ALL_SOURCES: readonly Source[] = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw', 'cursor']
+export const WATCHED_SOURCES: readonly WatchedSource[] = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw', 'cursor']
+export const ALL_SOURCES: readonly Source[] = [...WATCHED_SOURCES, 'chatgpt-export']
 
 function discoverClaudeAppRoots(): string[] {
   if (process.platform !== 'win32') {
@@ -81,7 +85,7 @@ function discoverClaudeAppRoots(): string[] {
   return Array.from(roots)
 }
 
-const STATIC_WATCH_PATHS: Record<Exclude<Source, 'openclaw'>, string[]> = {
+const STATIC_WATCH_PATHS: Record<Exclude<WatchedSource, 'openclaw'>, string[]> = {
   'claude-cli': envRoots('DATAMOAT_CLAUDE_CLI_ROOTS', [
     path.join(USER_HOME, '.claude', 'projects'),
   ]),
@@ -144,7 +148,7 @@ function discoverOpenclawRoots(): string[] {
   return Array.from(roots)
 }
 
-export function resolveWatchPaths(): Record<Source, string[]> {
+export function resolveWatchPaths(): Record<WatchedSource, string[]> {
   return {
     ...STATIC_WATCH_PATHS,
     'openclaw': discoverOpenclawRoots(),

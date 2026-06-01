@@ -1,5 +1,6 @@
 import * as crypto from 'crypto'
 import * as fs from 'fs'
+import * as os from 'os'
 import * as path from 'path'
 import {
   loadAuthConfig,
@@ -10,6 +11,9 @@ import {
 import type { AuthConfig } from './auth'
 import {
   AUTH_FILE,
+  BOOTSTRAP_CAPTURE_DIR,
+  BOOTSTRAP_CAPTURE_FILE,
+  BOOTSTRAP_CAPTURE_INDEX_FILE,
   DATAMOAT_ROOT,
   OFFSETS_FILE,
   SESSIONS_FILE,
@@ -34,6 +38,7 @@ import {
   decryptLinesForSession,
   decryptStateForSession,
   encryptBytesForSession,
+  encryptStateForSession,
   lockVaultSession,
   unwrapSecretToSession,
 } from './vault-helper'
@@ -43,6 +48,7 @@ import {
   transferManifestPath,
   transferStateManifestPath,
 } from './transfer-export'
+import { readSourceArchiveRawRecordsFromRoot } from './source-archive'
 import {
   TRANSFER_IMPORTS_VERSION,
   TRANSFER_JOB_VERSION,
@@ -61,6 +67,8 @@ import {
   type TransferStorageCheck,
   type TransferUnlockResult,
 } from './transfer-types'
+import { stopBootstrapCaptureSession } from './bootstrap-capture'
+import { stopWatchers } from './watcher'
 
 const STATE_PREFIX = 'dmstate1:'
 const TRANSFER_JOB_FILE = path.join(STATE_DIR, 'transfer-import-job.json')
@@ -70,6 +78,13 @@ const IMPORTED_SESSION_PREFIX = 'transfer-import'
 const STORAGE_SAFETY_MIN_BYTES = 512 * 1024 * 1024
 const STORAGE_SAFETY_MAX_BYTES = 2 * 1024 * 1024 * 1024
 const STORAGE_SAFETY_RATIO = 0.05
+const PRESERVED_BOOTSTRAP_CAPTURE_ROOT = 'datamoat-bootstrap-capture-'
+const BOOTSTRAP_CAPTURE_SECRET_FILE = path.join(STATE_DIR, 'bootstrap-capture-secret')
+const WINDOWS_BOOTSTRAP_CAPTURE_SECRET_FILE = path.join(
+  STATE_DIR,
+  'windows-secrets',
+  `${Buffer.from('bootstrapCaptureSecret', 'utf8').toString('base64url')}.dpapi`,
+)
 
 type SourceSessionPayload = {
   session: Session
@@ -77,6 +92,17 @@ type SourceSessionPayload = {
   rawRecords: RawRecord[]
   identity: string
   basicIdentity: string
+}
+
+type SourceValidationResult = {
+  sessions: Session[]
+  skippedMissingSessions: Session[]
+  skippedMissingVaultPaths: string[]
+  totalSessions: number
+}
+
+type PreservedBootstrapCapture = {
+  root: string
 }
 
 function nowIso(): string {
@@ -468,6 +494,14 @@ function relativeVaultPath(root: string, relativePath: string): string {
   return path.join(root, 'vault', ...relativePath.split(/[\\/]/).filter(Boolean))
 }
 
+function writePrivateText(filePath: string, content: string): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 })
+  const tmp = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`
+  fs.writeFileSync(tmp, content, { encoding: 'utf8', mode: 0o600 })
+  fs.renameSync(tmp, filePath)
+  try { fs.chmodSync(filePath, 0o600) } catch { /* non-fatal */ }
+}
+
 function rawPathForSession(root: string, source: Source, sessionUid: string): string {
   return path.join(root, 'vault', 'raw', source, `${sessionUid}.jsonl`)
 }
@@ -548,6 +582,27 @@ function rewriteRawRecordForDestination(record: RawRecord, destinationSession: S
   }
 }
 
+function rawRecordDedupeKey(record: RawRecord): string {
+  return JSON.stringify({
+    sourcePath: record.sourcePath || '',
+    sourceByteOffset: record.sourceByteOffset ?? null,
+    rawHash: record.rawHash || '',
+    raw: record.raw ?? null,
+  })
+}
+
+function dedupeRawRecords(records: RawRecord[]): RawRecord[] {
+  const seen = new Set<string>()
+  const out: RawRecord[] = []
+  for (const record of records) {
+    const key = rawRecordDedupeKey(record)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(record)
+  }
+  return out
+}
+
 function isAttachmentId(value: string): boolean {
   return /^[a-f0-9]{64}$/i.test(value)
 }
@@ -581,7 +636,14 @@ async function readSourceSessionPayload(root: string, helperSessionId: string, s
     throw new Error(`missing vault file for session ${session.uid}`)
   }
   const messages = await readSourceJsonLines<Message>(sourceVaultPath, helperSessionId)
-  const rawRecords = await readSourceJsonLines<RawRecord>(rawFilePath, helperSessionId)
+  const legacyRawRecords = await readSourceJsonLines<RawRecord>(rawFilePath, helperSessionId)
+  const archiveRawRecords = await readSourceArchiveRawRecordsFromRoot(
+    helperSessionId,
+    path.join(root, 'vault', 'raw-archive'),
+    session.source,
+    session.uid,
+  )
+  const rawRecords = dedupeRawRecords([...legacyRawRecords, ...archiveRawRecords])
   return {
     session,
     messages,
@@ -591,17 +653,57 @@ async function readSourceSessionPayload(root: string, helperSessionId: string, s
   }
 }
 
-async function validateUnlockedSource(root: string, helperSessionId: string): Promise<Session[]> {
+function manifestAllowsStaleMissingSessions(root: string, manifest: TransferManifest | null, missingCount: number): boolean {
+  if (!manifest || missingCount <= 0) return false
+  const manifestMissing = Math.max(0, Number(manifest.counts.sessions || 0) - Number(manifest.counts.vaultFiles || 0))
+  if (manifestMissing <= 0 || missingCount > manifestMissing) return false
+  const currentCounts = inspectTransferRoot(root)
+  return currentCounts.vaultFiles >= Number(manifest.counts.vaultFiles || 0)
+}
+
+function looksLikeLegacyChatGptEmptySession(session: Session): boolean {
+  if (session.source !== 'chatgpt-export') return false
+  const vaultPath = String(session.vaultPath || '').replace(/\\/g, '/')
+  if (!vaultPath.startsWith('chatgpt-export/') || !vaultPath.endsWith('.jsonl')) return false
+  return Math.max(0, Number(session.messageCount || 0)) === 0
+}
+
+function canSkipLegacyMissingParsedSessions(missingSessions: Session[]): boolean {
+  if (missingSessions.length === 0) return false
+  if (missingSessions.length > 10) return false
+  return missingSessions.every(looksLikeLegacyChatGptEmptySession)
+}
+
+async function validateUnlockedSource(root: string, helperSessionId: string): Promise<SourceValidationResult> {
   const sessions = await readSourceSessions(root, helperSessionId)
-  const missing: string[] = []
+  const manifest = loadManifest(root)
+  const available: Session[] = []
+  const missingSessions: Session[] = []
   for (const session of sessions) {
-    if (!fs.existsSync(relativeVaultPath(root, session.vaultPath))) missing.push(session.vaultPath)
-    if (missing.length >= 5) break
+    if (fs.existsSync(relativeVaultPath(root, session.vaultPath))) available.push(session)
+    else missingSessions.push(session)
   }
-  if (missing.length > 0) {
-    throw new Error(`This transfer folder looks incomplete. Missing vault files: ${missing.join(', ')}`)
+  const missingPaths = missingSessions.map(session => session.vaultPath)
+  if (missingPaths.length > 0) {
+    if (
+      manifestAllowsStaleMissingSessions(root, manifest, missingPaths.length)
+      || canSkipLegacyMissingParsedSessions(missingSessions)
+    ) {
+      return {
+        sessions: available,
+        skippedMissingSessions: missingSessions,
+        skippedMissingVaultPaths: missingPaths,
+        totalSessions: sessions.length,
+      }
+    }
+    throw new Error(`This transfer folder looks incomplete. Missing vault files: ${missingPaths.slice(0, 5).join(', ')}`)
   }
-  return sessions
+  return {
+    sessions,
+    skippedMissingSessions: [],
+    skippedMissingVaultPaths: [],
+    totalSessions: sessions.length,
+  }
 }
 
 function attachmentIdFromFile(fileName: string): string | null {
@@ -682,15 +784,16 @@ async function importAttachments(
   return updateJob(nextJob, { phase: 'importing-sessions' })
 }
 
-async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: TransferUnlockResult, sessions: Session[]): Promise<TransferImportJob> {
+async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: TransferUnlockResult, validation: SourceValidationResult): Promise<TransferImportJob> {
   if (!hasVaultSession()) throw new Error('current vault must be unlocked before merge')
   ensureDirs()
+  const sessions = validation.sessions
   let nextJob = updateJob(job, {
     phase: 'importing-sessions',
     sourceVaultFingerprint: source.rootFingerprint,
     counts: {
       ...job.counts,
-      sessions: sessions.length,
+      sessions: Math.max(job.counts.sessions || 0, validation.totalSessions),
     },
   })
   const importsState = readImportsState()
@@ -859,6 +962,53 @@ function isTransferTransientPath(relativePath: string): boolean {
     || normalized === 'state/transfer-replace-journal.json'
 }
 
+function hasCurrentBootstrapCapture(): boolean {
+  return fs.existsSync(BOOTSTRAP_CAPTURE_FILE)
+    || fs.existsSync(BOOTSTRAP_CAPTURE_INDEX_FILE)
+    || fs.existsSync(BOOTSTRAP_CAPTURE_DIR)
+}
+
+function copyIfExists(from: string, to: string): void {
+  if (!fs.existsSync(from)) return
+  fs.mkdirSync(path.dirname(to), { recursive: true, mode: 0o700 })
+  const stat = fs.lstatSync(from)
+  if (stat.isDirectory()) {
+    fs.cpSync(from, to, { recursive: true })
+  } else if (stat.isFile()) {
+    fs.copyFileSync(from, to)
+    try { fs.chmodSync(to, stat.mode) } catch { /* non-fatal */ }
+  }
+}
+
+async function preserveCurrentBootstrapCapture(): Promise<PreservedBootstrapCapture | null> {
+  if (!hasCurrentBootstrapCapture()) return null
+
+  await stopWatchers()
+  await stopBootstrapCaptureSession()
+
+  const preserveRoot = fs.mkdtempSync(path.join(os.tmpdir(), PRESERVED_BOOTSTRAP_CAPTURE_ROOT))
+  copyIfExists(BOOTSTRAP_CAPTURE_FILE, path.join(preserveRoot, 'state', 'bootstrap-capture.json'))
+  copyIfExists(BOOTSTRAP_CAPTURE_INDEX_FILE, path.join(preserveRoot, 'state', 'bootstrap-capture-index.json'))
+  copyIfExists(BOOTSTRAP_CAPTURE_SECRET_FILE, path.join(preserveRoot, 'state', 'bootstrap-capture-secret'))
+  copyIfExists(WINDOWS_BOOTSTRAP_CAPTURE_SECRET_FILE, path.join(preserveRoot, 'state', 'windows-secrets', path.basename(WINDOWS_BOOTSTRAP_CAPTURE_SECRET_FILE)))
+  copyIfExists(BOOTSTRAP_CAPTURE_DIR, path.join(preserveRoot, 'bootstrap-capture'))
+  return { root: preserveRoot }
+}
+
+function restorePreservedBootstrapCapture(preserved: PreservedBootstrapCapture | null): void {
+  if (!preserved) return
+  copyIfExists(path.join(preserved.root, 'state', 'bootstrap-capture.json'), BOOTSTRAP_CAPTURE_FILE)
+  copyIfExists(path.join(preserved.root, 'state', 'bootstrap-capture-index.json'), BOOTSTRAP_CAPTURE_INDEX_FILE)
+  copyIfExists(path.join(preserved.root, 'state', 'bootstrap-capture-secret'), BOOTSTRAP_CAPTURE_SECRET_FILE)
+  copyIfExists(path.join(preserved.root, 'state', 'windows-secrets', path.basename(WINDOWS_BOOTSTRAP_CAPTURE_SECRET_FILE)), WINDOWS_BOOTSTRAP_CAPTURE_SECRET_FILE)
+  copyIfExists(path.join(preserved.root, 'bootstrap-capture'), BOOTSTRAP_CAPTURE_DIR)
+}
+
+function removePreservedBootstrapCapture(preserved: PreservedBootstrapCapture | null): void {
+  if (!preserved) return
+  try { fs.rmSync(preserved.root, { recursive: true, force: true }) } catch { /* non-fatal */ }
+}
+
 async function copyDirectory(
   source: string,
   destination: string,
@@ -941,7 +1091,6 @@ function cleanMachineBoundTransferredState(root: string): void {
 
   for (const relative of [
     'daemon.pid',
-    'state/offsets.json',
     'state/port',
     'state/status.json',
     'state/health.json',
@@ -950,13 +1099,51 @@ function cleanMachineBoundTransferredState(root: string): void {
     'state/transfer-replace-journal.json',
     'state/bootstrap-capture.json',
     'state/bootstrap-capture-index.json',
+    'state/bootstrap-capture-secret',
+    `state/windows-secrets/${path.basename(WINDOWS_BOOTSTRAP_CAPTURE_SECRET_FILE)}`,
   ]) {
     try { fs.rmSync(path.join(root, ...relative.split('/')), { force: true }) } catch { /* ignore */ }
   }
   try { fs.rmSync(path.join(root, 'bootstrap-capture'), { recursive: true, force: true }) } catch { /* ignore */ }
 }
 
-async function switchCurrentRootToSource(job: TransferImportJob, sourceRoot: string): Promise<TransferImportJob> {
+function sortSessionsForIndex(sessions: Session[]): Session[] {
+  return sessions
+    .map(normalizeSessionIdentity)
+    .sort((a, b) => {
+      const timeDelta = Date.parse(b.lastTimestamp || '') - Date.parse(a.lastTimestamp || '')
+      if (Number.isFinite(timeDelta) && timeDelta !== 0) return timeDelta
+      const messageDelta = (b.messageCount || 0) - (a.messageCount || 0)
+      if (messageDelta !== 0) return messageDelta
+      return String(a.uid || a.id).localeCompare(String(b.uid || b.id))
+    })
+}
+
+async function writeTransferredSessionsIndex(root: string, helperSessionId: string, sessions: Session[]): Promise<void> {
+  const sorted = sortSessionsForIndex(sessions)
+  const idx: SessionsIndex = {
+    version: 2,
+    updatedAt: nowIso(),
+    sessions: sorted,
+  }
+  const encrypted = await encryptStateForSession(helperSessionId, JSON.stringify(idx))
+  writePrivateText(path.join(root, 'state', 'sessions.json'), `${STATE_PREFIX}${encrypted}`)
+  const bySource: Partial<Record<Source, number>> = {}
+  for (const session of sorted) bySource[session.source] = (bySource[session.source] ?? 0) + 1
+  writePrivateJson(path.join(root, 'state', 'status.json'), {
+    totalSessions: sorted.length,
+    bySource,
+    lastTimestamp: sorted[0]?.lastTimestamp ?? null,
+    updatedAt: idx.updatedAt,
+  })
+}
+
+async function switchCurrentRootToSource(
+  job: TransferImportJob,
+  sourceRoot: string,
+  helperSessionId: string,
+  sourceSessions: Session[],
+): Promise<TransferImportJob> {
   if (sourceInsideDestination(sourceRoot, DATAMOAT_ROOT)) {
     throw new Error('transfer source folder must not be inside the active DataMoat folder')
   }
@@ -966,6 +1153,7 @@ async function switchCurrentRootToSource(job: TransferImportJob, sourceRoot: str
   const hadCurrentRoot = job.mode !== 'adopt' && fs.existsSync(DATAMOAT_ROOT) && !isRootEmpty(DATAMOAT_ROOT)
   let currentRootMoved = false
   let stagingPromoted = false
+  let preservedBootstrap: PreservedBootstrapCapture | null = null
   writePrivateJson(REPLACE_JOURNAL_FILE, {
     version: 1,
     mode: job.mode,
@@ -1007,7 +1195,9 @@ async function switchCurrentRootToSource(job: TransferImportJob, sourceRoot: str
     nextJob = updateJob(nextJob, { phase: 'cleaning-machine-bound-auth' })
     cleanMachineBoundTransferredState(stagingRoot)
     removeTransferNoiseFiles(stagingRoot)
+    await writeTransferredSessionsIndex(stagingRoot, helperSessionId, sourceSessions)
     nextJob = updateJob(nextJob, { phase: 'finalizing-transfer-root' })
+    preservedBootstrap = await preserveCurrentBootstrapCapture()
     if (hadCurrentRoot) {
       await fs.promises.rename(DATAMOAT_ROOT, backupRoot)
       currentRootMoved = true
@@ -1028,6 +1218,7 @@ async function switchCurrentRootToSource(job: TransferImportJob, sourceRoot: str
     }
     await fs.promises.rename(stagingRoot, DATAMOAT_ROOT)
     stagingPromoted = true
+    restorePreservedBootstrapCapture(preservedBootstrap)
     writePrivateJson(path.join(DATAMOAT_ROOT, 'state', 'transfer-replace-journal.json'), {
       version: 1,
       mode: job.mode,
@@ -1047,19 +1238,23 @@ async function switchCurrentRootToSource(job: TransferImportJob, sourceRoot: str
     if (hadCurrentRoot && fs.existsSync(backupRoot) && !fs.existsSync(DATAMOAT_ROOT)) {
       await fs.promises.rename(backupRoot, DATAMOAT_ROOT)
     }
+    restorePreservedBootstrapCapture(preservedBootstrap)
     throw error
+  } finally {
+    removePreservedBootstrapCapture(preservedBootstrap)
   }
 }
 
-async function adoptOrReplaceRoot(job: TransferImportJob, source: TransferUnlockResult, sessions: Session[]): Promise<TransferImportJob> {
+async function adoptOrReplaceRoot(job: TransferImportJob, source: TransferUnlockResult, validation: SourceValidationResult): Promise<TransferImportJob> {
+  const sessions = validation.sessions
   let nextJob = updateJob(job, {
     sourceVaultFingerprint: source.rootFingerprint,
     counts: {
       ...job.counts,
-      sessions: sessions.length,
+      sessions: Math.max(job.counts.sessions || 0, validation.totalSessions),
     },
   })
-  nextJob = await switchCurrentRootToSource(nextJob, source.root)
+  nextJob = await switchCurrentRootToSource(nextJob, source.root, source.helperSessionId, sessions)
   setVaultSession(source.helperSessionId)
   nextJob.done = true
   nextJob.completedAt = nowIso()
@@ -1091,12 +1286,30 @@ export async function runTransferImport(options: {
     job = updateJob(job, { phase: 'unlocking-source' })
     source = await unlockTransferSource(sourceRoot, options.credentials)
     job = updateJob(job, { phase: 'validating-source', sourceVaultFingerprint: source.rootFingerprint })
-    const sessions = await validateUnlockedSource(source.root, source.helperSessionId)
+    const validation = await validateUnlockedSource(source.root, source.helperSessionId)
+    if (validation.skippedMissingSessions.length > 0) {
+      const skippedMessages = validation.skippedMissingSessions.reduce((sum, session) => sum + Math.max(0, Number(session.messageCount || 0)), 0)
+      job = updateJob(job, {
+        skipped: {
+          ...job.skipped,
+          sessions: job.skipped.sessions + validation.skippedMissingSessions.length,
+          messages: job.skipped.messages + skippedMessages,
+        },
+        warnings: [
+          ...(job.warnings ?? []),
+          `Skipped ${validation.skippedMissingSessions.length} stale session index entr${validation.skippedMissingSessions.length === 1 ? 'y' : 'ies'} whose parsed vault file was already missing from the transfer manifest.`,
+        ],
+        counts: {
+          ...job.counts,
+          sessions: Math.max(job.counts.sessions || 0, validation.totalSessions),
+        },
+      })
+    }
 
     if (options.mode === 'merge') {
-      return await mergeSourceIntoCurrentVault(job, source, sessions)
+      return await mergeSourceIntoCurrentVault(job, source, validation)
     }
-    return await adoptOrReplaceRoot(job, source, sessions)
+    return await adoptOrReplaceRoot(job, source, validation)
   } catch (error) {
     job.lastError = safeError(error)
     job.done = true
@@ -1149,5 +1362,4 @@ export function transferredRootWasMachineCleaned(root = DATAMOAT_ROOT): boolean 
   return !config.touchIdWrappedVaultKey
     && config.touchIdEnabled !== true
     && !config.backgroundWrappedVaultKey
-    && !fs.existsSync(root === DATAMOAT_ROOT ? OFFSETS_FILE : path.join(root, 'state', 'offsets.json'))
 }

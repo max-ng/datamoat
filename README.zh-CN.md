@@ -2,7 +2,7 @@
 
 语言: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
-[![Version](https://img.shields.io/badge/version-2.0.3-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.4-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -16,23 +16,24 @@
 [![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
+[![ChatGPT export](https://img.shields.io/badge/ChatGPT%20export-ZIP%2Ffolder%20import-10B981?style=flat-square)](#supported-today)
 
 官方网站: [https://datamoat.org](https://datamoat.org)
 GitHub 仓库: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="导出并备份你的 Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 数据、skills 与附件。" width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
-> **导出并备份你的全部 Claude / Codex / Cursor / DeepSeek / Qwen 数据 + skills + 附件。**
+> **导出并备份你的全部 ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 数据 + skills + 附件。**
 > DataMoat 将你的 AI 工作历史保存在本地并加密，完整保留原始来源记录，同时建立统一索引，方便搜索、导出、复用、交接和私有 AI memory。
 >
 > **你未来最有价值的 AI 数据已经在消失。**
-> 立即下载 DataMoat，看看你还能捕获多少 Claude、Codex、Cursor、OpenClaw、DeepSeek 和 Qwen 工作历史。
+> 立即下载 DataMoat，看看你还能捕获多少 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 工作历史。
 
 **核心备份范围:** DataMoat 会把受支持的 **skills + sessions + attachments** 备份进同一个本地加密 memory archive。Skills 会以完整文件夹快照保存，而不只是保存名称。
 
 **拥有自己 AI 数据的人和公司，会赢得未来。**
 
-DataMoat 是一个 AI work history memory archive，面向使用 Claude CLI、Claude Desktop、通过 Claude Code GUI workflow 使用 DeepSeek 和 Qwen、Codex CLI、Codex app、Cursor、OpenClaw 以及其他 AI 工具的个人和团队。它会保存完整工作记录：sessions、来源存在时本地保存的 thinking tokens 和 reasoning blocks、prompts、responses、tool output、files、attachments、metadata、skills folder contents，以及同一台机器上的原始来源记录，让你的工作之后仍然可以复查、受保护、复用，并更容易交接。
+DataMoat 是一个 AI work history memory archive，面向使用 ChatGPT exports、Claude CLI、Claude Desktop、通过 Claude Code GUI workflow 使用 DeepSeek 和 Qwen、Codex CLI、Codex app、Cursor、OpenClaw 以及其他 AI 工具的个人和团队。它会保存完整工作记录：sessions、来源存在时本地保存的 thinking tokens 和 reasoning blocks、prompts、responses、tool output、files、attachments、metadata、skills folder contents，以及同一台机器上的原始来源记录，让你的工作之后仍然可以复查、受保护、复用，并更容易交接。
 
 ![DataMoat sessions、skills backup 和本地加密 memory archive UI](.github/assets/screenshot.png)
 
@@ -43,8 +44,17 @@ DataMoat 保留两层数据:
 - **Raw archive:** 原始 session JSONL、SQLite records、logs、attachments、metadata、skills folder snapshots，以及任何本地保存的 thinking tokens 或 reasoning blocks，会尽量以接近来源格式保存。
 - **Normalized index:** 来自不同工具的 records 会转换成共同 schema，方便你跨工具搜索、复查、导出、分析、复用和交接工作。
 
-**目前支持的来源:** Claude CLI、Codex CLI、Codex app local sessions、macOS 上的 Claude Desktop local-agent sessions、Claude Code GUI workflow 写入本地时的 DeepSeek 和 Qwen sessions、受支持的本地 OpenClaw session records，以及受支持的本地 Cursor agent transcripts。
+**目前支持的来源:** ChatGPT export ZIP/文件夹导入、Claude CLI、Codex CLI、Codex app local sessions、macOS 上的 Claude Desktop local-agent sessions、Claude Code GUI workflow 写入本地时的 DeepSeek 和 Qwen sessions、受支持的本地 OpenClaw session records，以及受支持的本地 Cursor agent transcripts。
 **更多数据来源和平台版本已在 roadmap:** star 和 watch 这个 repository，就可以跟进新的 capture integrations 和平台更新发布。
+
+## 2.0.4 新功能：ChatGPT Export 记忆导入
+
+DataMoat 现在可以把支持的 ChatGPT export ZIP 文件或解压后的 export 文件夹导入到同一个加密本地 memory archive 中，和 Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw、skills 与附件放在一起保护。
+
+- **恢复、查看、搜索和备份 ChatGPT exports。** 支持的对话、分支、附件、assets 和 raw export 文件会导入到加密 vault。
+- **保留 raw export，同时避免浪费磁盘。** DataMoat 保留原始 source records，并把重复度高的 raw backup data 存入压缩加密 archive；真实 source-record 测试显示 raw archive 大约是原始来源字节的 60%。
+- **跨电脑迁移工作。** 复制 DataMoat 文件夹到另一台机器，即可跨 macOS、Windows 和 Linux 恢复，包括 Mac 到 Windows、Linux 到 Mac。
+- **随身保存第二份备份。** 把加密 DataMoat 文件夹保存到 USB 或外置硬盘，让 AI 工作历史可以独立于原电脑保存和携带。
 
 ## 为什么安装 DataMoat
 
@@ -278,7 +288,7 @@ Live git source installs 支持 in-place source updates。Packaged macOS install
 
 DataMoat 备份的是你 device 上已存在、而且你已可访问的受支持本地 transcript files。
 
-它不会授予你对内容或 source services 额外权利。你仍然有责任遵守 Claude、Codex、DeepSeek、Qwen、OpenClaw、Cursor 以及你使用的任何其他 source service 适用的 terms、policies、plan restrictions 和 internal rules。
+它不会授予你对内容或 source services 额外权利。你仍然有责任遵守 ChatGPT、Claude、Codex、DeepSeek、Qwen、OpenClaw、Cursor 以及你使用的任何其他 source service 适用的 terms、policies、plan restrictions 和 internal rules。
 
 ## Enterprise
 
@@ -292,7 +302,7 @@ Enterprise deployment 和 management features 已列入 roadmap。更多 enterpr
 
 ## License
 
-DataMoat 根据 **Business Source License 1.1 (`BUSL-1.1`)** 连同 **Additional Use Grant** 发布。
+DataMoat 以 **Business Source License 1.1 (`BUSL-1.1`)** 连同 **Additional Use Grant** 开源发布。
 
 意思是:
 

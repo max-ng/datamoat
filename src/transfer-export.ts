@@ -3,12 +3,14 @@ import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import * as readline from 'readline'
 import { loadAuthConfig } from './auth'
 import {
   ATTACHMENTS_DIR,
   AUTH_FILE,
   BOOTSTRAP_CAPTURE_DIR,
   DATAMOAT_ROOT,
+  RAW_ARCHIVE_DIR,
   RAW_DIR,
   SESSIONS_FILE,
   SKILLS_BACKUP_DIR,
@@ -18,9 +20,56 @@ import {
 import { bootstrapCaptureSummary } from './bootstrap-capture'
 import type { TransferAuthSummary, TransferBootstrapSummary, TransferCounts, TransferManifest } from './transfer-types'
 import { TRANSFER_MANIFEST_FORMAT } from './transfer-types'
+import { appendMessages, getVaultSessionId, loadSessions, makeRawPath } from './store'
+import type { RawRecord, Session } from './types'
+import { decryptLinesForSession } from './vault-helper'
+import { appendRawRecordArchiveLines, verifySourceArchive } from './source-archive'
 
 const MANIFEST_BASENAME = '.datamoat-transfer.json'
 const STATE_MANIFEST_BASENAME = 'transfer-export-manifest.json'
+
+export type TransferExportPreparationStatus = {
+  running: boolean
+  phase: 'raw-archives' | 'manifest' | 'done' | 'failed'
+  startedAt: string
+  updatedAt: string
+  sessionsProcessed: number
+  totalSessions: number
+  legacyFiles: number
+  migratedFiles: number
+  migratedRecords: number
+  legacyBytes: number
+  rawArchiveBytes: number
+  currentSession?: string
+  error?: string
+}
+
+let transferPreparationStatus: TransferExportPreparationStatus | null = null
+let activeTransferManifestWrite: Promise<TransferManifest> | null = null
+
+function updateTransferPreparationStatus(patch: Partial<TransferExportPreparationStatus>): void {
+  const now = new Date().toISOString()
+  const phase = patch.phase ?? transferPreparationStatus?.phase ?? 'raw-archives'
+  transferPreparationStatus = {
+    running: patch.running ?? (phase !== 'done' && phase !== 'failed'),
+    phase,
+    startedAt: patch.startedAt ?? transferPreparationStatus?.startedAt ?? now,
+    updatedAt: now,
+    sessionsProcessed: patch.sessionsProcessed ?? transferPreparationStatus?.sessionsProcessed ?? 0,
+    totalSessions: patch.totalSessions ?? transferPreparationStatus?.totalSessions ?? 0,
+    legacyFiles: patch.legacyFiles ?? transferPreparationStatus?.legacyFiles ?? 0,
+    migratedFiles: patch.migratedFiles ?? transferPreparationStatus?.migratedFiles ?? 0,
+    migratedRecords: patch.migratedRecords ?? transferPreparationStatus?.migratedRecords ?? 0,
+    legacyBytes: patch.legacyBytes ?? transferPreparationStatus?.legacyBytes ?? 0,
+    rawArchiveBytes: patch.rawArchiveBytes ?? transferPreparationStatus?.rawArchiveBytes ?? 0,
+    currentSession: Object.prototype.hasOwnProperty.call(patch, 'currentSession') ? patch.currentSession : transferPreparationStatus?.currentSession,
+    error: Object.prototype.hasOwnProperty.call(patch, 'error') ? patch.error : transferPreparationStatus?.error,
+  }
+}
+
+export function currentTransferExportPreparationStatus(): TransferExportPreparationStatus | null {
+  return transferPreparationStatus ? { ...transferPreparationStatus } : null
+}
 
 function toPosix(relativePath: string): string {
   return relativePath.split(path.sep).join('/')
@@ -224,11 +273,19 @@ export function transferExportWarnings(root = DATAMOAT_ROOT): string[] {
   return warnings
 }
 
+function sessionVaultWarnings(counts: TransferCounts): string[] {
+  return counts.sessions > counts.vaultFiles ? ['session-index-missing-vault-files'] : []
+}
+
 export async function buildTransferManifest(options: { sessionCount?: number; root?: string } = {}): Promise<TransferManifest> {
   const root = path.resolve(options.root ?? DATAMOAT_ROOT)
   const auth = authSummaryForRoot(root)
   const counts = inspectTransferRoot(root)
   counts.sessions = Math.max(0, options.sessionCount ?? counts.vaultFiles)
+  const warnings = [
+    ...transferExportWarnings(root),
+    ...sessionVaultWarnings(counts),
+  ]
   return {
     format: TRANSFER_MANIFEST_FORMAT,
     createdAt: new Date().toISOString(),
@@ -245,7 +302,7 @@ export async function buildTransferManifest(options: { sessionCount?: number; ro
       totpEnrolled: false,
     },
     counts,
-    warnings: transferExportWarnings(root),
+    warnings,
     bootstrapCapture: bootstrapSummaryForRoot(root),
   }
 }
@@ -258,12 +315,192 @@ function writePrivateJson(filePath: string, value: unknown): void {
   try { fs.chmodSync(filePath, 0o600) } catch { /* non-fatal */ }
 }
 
+function rawRecordLine(record: RawRecord): string {
+  return JSON.stringify(record)
+}
+
+async function prepareLegacyRawFileForTransfer(sessionId: string, session: Session): Promise<{
+  migrated: boolean
+  records: number
+  legacyBytes: number
+}> {
+  const rawPath = path.join(RAW_DIR, makeRawPath(session.source, session.uid))
+  const stat = safeStat(rawPath)
+  if (!stat?.isFile()) return { migrated: false, records: 0, legacyBytes: 0 }
+
+  const stream = fs.createReadStream(rawPath, { encoding: 'utf8' })
+  const reader = readline.createInterface({ input: stream, crlfDelay: Infinity })
+  let batch: string[] = []
+  let records = 0
+
+  const flush = async (): Promise<void> => {
+    if (batch.length === 0) return
+    const current = batch
+    batch = []
+    const decoded = current[0].startsWith('{')
+      ? current
+      : await decryptLinesForSession(sessionId, current)
+    const rawRecordLines: string[] = []
+    for (const line of decoded) {
+      if (!line.trim()) continue
+      try {
+        rawRecordLines.push(rawRecordLine(JSON.parse(line) as RawRecord))
+      } catch {
+        /* Keep export preparation resilient; malformed legacy raw lines were unreadable already. */
+      }
+    }
+    if (rawRecordLines.length === 0) return
+    await appendRawRecordArchiveLines(sessionId, session.source, session.uid, rawRecordLines)
+    records += rawRecordLines.length
+  }
+
+  try {
+    for await (const line of reader) {
+      if (!line) continue
+      batch.push(line)
+      if (batch.length >= 500) await flush()
+    }
+    await flush()
+  } finally {
+    reader.close()
+    stream.destroy()
+  }
+
+  if (records === 0) return { migrated: false, records: 0, legacyBytes: stat.size }
+  await verifySourceArchive(sessionId, session.source, session.uid)
+  fs.rmSync(rawPath, { force: true })
+  return { migrated: true, records, legacyBytes: stat.size }
+}
+
+export async function prepareTransferRawArchives(options: { root?: string } = {}): Promise<{
+  skipped: boolean
+  legacyFiles: number
+  migratedFiles: number
+  migratedRecords: number
+  legacyBytes: number
+  rawArchiveBytes: number
+}> {
+  const root = path.resolve(options.root ?? DATAMOAT_ROOT)
+  if (root !== DATAMOAT_ROOT) {
+    return { skipped: true, legacyFiles: 0, migratedFiles: 0, migratedRecords: 0, legacyBytes: 0, rawArchiveBytes: 0 }
+  }
+  const sessionId = getVaultSessionId()
+  if (!sessionId) {
+    return { skipped: true, legacyFiles: 0, migratedFiles: 0, migratedRecords: 0, legacyBytes: 0, rawArchiveBytes: 0 }
+  }
+
+  const sessions = await loadSessions()
+  for (const session of sessions) {
+    if (Math.max(0, Number(session.messageCount || 0)) === 0) await appendMessages(session, [])
+  }
+  updateTransferPreparationStatus({
+    phase: 'raw-archives',
+    running: true,
+    totalSessions: sessions.length,
+    sessionsProcessed: 0,
+    legacyFiles: 0,
+    migratedFiles: 0,
+    migratedRecords: 0,
+    legacyBytes: 0,
+    rawArchiveBytes: countMatchingFiles(RAW_ARCHIVE_DIR, () => true).bytes,
+    currentSession: undefined,
+  })
+
+  let legacyFiles = 0
+  let migratedFiles = 0
+  let migratedRecords = 0
+  let legacyBytes = 0
+  let sessionsProcessed = 0
+  for (const session of sessions) {
+    updateTransferPreparationStatus({
+      phase: 'raw-archives',
+      currentSession: session.uid,
+      sessionsProcessed,
+      totalSessions: sessions.length,
+      legacyFiles,
+      migratedFiles,
+      migratedRecords,
+      legacyBytes,
+    })
+    const rawPath = path.join(RAW_DIR, makeRawPath(session.source, session.uid))
+    if (!safeStat(rawPath)?.isFile()) {
+      sessionsProcessed += 1
+      continue
+    }
+    legacyFiles += 1
+    const result = await prepareLegacyRawFileForTransfer(sessionId, session)
+    sessionsProcessed += 1
+    if (!result.migrated) continue
+    migratedFiles += 1
+    migratedRecords += result.records
+    legacyBytes += result.legacyBytes
+    updateTransferPreparationStatus({
+      phase: 'raw-archives',
+      sessionsProcessed,
+      totalSessions: sessions.length,
+      legacyFiles,
+      migratedFiles,
+      migratedRecords,
+      legacyBytes,
+    })
+  }
+
+  const rawArchiveBytes = countMatchingFiles(RAW_ARCHIVE_DIR, () => true).bytes
+  updateTransferPreparationStatus({
+    phase: 'raw-archives',
+    sessionsProcessed: sessions.length,
+    totalSessions: sessions.length,
+    legacyFiles,
+    migratedFiles,
+    migratedRecords,
+    legacyBytes,
+    rawArchiveBytes,
+    currentSession: undefined,
+  })
+  return { skipped: false, legacyFiles, migratedFiles, migratedRecords, legacyBytes, rawArchiveBytes }
+}
+
+async function writeTransferManifestOnce(options: { sessionCount?: number; root?: string } = {}): Promise<TransferManifest> {
+  const root = path.resolve(options.root ?? DATAMOAT_ROOT)
+  try {
+    await prepareTransferRawArchives({ root })
+    if (root === DATAMOAT_ROOT) updateTransferPreparationStatus({ phase: 'manifest', running: true })
+    const manifest = await buildTransferManifest({ ...options, root })
+    writePrivateJson(transferManifestPath(root), manifest)
+    writePrivateJson(transferStateManifestPath(root), manifest)
+    if (root === DATAMOAT_ROOT) {
+      updateTransferPreparationStatus({
+        phase: 'done',
+        running: false,
+        sessionsProcessed: manifest.counts.sessions,
+        totalSessions: manifest.counts.sessions,
+        rawArchiveBytes: manifest.counts.totalBytes,
+        currentSession: undefined,
+      })
+    }
+    return manifest
+  } catch (error) {
+    if (root === DATAMOAT_ROOT) {
+      updateTransferPreparationStatus({
+        phase: 'failed',
+        running: false,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
+    throw error
+  }
+}
+
 export async function writeTransferManifest(options: { sessionCount?: number; root?: string } = {}): Promise<TransferManifest> {
   const root = path.resolve(options.root ?? DATAMOAT_ROOT)
-  const manifest = await buildTransferManifest({ ...options, root })
-  writePrivateJson(transferManifestPath(root), manifest)
-  writePrivateJson(transferStateManifestPath(root), manifest)
-  return manifest
+  if (root !== DATAMOAT_ROOT) return writeTransferManifestOnce(options)
+  if (!activeTransferManifestWrite) {
+    activeTransferManifestWrite = writeTransferManifestOnce({ ...options, root })
+      .finally(() => {
+        activeTransferManifestWrite = null
+      })
+  }
+  return activeTransferManifestWrite
 }
 
 export async function transferExportStatus(options: { sessionCount?: number; root?: string } = {}): Promise<{
@@ -276,6 +513,7 @@ export async function transferExportStatus(options: { sessionCount?: number; roo
   manifest: TransferManifest | null
   manifestPath: string
   stateManifestPath: string
+  preparation: TransferExportPreparationStatus | null
 }> {
   const root = path.resolve(options.root ?? DATAMOAT_ROOT)
   const required = {
@@ -286,14 +524,20 @@ export async function transferExportStatus(options: { sessionCount?: number; roo
   const counts = inspectTransferRoot(root)
   counts.sessions = Math.max(0, options.sessionCount ?? counts.vaultFiles)
   const auth = authSummaryForRoot(root)
-  const warnings = transferExportWarnings(root)
+  const warnings = [
+    ...transferExportWarnings(root),
+    ...sessionVaultWarnings(counts),
+  ]
+  const preparation = root === DATAMOAT_ROOT ? currentTransferExportPreparationStatus() : null
   const manifest = safeJson<TransferManifest>(transferManifestPath(root))
     ?? safeJson<TransferManifest>(transferStateManifestPath(root))
   const requiredOk = required.authJson && required.vault && required.sessionsJson
   const hasPortableUnlock = !!(auth?.hasPassword || auth?.hasMnemonic)
   return {
     root,
-    status: !requiredOk || !hasPortableUnlock
+    status: preparation?.running
+      ? 'checking'
+      : !requiredOk || !hasPortableUnlock
       ? 'cannot transfer yet'
       : warnings.length > 0
         ? 'needs attention'
@@ -305,6 +549,7 @@ export async function transferExportStatus(options: { sessionCount?: number; roo
     manifest,
     manifestPath: transferManifestPath(root),
     stateManifestPath: transferStateManifestPath(root),
+    preparation,
   }
 }
 

@@ -2,7 +2,7 @@
 
 Dil: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
-[![Version](https://img.shields.io/badge/version-2.0.3-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.4-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -16,23 +16,24 @@ Dil: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体
 [![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
+[![ChatGPT export](https://img.shields.io/badge/ChatGPT%20export-ZIP%2Ffolder%20import-10B981?style=flat-square)](#supported-today)
 
 Resmi website: [https://datamoat.org](https://datamoat.org)
 GitHub deposu: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw verilerinizi, skills klasörlerinizi ve eklerinizi dışa aktarın ve yedekleyin." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
-> **Tüm Claude / Codex / Cursor / DeepSeek / Qwen verilerinizi + skills + eklerinizi dışa aktarın ve yedekleyin.**
+> **Tüm ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen verilerinizi + skills + eklerinizi dışa aktarın ve yedekleyin.**
 > DataMoat, AI çalışma geçmişinizi yerel ve şifreli tutar; raw source records kayıtlarını bozmadan saklar ve arama, export, reuse, handoff ve private AI memory için normalized index oluşturur.
 >
 > **Gelecekte en değerli olacak AI verileriniz zaten kayboluyor.**
-> DataMoat'ı şimdi indirerek Claude, Codex, Cursor, OpenClaw, DeepSeek ve Qwen çalışma geçmişinizin ne kadarını hâlâ capture edebileceğinizi görün.
+> DataMoat'ı şimdi indirerek ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw çalışma geçmişinizin ne kadarını hâlâ capture edebileceğinizi görün.
 
 **Temel backup kapsamı:** DataMoat desteklenen **skills + sessions + attachments** kayıtlarını aynı encrypted local memory archive içine yedekler. Skills yalnızca ad olarak değil, tam folder snapshot olarak saklanır.
 
 **AI verilerine sahip olan insanlar ve şirketler geleceği kazanacak.**
 
-DataMoat, Claude CLI, Claude Desktop, Claude Code GUI workflows üzerinden DeepSeek ve Qwen, Codex CLI, Codex app, Cursor, OpenClaw ve diğer AI tools ile çalışan kişi ve ekipler için bir AI work history memory archive'dır. Tam çalışma kaydını korur: sessions, varsa locally stored thinking tokens ve reasoning blocks, prompts, responses, tool output, files, attachments, metadata, skills folder contents ve aynı makinedeki original source records. Böylece çalışmanız daha sonra review edilebilir, korunmuş, yeniden kullanılabilir ve handoff için daha kolay olur.
+DataMoat, ChatGPT exports, Claude CLI, Claude Desktop, Claude Code GUI workflows üzerinden DeepSeek ve Qwen, Codex CLI, Codex app, Cursor, OpenClaw ve diğer AI tools ile çalışan kişi ve ekipler için bir AI work history memory archive'dır. Tam çalışma kaydını korur: sessions, varsa locally stored thinking tokens ve reasoning blocks, prompts, responses, tool output, files, attachments, metadata, skills folder contents ve aynı makinedeki original source records. Böylece çalışmanız daha sonra review edilebilir, korunmuş, yeniden kullanılabilir ve handoff için daha kolay olur.
 
 ![DataMoat sessions, skills backup ve encrypted local memory archive UI](.github/assets/screenshot.png)
 
@@ -43,7 +44,7 @@ DataMoat iki katman tutar:
 - **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots ve locally stored thinking tokens veya reasoning blocks mümkün olduğunca source formatına yakın şekilde saklanır.
 - **Normalized index:** farklı tools kayıtları common schema'ya dönüştürülür; böylece tools arasında search, review, export, analyze, reuse ve handoff yapabilirsiniz.
 
-**Bugün desteklenen sources:** Claude CLI, Codex CLI, Codex app local sessions, macOS'ta Claude Desktop local-agent sessions, Claude Code GUI workflows tarafından local yazıldığında DeepSeek ve Qwen sessions, desteklenen local OpenClaw session records ve desteklenen local Cursor agent transcripts.
+**Bugün desteklenen sources:** ChatGPT export ZIP/folder importları, Claude CLI, Codex CLI, Codex app local sessions, macOS'ta Claude Desktop local-agent sessions, Claude Code GUI workflows tarafından local yazıldığında DeepSeek ve Qwen sessions, desteklenen local OpenClaw session records ve desteklenen local Cursor agent transcripts.
 **Daha fazla data source ve platform release roadmap'te:** yeni capture integrations ve platform updates çıktığında takip etmek için bu repository'yi star/watch edin.
 
 ## Neden DataMoat Kurmalı
@@ -152,7 +153,7 @@ Her Windows ZIP, `DataMoat.exe` ve gerekli app files içerir. Windows package'i 
 
 Mac users için önce signed ve notarized packaged DMG kullanın: [Download DMG](https://datamoat.org/download/macos). Kullanıcı açıkça source install istemedikçe veya packaged release mevcut değilse macOS'ta `git clone` ile başlamayın.
 
-Target desktop'a bakıyorken Claude CLI, Codex CLI veya OpenClaw'dan DataMoat'ı kurmasını isteyebilirsiniz.
+Target desktop'a bakıyorken ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI veya OpenClaw'dan DataMoat'ı kurmasını isteyebilirsiniz.
 
 Typical prompt:
 
@@ -278,7 +279,7 @@ Live git source installs in-place source updates destekler. Packaged macOS insta
 
 DataMoat, cihazınızda zaten bulunan ve sizin tarafınızdan zaten erişilebilir olan supported local transcript files'ı yedekler.
 
-Content veya source services üzerinde ek hak vermez. Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor ve kullandığınız diğer source service için geçerli terms, policies, plan restrictions ve internal rules'a uymaktan siz sorumlusunuz.
+Content veya source services üzerinde ek hak vermez. ChatGPT, Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor ve kullandığınız diğer source service için geçerli terms, policies, plan restrictions ve internal rules'a uymaktan siz sorumlusunuz.
 
 ## Enterprise
 
@@ -292,7 +293,7 @@ Sorular veya deployment help:
 
 ## License
 
-DataMoat **Business Source License 1.1 (`BUSL-1.1`)** ve **Additional Use Grant** altında dağıtılır.
+DataMoat **Business Source License 1.1 (`BUSL-1.1`)** ve **Additional Use Grant** altında open-sourced olarak sunulur.
 
 Bu şu anlama gelir:
 

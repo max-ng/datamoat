@@ -19,6 +19,7 @@
     --codex:     #3888e0;
     --openclaw:  #a060d0;
     --cursor:    #d8b640;
+    --chatgpt:   #00c8a0;
     --app:       #20a840;
     --think-bg:  #0a1208;
     --think-border: #1a3020;
@@ -116,6 +117,7 @@
   .filter-btn[data-src="claude-app"].active  { background: #081808; color: var(--app); border-color: var(--app); }
   .filter-btn[data-src="openclaw"].active    { background: #180828; color: var(--openclaw); border-color: var(--openclaw); }
   .filter-btn[data-src="cursor"].active      { background: #282408; color: var(--cursor); border-color: var(--cursor); }
+  .filter-btn[data-src="chatgpt-export"].active { background: #06241e; color: var(--chatgpt); border-color: var(--chatgpt); }
 
   .stat {
     font-family: var(--font-mono);
@@ -496,6 +498,7 @@
   .source-dot.claude-app  { background: var(--app); }
   .source-dot.openclaw    { background: var(--openclaw); }
   .source-dot.cursor      { background: var(--cursor); }
+  .source-dot.chatgpt-export { background: var(--chatgpt); }
 
   .session-model {
     font-family: var(--font-mono);
@@ -614,6 +617,104 @@
   .badge.claude-app  { color: var(--app); border-color: var(--app); background: #08180820; }
   .badge.openclaw    { color: var(--openclaw); border-color: var(--openclaw); background: #18082820; }
   .badge.cursor      { color: var(--cursor); border-color: var(--cursor); background: #28240820; }
+  .badge.chatgpt-export { color: var(--chatgpt); border-color: var(--chatgpt); background: #06241e40; }
+  .conversation-map {
+    margin: 0 0 18px;
+    border: 1px solid rgba(0, 200, 160, 0.28);
+    border-radius: 8px;
+    background: #07110f;
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+  }
+  .conversation-map-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .conversation-map-title {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text);
+  }
+  .conversation-map-sub {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.55;
+    margin-top: 2px;
+  }
+  .conversation-map-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .conversation-map-stat {
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.02);
+    padding: 5px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .conversation-map-stat strong {
+    color: var(--text);
+    font-size: 12px;
+    margin-right: 4px;
+  }
+  .branch-list {
+    display: grid;
+    gap: 7px;
+  }
+  .branch-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    align-items: center;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 7px;
+    padding: 8px;
+    background: #09141a;
+  }
+  .branch-name {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+  }
+  .branch-meta {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  .branch-btn {
+    border: 1px solid rgba(0, 200, 160, 0.35);
+    border-radius: 6px;
+    background: rgba(0, 200, 160, 0.08);
+    color: var(--accent);
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 5px 8px;
+  }
+  .branch-btn:hover {
+    border-color: var(--accent);
+  }
+  .branch-banner {
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid rgba(255, 170, 0, 0.3);
+    border-radius: 8px;
+    background: rgba(255, 170, 0, 0.06);
+    padding: 10px 12px;
+  }
+  .branch-banner-text {
+    color: #f0c27a;
+    font-size: 12px;
+  }
   .session-skills {
     margin-top: 12px;
     border: 1px solid var(--border);
@@ -989,6 +1090,28 @@
     text-transform: uppercase;
     color: var(--muted);
   }
+  .attachment-open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    color: var(--accent);
+    text-decoration: none;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: #0f131a;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .attachment-open-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+  }
+  .attachment-open-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+  }
   .detail-block {
     margin: 8px 0;
     border: 1px solid var(--border);
@@ -1121,6 +1244,89 @@
     display: grid;
     gap: 16px;
     padding: 18px 20px 20px;
+  }
+  .language-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .language-picker {
+    position: relative;
+    flex-shrink: 0;
+  }
+  .language-current {
+    min-width: 156px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    background: #0a1016;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 10px 12px;
+  }
+  .language-current:hover {
+    border-color: var(--accent);
+  }
+  .language-current::after {
+    content: "▾";
+    color: var(--muted);
+    font-size: 10px;
+  }
+  .language-menu {
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    z-index: 8;
+    min-width: 190px;
+    display: grid;
+    gap: 4px;
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    background: #081017;
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+    padding: 6px;
+  }
+  .language-menu[hidden] {
+    display: none;
+  }
+  .language-btn {
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+    text-align: left;
+  }
+  .language-btn.active {
+    background: rgba(83, 215, 210, 0.16);
+    border-color: rgba(83, 215, 210, 0.44);
+    color: #bffdfa;
+  }
+  @media (max-width: 720px) {
+    .language-card-head {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .language-current,
+    .language-picker {
+      width: 100%;
+    }
+    .language-menu {
+      left: 0;
+      right: 0;
+    }
   }
   .switch-row {
     width: 100%;
@@ -1525,6 +1731,7 @@
   .backup-path-dot.claude-app { background: var(--app); }
   .backup-path-dot.openclaw { background: var(--openclaw); }
   .backup-path-dot.cursor { background: var(--cursor); }
+  .backup-path-dot.chatgpt-export { background: var(--chatgpt); }
   .backup-path-items {
     display: grid;
     gap: 8px;
@@ -1698,6 +1905,7 @@
     <button class="filter-btn" data-src="claude-app">claude app</button>
     <button class="filter-btn" data-src="openclaw">openclaw</button>
     <button class="filter-btn" data-src="cursor">cursor</button>
+    <button class="filter-btn" data-src="chatgpt-export">chatgpt-export</button>
   </div>
   <div class="stat" id="stat">loading…</div>
   <div class="header-actions">
@@ -1713,7 +1921,7 @@
 
 <div id="weekly-strip" class="weekly-strip" aria-label="Weekly work summary">
   <div class="weekly-strip-inner">
-    <div class="weekly-period">last 7 days</div>
+    <div class="weekly-period">your work, last 7 days</div>
     <div class="weekly-metrics">
       <div class="weekly-metric primary loading">
         <div class="weekly-value">calculating…</div>
@@ -1734,8 +1942,8 @@
 <div id="notice-banner" class="notice-banner" role="status" aria-live="polite">
   <div id="notice-banner-text" class="notice-copy"></div>
   <div class="notice-actions">
-    <button id="notice-action-btn" class="notice-action" type="button" hidden></button>
     <button id="notice-dismiss-btn" class="notice-dismiss" type="button">dismiss</button>
+    <button id="notice-action-btn" class="notice-action" type="button" hidden></button>
   </div>
 </div>
 
@@ -1815,6 +2023,23 @@
       <button id="close-settings-btn" class="settings-close" type="button" aria-label="Close settings">×</button>
     </div>
     <div class="settings-body">
+      <div class="settings-card wide" id="language-settings-card">
+        <div class="language-card-head">
+          <div>
+            <div class="settings-label" id="language-settings-title">Language</div>
+            <div class="settings-value" id="language-settings-subtitle">Choose the app language for setup, unlock, and settings.</div>
+          </div>
+          <div class="language-picker" id="app-language-picker">
+            <button class="language-current" id="app-language-current" type="button" aria-haspopup="listbox" aria-expanded="false">EN</button>
+            <div class="language-menu" id="app-language-switch" role="listbox" aria-label="Language" hidden>
+              <button class="language-btn" type="button" role="option" data-language="en">EN</button>
+              <button class="language-btn" type="button" role="option" data-language="zh-CN">简体中文</button>
+              <button class="language-btn" type="button" role="option" data-language="zh-TW">繁體中文</button>
+              <button class="language-btn" type="button" role="option" data-language="ja">日本語</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <button id="update-toggle" class="switch-row" type="button" role="switch" aria-checked="true">
         <span class="switch-track"><span class="switch-knob"></span></span>
         <span class="switch-copy">
@@ -1903,7 +2128,7 @@
       <div class="settings-card wide referenced-backup-card" id="transfer-export-card">
         <div class="referenced-backup-head">
           <div>
-            <div class="settings-label">Transfer to another computer</div>
+            <div class="settings-label" id="transfer-export-title">Transfer to another computer</div>
             <div class="settings-value" id="transfer-export-state">checking…</div>
           </div>
           <div class="referenced-backup-badge" id="transfer-export-badge">checking</div>
@@ -1928,23 +2153,23 @@
       <div class="settings-card wide referenced-backup-card" id="transfer-import-card">
         <div class="referenced-backup-head">
           <div>
-            <div class="settings-label">Transfer from another computer</div>
+            <div class="settings-label" id="transfer-import-title">Transfer from another computer</div>
             <div class="settings-value" id="transfer-import-state">waiting for folder</div>
           </div>
           <div class="referenced-backup-badge off" id="transfer-import-badge">waiting</div>
         </div>
         <div class="settings-message referenced-backup-copy" id="transfer-import-message">Choose the copied whole .datamoat folder, unlock the old vault, then add backup data or delete current data and use the backup.</div>
         <div class="source-field">
-          <label class="source-label" for="transfer-import-path">Transfer folder</label>
+          <label class="source-label" id="transfer-import-folder-label" for="transfer-import-path">Transfer folder</label>
           <div class="source-row">
             <input id="transfer-import-path" class="source-input" type="text" placeholder="/path/to/copied/.datamoat">
             <button id="transfer-import-select-btn" class="settings-btn" type="button">Choose folder</button>
           </div>
-          <div class="source-help">The selected folder is checked automatically before import.</div>
+          <div class="source-help" id="transfer-import-folder-help">The selected folder is checked automatically before import.</div>
         </div>
         <div class="source-field" style="margin-top:10px;">
-          <label class="source-label">Old vault unlock</label>
-          <div class="source-help">Use the old password or the old 24-word phrase that belongs to this copied folder.</div>
+          <label class="source-label" id="transfer-import-auth-label">Old vault unlock</label>
+          <div class="source-help" id="transfer-import-auth-help">Use the old password or the old 24-word phrase that belongs to this copied folder.</div>
           <div class="transfer-import-auth-tabs">
             <button id="transfer-import-auth-password" class="settings-btn transfer-import-auth-tab active" type="button">Old password</button>
             <button id="transfer-import-auth-phrase" class="settings-btn transfer-import-auth-tab" type="button">Old 24-word phrase</button>
@@ -1971,15 +2196,50 @@
         </div>
       </div>
 
+      <div class="settings-card wide referenced-backup-card" id="chatgpt-import-card">
+        <div class="referenced-backup-head">
+          <div>
+            <div class="settings-label" id="chatgpt-import-title">Import chatgpt-export</div>
+            <div class="settings-value" id="chatgpt-import-state">waiting for export</div>
+          </div>
+          <div class="referenced-backup-badge off" id="chatgpt-import-badge">waiting</div>
+        </div>
+        <div class="settings-message referenced-backup-copy" id="chatgpt-import-message">Step 1 checks the chatgpt-export without changing your vault. Step 2 imports sessions, raw data, attachments, and branch indexes.</div>
+        <div class="source-field">
+          <label class="source-label">chatgpt-export</label>
+          <div class="settings-actions">
+            <button id="chatgpt-import-select-btn" class="settings-btn primary" type="button">1. Choose &amp; Check Export</button>
+            <button id="chatgpt-import-check-btn" class="settings-btn" type="button" hidden>Check Again (No Import)</button>
+          </div>
+          <div class="source-help" id="chatgpt-import-path-summary">No export selected yet. The picker accepts chatgpt-export zip files and extracted export folders.</div>
+          <div class="source-row" id="chatgpt-import-manual-row" hidden>
+            <input id="chatgpt-import-path" class="source-input" type="text" placeholder="/path/to/chatgpt-export.zip or folder">
+          </div>
+          <div class="source-help" id="chatgpt-import-manual-help" hidden>File picker is unavailable in this browser view, so paste the export path here.</div>
+        </div>
+        <div class="referenced-backup-progress" id="chatgpt-import-progress" hidden>
+          <div class="referenced-progress-row">
+            <span id="chatgpt-import-progress-label">Checking export</span>
+            <span id="chatgpt-import-progress-count"></span>
+          </div>
+          <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="chatgpt-import-progress-fill"></div></div>
+        </div>
+        <div class="referenced-backup-permission" id="chatgpt-import-warning" hidden></div>
+        <div class="referenced-attachment-stats" id="chatgpt-import-stats"></div>
+        <div class="settings-actions">
+          <button id="chatgpt-import-start-btn" class="settings-btn primary" type="button">2. Import into Vault</button>
+        </div>
+      </div>
+
       <div class="source-field" id="reinstall-source-field" hidden>
-        <label class="source-label" for="reinstall-source-path">Source Folder</label>
+        <label class="source-label" id="reinstall-source-label" for="reinstall-source-path">DataMoat source install folder</label>
         <input id="reinstall-source-path" class="source-input" type="text" placeholder="/path/to/live/git/checkout">
-        <div class="source-help" id="reinstall-source-help">You can paste a DataMoat source folder here. If it is a live git checkout, future automatic updates can be enabled.</div>
+        <div class="source-help" id="reinstall-source-help">This is for DataMoat app updates, not chatgpt-export import. If it is a live git checkout, future automatic updates can be enabled.</div>
       </div>
 
       <div class="settings-card" id="backup-paths-card" hidden>
-        <div class="settings-label">Current Backup Paths</div>
-        <div class="settings-value" style="margin-bottom:10px;">Only sources with captured conversations appear here.</div>
+        <div class="settings-label" id="backup-paths-title">Current Backup Paths</div>
+        <div class="settings-value" id="backup-paths-subtitle" style="margin-bottom:10px;">Only sources with captured conversations appear here.</div>
         <div id="backup-paths-list" class="backup-paths"></div>
       </div>
 
@@ -2016,26 +2276,41 @@ let referencedAttachmentPollTail = 0
 let transferExportData = null
 let transferImportData = null
 let transferBusy = false
+let transferExportPollTimer = null
 let transferImportPollTimer = null
 let transferImportPreflightTimer = null
 let transferImportAuthMode = 'password'
+let chatGptImportData = null
+let chatGptImportBusy = false
+let chatGptImportPollTimer = null
+let chatGptImportPreflightTimer = null
 let releasesUrl = ''
 let settingsAppVersion = ''
 let noticeActionHandler = null
 let activeNoticeKey = ''
 let touchIdUpgradeCheckStarted = false
 const TOUCH_ID_UPGRADE_DISMISSED_KEY = 'dm_touchid_upgrade_dismissed'
+const TOUCH_ID_REFRESH_DISMISSED_KEY = 'dm_touchid_refresh_dismissed'
 const UPDATE_READY_DISMISSED_KEY = 'dm_update_ready_dismissed_version'
 const UPDATE_APPLIED_NOTICE_KEY = 'dm_update_applied_notice_version'
+const UPDATE_APPLIED_FEATURE_NOTICE_KEY = 'dm_update_applied_feature_notice_version'
+let chatGptExportFeatureNoticeCheckStarted = false
 const LARGE_SESSION_MESSAGE_THRESHOLD = 1000
 const SESSION_PAGE_SIZE = 500
 let activeSessionData = null
 let activeMessages = []
 let activePageInfo = null
+let activeBranchData = null
 let loadingMoreMessages = false
 let weeklyAnalytics = null
 let weeklyAnalyticsLoading = false
 let weeklyAnalyticsError = ''
+let weeklyAnalyticsLoadedAt = 0
+let weeklyAnalyticsTimer = null
+let weeklyAnalyticsSessionSignature = ''
+const WEEKLY_ANALYTICS_REFRESH_MS = 5 * 60 * 1000
+const WEEKLY_ANALYTICS_CACHE_KEY = 'dm_weekly_analytics_v1'
+const WEEKLY_ANALYTICS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
 let skillsBackupStatus = null
 let skillsBackupError = ''
 let skillManifestCache = {}
@@ -2048,6 +2323,7 @@ const SOURCE_LABELS = {
   'claude-app': 'Claude App',
   'openclaw': 'OpenClaw',
   'cursor': 'Cursor',
+  'chatgpt-export': 'chatgpt-export',
 }
 
 function sessionSourceLabel(session) {
@@ -2082,6 +2358,953 @@ async function apiFetch(url, options) {
     throw new Error('authentication required')
   }
   return res
+}
+
+const appText = {
+  en: {
+    searchPlaceholder: 'search conversations...',
+    settings: 'Settings',
+    closeSettings: 'Close settings',
+    about: 'about',
+    noticeDismiss: 'dismiss',
+    languageTitle: 'Language',
+    languageSubtitle: 'Choose the app language for setup, unlock, and settings.',
+    autoUpdate: 'Auto-update',
+    autoUpdateUnavailable: 'Auto-update unavailable',
+    autoUpdateCopy: 'Only live git source installs can update in place. Other installs stay on manual download for safety for now and will not auto-update directly.',
+    manualUpdates: 'Manual Updates',
+    manualUpdatesCopy: 'Download the latest Windows version and run it to upgrade.',
+    checkNow: 'Check Now',
+    updateNow: 'Update Now',
+    downloadLatest: 'Download Latest Version',
+    reinstallSource: 'Reinstall From Source',
+    currentInstall: 'Current Install',
+    appVersion: 'App Version',
+    updateMethod: 'Update Method',
+    updateStatus: 'Update Status',
+    lastChecked: 'Last Checked',
+    lastApplied: 'Last Applied',
+    sourceCheck: 'Source Check',
+    referencedBackup: 'Referenced File Backup',
+    transferTo: 'Transfer to another computer',
+    transferFrom: 'Transfer from another computer',
+    chatgptImport: 'Import chatgpt-export',
+    checking: 'checking...',
+    checkingEllipsis: 'checking…',
+    detecting: 'detecting…',
+    waiting: 'waiting',
+    working: 'working',
+    ready: 'ready',
+    imported: 'imported',
+    checked: 'checked',
+    checkedOnly: 'checked only',
+    failed: 'failed',
+    blocked: 'blocked',
+    attention: 'attention',
+    optional: 'optional',
+    on: 'on',
+    off: 'off',
+    enabled: 'enabled',
+    notEnabled: 'not enabled',
+    running: 'running',
+    unknown: 'unknown',
+    never: 'never',
+    notChecked: 'not checked',
+    chooseLanguage: 'Choose language',
+    transferFolder: 'Transfer folder',
+    transferFolderHelp: 'The selected folder is checked automatically before import.',
+    oldVaultUnlock: 'Old vault unlock',
+    oldVaultUnlockHelp: 'Use the old password or the old 24-word phrase that belongs to this copied folder.',
+    oldPassword: 'Old password',
+    oldPhrase: 'Old 24-word phrase',
+    oldMasterPassword: 'Old master password',
+    oldRecoveryPhrase: 'Old 24-word recovery phrase',
+    addBackupData: 'Add backup data to this vault',
+    replaceWithBackup: 'Delete current data and use backup',
+    transferImportIntro: 'Choose the copied whole .datamoat folder, unlock the old vault, then add backup data or delete current data and use the backup.',
+    transferExportIntro: 'Check the current DataMoat data folder before copying it to another computer.',
+    transferExportReady: 'Copy this whole DataMoat folder to the new computer. Do not copy only vault/ or only sessions.json.',
+    transferExportPreparing: 'Preparing the transfer folder. DataMoat may compact old raw archives first, so folder size can go down during this check. When it finishes, this panel will switch to ready and you can copy the whole folder.',
+    phasePreparingRawArchives: 'Preparing raw archives',
+    phaseWritingTransferManifest: 'Writing transfer manifest',
+    checkingFiles: 'Checking files',
+    checkingTransfer: 'Checking transfer',
+    chatgptImportIntro: 'Step 1 checks the chatgpt-export without changing your vault. Step 2 imports sessions, raw data, attachments, and branch indexes.',
+    chatgptChooseExport: 'Choose a chatgpt-export zip or extracted folder.',
+    chatgptImported: 'chatgpt-export has been imported into this vault. Main paths, raw snapshots, attachments, and branch indexes are now available.',
+    chatgptChecked: 'Check complete. Nothing has been imported yet. Click Import into Vault to write this chatgpt-export into DataMoat.',
+    chatgptNoExportPicker: 'No export selected yet. Step 1 opens a picker and checks the chatgpt-export before anything is imported.',
+    chatgptNoExportPaste: 'No export selected yet. Paste the chatgpt-export zip or extracted folder path below.',
+    chatgptManualHelp: 'File picker is unavailable in this browser view, so paste the export path here.',
+    chatgptSelected: 'Selected',
+    chooseDifferentExport: '1. Choose Different Export',
+    checkSelectedExport: 'Check Selected Export',
+    importComplete: 'Imported',
+    checkingExport: 'Checking export',
+    sourceInstallFolder: 'DataMoat source install folder',
+    backupPathsTitle: 'Current Backup Paths',
+    backupPathsSubtitle: 'Only sources with captured conversations appear here.',
+    referencedChecking: 'Checking referenced file backup status...',
+    referencedProcessing: 'Processing previous conversations',
+    referencedEnabledTitle: 'Referenced file backup enabled',
+    referencedEnableTitle: 'Enable referenced file backup',
+    referencedEnabledSub: 'Path-only files will be copied when available',
+    referencedEnableSub: 'Copy path-only files into the encrypted vault',
+    referencedFilesProtected: 'referenced files protected',
+    previousSessionsChecked: 'previous sessions checked',
+    coveredApps: 'covered apps',
+    sessions: 'sessions',
+    attachments: 'attachments',
+    folderSize: 'folder size',
+    newSessions: 'new sessions',
+    updated: 'updated',
+    duplicates: 'duplicates',
+    newAssets: 'new assets',
+    chooseFolder: 'Choose folder',
+    chooseCheckExport: '1. Choose & Check Export',
+    checkAgain: 'Check Again (No Import)',
+    importVault: '2. Import into Vault',
+    openFolder: 'Open DataMoat folder',
+  },
+  'zh-CN': {
+    searchPlaceholder: '搜索对话...',
+    settings: '设置',
+    closeSettings: '关闭设置',
+    about: '关于',
+    noticeDismiss: '关闭',
+    languageTitle: '语言',
+    languageSubtitle: '选择首次设置、解锁和设置页面使用的界面语言。',
+    autoUpdate: '自动更新',
+    autoUpdateUnavailable: '自动更新不可用',
+    autoUpdateCopy: '只有 live git source 安装可以原地更新。其他安装方式目前为了安全会保留手动下载，不会直接自动更新。',
+    manualUpdates: '手动更新',
+    manualUpdatesCopy: '下载最新 Windows 版本并运行它来升级。',
+    checkNow: '立即检查',
+    updateNow: '立即更新',
+    downloadLatest: '下载最新版',
+    reinstallSource: '从源码重新安装',
+    currentInstall: '当前安装',
+    appVersion: 'App 版本',
+    updateMethod: '更新方式',
+    updateStatus: '更新状态',
+    lastChecked: '上次检查',
+    lastApplied: '上次应用',
+    sourceCheck: '源码检查',
+    referencedBackup: '引用文件备份',
+    transferTo: '转移到另一台电脑',
+    transferFrom: '从另一台电脑转移',
+    chatgptImport: '导入 chatgpt-export',
+    checking: '检查中...',
+    checkingEllipsis: '检查中…',
+    detecting: '检测中…',
+    waiting: '等待中',
+    working: '处理中',
+    ready: '就绪',
+    imported: '已导入',
+    checked: '已检查',
+    checkedOnly: '仅已检查',
+    failed: '失败',
+    blocked: '已阻止',
+    attention: '需要注意',
+    optional: '可选',
+    on: '开启',
+    off: '关闭',
+    enabled: '已启用',
+    notEnabled: '未启用',
+    running: '运行中',
+    unknown: '未知',
+    never: '从未',
+    notChecked: '未检查',
+    chooseLanguage: '选择语言',
+    transferFolder: '转移文件夹',
+    transferFolderHelp: '所选文件夹会在导入前自动检查。',
+    oldVaultUnlock: '旧 vault 解锁',
+    oldVaultUnlockHelp: '使用属于这个复制文件夹的旧密码或旧 24 词恢复短语。',
+    oldPassword: '旧密码',
+    oldPhrase: '旧 24 词短语',
+    oldMasterPassword: '旧主密码',
+    oldRecoveryPhrase: '旧 24 词恢复短语',
+    addBackupData: '把备份数据加入这个 vault',
+    replaceWithBackup: '删除当前数据并使用备份',
+    transferImportIntro: '选择复制出来的完整 .datamoat 文件夹，解锁旧 vault，然后加入备份数据或删除当前数据并使用备份。',
+    transferExportIntro: '复制到另一台电脑前，先检查当前 DataMoat 数据文件夹。',
+    transferExportReady: '把整个 DataMoat 文件夹复制到新电脑。不要只复制 vault/ 或 sessions.json。',
+    transferExportPreparing: '正在准备转移文件夹。DataMoat 可能会先压缩旧 raw 备份，所以检查期间文件夹大小可能会下降。完成后这里会自动变成就绪，到时再复制整个文件夹。',
+    phasePreparingRawArchives: '正在准备 raw 备份',
+    phaseWritingTransferManifest: '正在写入转移清单',
+    checkingFiles: '检查文件',
+    checkingTransfer: '检查转移',
+    chatgptImportIntro: '第 1 步只检查 chatgpt-export，不会改变 vault。第 2 步会导入会话、原始数据、附件和分支索引。',
+    chatgptChooseExport: '选择 chatgpt-export zip 或解压后的文件夹。',
+    chatgptImported: 'chatgpt-export 已导入这个 vault。主路径、原始快照、附件和分支索引现在都可用。',
+    chatgptChecked: '检查完成。现在还没有导入。点击导入到 Vault 才会写入 DataMoat。',
+    chatgptNoExportPicker: '尚未选择 export。第 1 步会打开选择器，并在导入前检查 chatgpt-export。',
+    chatgptNoExportPaste: '尚未选择 export。请在下面粘贴 chatgpt-export zip 或解压文件夹路径。',
+    chatgptManualHelp: '这个浏览器视图无法使用文件选择器，请在这里粘贴 export 路径。',
+    chatgptSelected: '已选择',
+    chooseDifferentExport: '1. 选择其他 Export',
+    checkSelectedExport: '检查已选 Export',
+    importComplete: '已导入',
+    checkingExport: '检查 export',
+    sourceInstallFolder: 'DataMoat 源码安装文件夹',
+    backupPathsTitle: '当前备份路径',
+    backupPathsSubtitle: '这里只显示已捕捉到对话的来源。',
+    referencedChecking: '正在检查引用文件备份状态...',
+    referencedProcessing: '处理过往对话',
+    referencedEnabledTitle: '引用文件备份已启用',
+    referencedEnableTitle: '启用引用文件备份',
+    referencedEnabledSub: '只有路径的文件会在可用时复制',
+    referencedEnableSub: '把只有路径的文件复制进加密 vault',
+    referencedFilesProtected: '已保护的引用文件',
+    previousSessionsChecked: '已检查的过往会话',
+    coveredApps: '覆盖应用',
+    sessions: '会话',
+    attachments: '附件',
+    folderSize: '文件夹大小',
+    newSessions: '新会话',
+    updated: '已更新',
+    duplicates: '重复项',
+    newAssets: '新资源',
+    chooseFolder: '选择文件夹',
+    chooseCheckExport: '1. 选择并检查 Export',
+    checkAgain: '再次检查（不导入）',
+    importVault: '2. 导入 Vault',
+    openFolder: '打开 DataMoat 文件夹',
+  },
+  ja: {
+    searchPlaceholder: '会話を検索...',
+    settings: '設定',
+    closeSettings: '設定を閉じる',
+    about: '情報',
+    noticeDismiss: '閉じる',
+    languageTitle: '言語',
+    languageSubtitle: '初回設定、ロック解除、設定画面で使う表示言語を選択します。',
+    autoUpdate: '自動アップデート',
+    autoUpdateUnavailable: '自動アップデートは利用できません',
+    autoUpdateCopy: 'live git source インストールのみその場で更新できます。それ以外は安全のため当面手動ダウンロードです。',
+    manualUpdates: '手動アップデート',
+    manualUpdatesCopy: '最新の Windows 版をダウンロードして実行してください。',
+    checkNow: '今すぐ確認',
+    updateNow: '今すぐ更新',
+    downloadLatest: '最新版をダウンロード',
+    reinstallSource: 'ソースから再インストール',
+    currentInstall: '現在のインストール',
+    appVersion: 'App バージョン',
+    updateMethod: '更新方法',
+    updateStatus: '更新状態',
+    lastChecked: '最終確認',
+    lastApplied: '最終適用',
+    sourceCheck: 'ソース確認',
+    referencedBackup: '参照ファイルのバックアップ',
+    transferTo: '別のコンピュータへ転送',
+    transferFrom: '別のコンピュータから転送',
+    chatgptImport: 'chatgpt-export をインポート',
+    checking: '確認中...',
+    checkingEllipsis: '確認中…',
+    detecting: '検出中…',
+    waiting: '待機中',
+    working: '処理中',
+    ready: '準備完了',
+    imported: 'インポート済み',
+    checked: '確認済み',
+    checkedOnly: '確認のみ完了',
+    failed: '失敗',
+    blocked: 'ブロック',
+    attention: '要確認',
+    optional: '任意',
+    on: 'オン',
+    off: 'オフ',
+    enabled: '有効',
+    notEnabled: '未有効',
+    running: '実行中',
+    unknown: '不明',
+    never: '未実行',
+    notChecked: '未確認',
+    chooseLanguage: '言語を選択',
+    transferFolder: '転送フォルダ',
+    transferFolderHelp: '選択したフォルダはインポート前に自動確認されます。',
+    oldVaultUnlock: '旧 vault の解除',
+    oldVaultUnlockHelp: 'このコピー元フォルダに属する旧パスワードまたは旧 24 語フレーズを使います。',
+    oldPassword: '旧パスワード',
+    oldPhrase: '旧 24 語フレーズ',
+    oldMasterPassword: '旧マスターパスワード',
+    oldRecoveryPhrase: '旧 24 語リカバリーフレーズ',
+    addBackupData: 'この vault にバックアップデータを追加',
+    replaceWithBackup: '現在のデータを削除してバックアップを使用',
+    transferImportIntro: 'コピーした .datamoat フォルダ全体を選び、旧 vault を解除してから、バックアップデータを追加するか現在のデータを置き換えます。',
+    transferExportIntro: '別のコンピュータへコピーする前に、現在の DataMoat データフォルダを確認します。',
+    transferExportReady: 'DataMoat フォルダ全体を新しいコンピュータへコピーしてください。vault/ や sessions.json だけをコピーしないでください。',
+    transferExportPreparing: '転送フォルダを準備しています。DataMoat は古い raw アーカイブを先に圧縮することがあるため、確認中にフォルダサイズが小さくなる場合があります。完了するとここが自動的に準備完了になり、フォルダ全体をコピーできます。',
+    phasePreparingRawArchives: 'raw アーカイブを準備中',
+    phaseWritingTransferManifest: '転送マニフェストを書き込み中',
+    checkingFiles: 'ファイルを確認中',
+    checkingTransfer: '転送を確認中',
+    chatgptImportIntro: '手順 1 は vault を変更せず chatgpt-export を確認します。手順 2 で会話、raw データ、添付ファイル、分岐インデックスをインポートします。',
+    chatgptChooseExport: 'chatgpt-export の zip または展開済みフォルダを選択してください。',
+    chatgptImported: 'chatgpt-export はこの vault にインポート済みです。メインパス、raw スナップショット、添付ファイル、分岐インデックスが利用できます。',
+    chatgptChecked: '確認完了。まだインポートしていません。Vault にインポートを押すと DataMoat に書き込みます。',
+    chatgptNoExportPicker: 'まだ export が選択されていません。手順 1 で選択画面を開き、インポート前に chatgpt-export を確認します。',
+    chatgptNoExportPaste: 'まだ export が選択されていません。chatgpt-export zip または展開済みフォルダのパスを下に貼り付けてください。',
+    chatgptManualHelp: 'このブラウザ表示ではファイル選択が使えないため、export パスをここに貼り付けてください。',
+    chatgptSelected: '選択済み',
+    chooseDifferentExport: '1. 別の Export を選択',
+    checkSelectedExport: '選択した Export を確認',
+    importComplete: 'インポート済み',
+    checkingExport: 'export を確認中',
+    sourceInstallFolder: 'DataMoat ソースインストールフォルダ',
+    backupPathsTitle: '現在のバックアップパス',
+    backupPathsSubtitle: '会話を取得済みのソースのみ表示されます。',
+    referencedChecking: '参照ファイルバックアップの状態を確認中...',
+    referencedProcessing: '過去の会話を処理中',
+    referencedEnabledTitle: '参照ファイルバックアップは有効です',
+    referencedEnableTitle: '参照ファイルバックアップを有効化',
+    referencedEnabledSub: 'パスのみのファイルは利用可能なときにコピーされます',
+    referencedEnableSub: 'パスのみのファイルを暗号化 vault にコピーします',
+    referencedFilesProtected: '保護済み参照ファイル',
+    previousSessionsChecked: '確認済み過去セッション',
+    coveredApps: '対象アプリ',
+    sessions: 'セッション',
+    attachments: '添付ファイル',
+    folderSize: 'フォルダサイズ',
+    newSessions: '新規セッション',
+    updated: '更新済み',
+    duplicates: '重複',
+    newAssets: '新規アセット',
+    chooseFolder: 'フォルダを選択',
+    chooseCheckExport: '1. Export を選択して確認',
+    checkAgain: '再確認（インポートなし）',
+    importVault: '2. Vault にインポート',
+    openFolder: 'DataMoat フォルダを開く',
+  },
+}
+const appTextSettingsExtra = {
+  en: {
+    manualUpdatePackagedReplace: 'Download the latest version, replace this app, and reopen DataMoat automatically. Signing can be added later to reduce Windows warnings.',
+    manualUpdateWindowsSigned: 'Download the latest Windows version and run it to upgrade. Automatic Windows updates need a signed installer/updater and are not enabled in this build.',
+    updateStateReadyToUpdate: 'ready to update',
+    updateStateDownloading: 'downloading update',
+    updateStateReadyInstall: 'ready to install',
+    updateStateUpToDate: 'up to date',
+    updateStateChecking: 'checking for updates',
+    updateStateUpdating: 'updating',
+    updateStateInstalling: 'installing',
+    updateStatePaused: 'paused',
+    updateStateUnsupported: 'not set up on this install',
+    updateStateNeedsAttention: 'needs attention',
+    installSourceDev: 'live source folder',
+    installSourceCopy: 'standard installed copy',
+    installPackagedRecommended: 'packaged app (recommended)',
+    strategySourceGitPull: 'automatic source updates',
+    strategySourceManualReinstall: 'manual source reinstall only',
+    strategyPackagedAuto: 'automatic packaged updates',
+    strategyPackagedManual: 'manual packaged update',
+    strategyPackagedManualOnly: 'manual packaged upgrade only',
+    autoUpdateCheckingInstall: 'Checking whether this install can use automatic updates...',
+    autoUpdatePackagedAvailable: 'Available on this packaged install and enabled by default. DataMoat checks for signed release updates, downloads them in the background, and asks before restart.',
+    autoUpdateSourceAvailable: 'Available on this install and enabled by default. This keeps fixes and improvements current automatically.',
+    autoUpdatePackagedManual: 'This packaged app can be upgraded manually from the latest release. Automatic packaged updates are not implemented on this platform yet.',
+    autoUpdateDmgInstall: 'This packaged app uses the recommended release path. Automatic updates are only available after DataMoat is installed outside the mounted DMG.',
+    autoUpdateSourceInactive: 'Not active on this install. For safety for now, this copy will only open the latest download page. To enable in-place updates later, choose a live git source folder below and reinstall from it.',
+    gitNotNeeded: 'not needed on this install',
+    gitClean: 'clean',
+    gitLocalChanges: 'local changes found',
+    gitAhead: 'ahead',
+    gitBehind: 'behind',
+    defaultUpdateSourceManual: 'This app is working normally. This install does not auto-update directly for now. Use Download Latest Version, or choose a live git source folder below and reinstall if you want git-based in-place updates later.',
+    defaultUpdatePackagedAuto: 'This packaged app can check signed release updates automatically. DataMoat downloads the new version first and then waits for you to update the app when you are ready.',
+    defaultUpdatePackagedManual: 'This app is working normally. This packaged app is the recommended install type. Use Download Latest Version to download and replace the app safely.',
+    defaultUpdatePackagedUnavailable: 'This app is working normally. This packaged app is the recommended install type. Use Download Latest Version to get the newest release manually.',
+    defaultUpdateGeneric: 'Automatic updates help keep fixes and improvements current on supported installs.',
+    updateApplying: 'Applying the latest update...',
+    updateChecking: 'Checking whether an update is available...',
+    updateAvailable: 'A newer version is available for this install. You can update when ready.',
+    updateDownloadedPackaged: 'A newer packaged version has finished downloading. Click Update Now whenever you are ready to install it.',
+    updateUpToDate: 'Everything is up to date.',
+    updateInstalling: 'Closing and reopening DataMoat to apply the downloaded update...',
+    updateCompleted: 'Update completed successfully.',
+    updatePausedLocalChanges: 'Automatic updating is paused because local changes were found in the source folder.',
+    updatePausedLocalCommits: 'Automatic updating is paused because this source folder has local commits that should be reviewed first.',
+    updatePausedGeneric: 'Automatic updating is paused until this install is ready for it. Other install types stay on manual download for now.',
+    updateErrorPackaged: 'The last update step did not finish, but the app can still be used normally. Use Download Latest Version to install the newest packaged release manually.',
+    updateErrorSource: 'The last update step did not finish, but the app can still be used normally. You can try again later or use the source reinstall option below.',
+    chooseSourceBeforeReinstall: 'Choose a DataMoat source folder before starting a source reinstall.',
+    reinstallConfirm: 'Reinstall From Source will stop DataMoat immediately and replace the current app from the source folder you entered. Your encrypted DataMoat data should stay in place, but the app window will close now. Continue?',
+    reinstallPrompt: 'Type REINSTALL to confirm source reinstall now.',
+    reinstallCancelled: 'Source reinstall cancelled. Type REINSTALL exactly if you want to continue.',
+    reinstallStarted: 'Source reinstall started. DataMoat will close and relaunch after the reinstall flow finishes.',
+    packagedDownloadStarted: 'Downloaded the latest packaged release. DataMoat will close, replace the app, and reopen automatically.',
+    latestDownloadOpened: 'Opened the latest download page in your browser. Download the newest packaged release there and replace the current app when ready.',
+    latestDownloadFallback: 'Could not open the latest download page automatically. You can open this link manually: {url}',
+    reinstallHelpEmpty: 'Paste a DataMoat source folder here. If it is a live git checkout, future automatic updates can be enabled.',
+    reinstallHelpTyped: 'This folder will be checked before reinstall. If it is a live git checkout, future automatic updates can be enabled.',
+    reinstallHelpUnavailableReason: 'This source folder cannot be used for automatic source updates right now: {reason}.',
+    reinstallHelpUnavailable: 'The previously recorded source folder is not available right now. The app still works normally. If you have a live git checkout, paste it here and reinstall.',
+    reinstallHelpLive: 'This source folder is a live git checkout. Reinstalling from it will also enable future source updates.',
+    reinstallHelpNonLive: 'This source folder can reinstall the app, but it will not turn on automatic updates until you point this to a live git checkout.',
+    referencedPermissionFolder: 'a referenced folder',
+    referencedPermissionMac: 'Folder access needed for {folder}. Open System Settings > Privacy & Security > Files and Folders > DataMoat, then enable that folder. If the folder is not listed there, add DataMoat under Full Disk Access. Everything else keeps backing up while this permission is off.',
+    referencedPermissionWindows: 'Windows denied access to {folder}. DataMoat can copy files that are readable by the current Windows user; check the folder or file permissions, then DataMoat will retry on the next scan.',
+    referencedPermissionOther: 'Folder access needed for {folder}. DataMoat can copy files that are readable by this user account; check the folder or file permissions, then DataMoat will retry on the next scan.',
+    referencedRunningMac: 'Referenced file backup is enabled. DataMoat is processing previous conversations now and will also protect future path-referenced files automatically. If macOS asks for folder access, it is so DataMoat can copy the original file into your encrypted vault.',
+    referencedRunningOther: 'Referenced file backup is enabled. DataMoat is processing previous conversations now and will also protect future path-referenced files automatically when those files are readable by this user account.',
+    referencedEnabledMessage: 'Referenced file backup is enabled. DataMoat protects future path-referenced files automatically and keeps embedded files and images protected as before.',
+    referencedOffProtected: 'Referenced file backup is off. Files already protected inside this vault stay available; enable only if you want DataMoat to copy future path-only local files too.',
+    referencedOffMac: 'DataMoat already protects embedded files and images saved inside supported sessions. Some conversations only mention files by path, such as files in Downloads, Desktop, or Documents. Enable this to copy those originals into your encrypted vault; macOS only asks when DataMoat actually reaches a folder that needs permission.',
+    referencedOffOther: 'DataMoat already protects embedded files and images saved inside supported sessions. Some conversations only mention files by path. Enable this to copy those originals into your encrypted vault when they are readable by this user account.',
+    processing: 'processing',
+    starting: 'starting...',
+    fileSingular: 'file',
+    filePlural: 'files',
+    folder: 'Folder',
+    dataMoatFolder: 'DataMoat folder',
+    transferExportTouchIdWarning: 'Touch ID cannot be transferred. Make sure you know the old master password or 24-word phrase before copying this folder.',
+    transferManifestWritten: 'Transfer manifest written. Copy the whole DataMoat folder to the new computer.',
+    openedPath: 'Opened {path}',
+    transferImportCompleted: 'Transfer completed. Session list and search are available from the imported vault data.',
+    transferImportPassed: 'Transfer folder passed preflight. Unlock the selected backup with its old password or old 24-word phrase.',
+    sessionsImported: 'sessions imported',
+    duplicatesSkipped: 'duplicates skipped',
+    attachmentsImported: 'attachments imported',
+    transferFolderPickerUnavailable: 'Folder picker is unavailable here. Paste the copied DataMoat folder path.',
+    transferFolderPathRequired: 'Transfer folder path required',
+    transferPhraseRequired: 'Transfer folder and old 24-word phrase are required',
+    transferPasswordRequired: 'Transfer folder and old vault password are required',
+    replaceCancelled: 'Replace cancelled. Current data was not deleted.',
+    transferReplaceDone: 'Current data was deleted after a safety copy was made, then the selected backup became this vault.',
+    transferMergeDone: 'Backup data added to this vault. Duplicates were skipped.',
+    waitingForFolder: 'waiting for folder',
+    waitingForExport: 'waiting for export',
+    needsAttention: 'needs attention',
+    cannotTransferYet: 'cannot transfer yet',
+    unlockRequired: 'unlock required',
+    needsRepair: 'needs repair',
+    preflight: 'preflight',
+    phaseUnlockingSource: 'unlocking source',
+    phaseValidatingSource: 'validating source',
+    phaseImportingSessions: 'importing sessions',
+    phaseImportingAttachments: 'importing attachments',
+    phaseBackingUpCurrentRoot: 'backing up current data',
+    phaseReplaceStarted: 'replace started',
+    phaseCopyingSourceRoot: 'copying backup data',
+    phaseCleaningAuth: 'cleaning machine-bound auth',
+    phaseFinalizingTransferRoot: 'finalizing transfer',
+    phaseCurrentRootBackedUp: 'current data backed up',
+    phaseNeedsReconnect: 'needs reconnect',
+    phaseReadingExport: 'reading export',
+    phaseImportingConversations: 'importing conversations',
+    phaseCompleted: 'completed',
+    phaseCancelled: 'cancelled',
+    conversations: 'conversations',
+    messages: 'messages',
+    branches: 'branches',
+    offPathMsgs: 'off-path msgs',
+    assets: 'assets',
+    duplicateFiles: 'duplicate files',
+    chatgptPickerUnavailable: 'File picker is unavailable here. Paste the chatgpt-export zip or folder path.',
+    chatgptPathRequired: 'chatgpt-export zip or folder path required',
+    chatgptImportReview: 'chatgpt-export import finished with items that need review.',
+  },
+  'zh-CN': {
+    manualUpdatePackagedReplace: '下载最新版本、替换这个 app，然后自动重新打开 DataMoat。之后可以加入签名来减少 Windows 警告。',
+    manualUpdateWindowsSigned: '下载最新 Windows 版本并运行它来升级。自动 Windows 更新需要签名安装器/更新器，这个版本尚未启用。',
+    updateStateReadyToUpdate: '可更新',
+    updateStateDownloading: '正在下载更新',
+    updateStateReadyInstall: '可安装',
+    updateStateUpToDate: '已是最新',
+    updateStateChecking: '正在检查更新',
+    updateStateUpdating: '正在更新',
+    updateStateInstalling: '正在安装',
+    updateStatePaused: '已暂停',
+    updateStateUnsupported: '此安装未设置',
+    updateStateNeedsAttention: '需要注意',
+    installSourceDev: 'live 源码文件夹',
+    installSourceCopy: '标准安装副本',
+    installPackagedRecommended: '打包 app（推荐）',
+    strategySourceGitPull: '自动源码更新',
+    strategySourceManualReinstall: '仅手动源码重装',
+    strategyPackagedAuto: '自动打包更新',
+    strategyPackagedManual: '手动打包更新',
+    strategyPackagedManualOnly: '仅手动打包升级',
+    autoUpdateCheckingInstall: '正在检查此安装是否可以使用自动更新...',
+    autoUpdatePackagedAvailable: '此打包安装可用，并默认启用。DataMoat 会检查已签名 release 更新、在后台下载，并在重启前询问你。',
+    autoUpdateSourceAvailable: '此安装可用，并默认启用。它会自动保持修复和改进为最新。',
+    autoUpdatePackagedManual: '这个打包 app 可以从最新 release 手动升级。此平台尚未实现自动打包更新。',
+    autoUpdateDmgInstall: '这个打包 app 使用推荐 release 路径。只有安装到挂载 DMG 之外之后才可以自动更新。',
+    autoUpdateSourceInactive: '此安装未启用。为了安全，这个副本目前只会打开最新下载页面。之后要启用原地更新，请在下面选择 live git 源码文件夹并从它重新安装。',
+    gitNotNeeded: '此安装不需要',
+    gitClean: '干净',
+    gitLocalChanges: '发现本地改动',
+    gitAhead: '领先',
+    gitBehind: '落后',
+    defaultUpdateSourceManual: '这个 app 正常运行。此安装目前不会直接自动更新。可使用下载最新版，或在下面选择 live git 源码文件夹并重新安装，以便之后使用 git 原地更新。',
+    defaultUpdatePackagedAuto: '这个打包 app 可以自动检查已签名 release 更新。DataMoat 会先下载新版本，然后等你准备好再更新 app。',
+    defaultUpdatePackagedManual: '这个 app 正常运行。打包 app 是推荐安装类型。使用下载最新版即可安全下载并替换 app。',
+    defaultUpdatePackagedUnavailable: '这个 app 正常运行。打包 app 是推荐安装类型。使用下载最新版即可手动取得最新 release。',
+    defaultUpdateGeneric: '自动更新可让支持的安装保持修复和改进为最新。',
+    updateApplying: '正在应用最新更新...',
+    updateChecking: '正在检查是否有更新...',
+    updateAvailable: '此安装有新版本。准备好后可以更新。',
+    updateDownloadedPackaged: '新的打包版本已下载完成。准备好安装时点击立即更新。',
+    updateUpToDate: '已经是最新。',
+    updateInstalling: '正在关闭并重新打开 DataMoat 以应用已下载的更新...',
+    updateCompleted: '更新成功完成。',
+    updatePausedLocalChanges: '因为源码文件夹发现本地改动，自动更新已暂停。',
+    updatePausedLocalCommits: '因为这个源码文件夹有需要先检查的本地 commit，自动更新已暂停。',
+    updatePausedGeneric: '自动更新会暂停到此安装准备好为止。其他安装类型目前保留手动下载。',
+    updateErrorPackaged: '上次更新步骤未完成，但 app 仍可正常使用。请使用下载最新版手动安装最新打包 release。',
+    updateErrorSource: '上次更新步骤未完成，但 app 仍可正常使用。可以稍后再试，或使用下面的源码重装选项。',
+    chooseSourceBeforeReinstall: '开始源码重装前，请先选择 DataMoat 源码文件夹。',
+    reinstallConfirm: '从源码重新安装会立即停止 DataMoat，并用你输入的源码文件夹替换当前 app。你的加密 DataMoat 数据应该会保留，但 app 窗口会马上关闭。继续吗？',
+    reinstallPrompt: '输入 REINSTALL 以确认现在源码重装。',
+    reinstallCancelled: '源码重装已取消。如果要继续，请准确输入 REINSTALL。',
+    reinstallStarted: '源码重装已开始。重装流程完成后，DataMoat 会关闭并重新打开。',
+    packagedDownloadStarted: '最新打包 release 已下载。DataMoat 会关闭、替换 app 并自动重新打开。',
+    latestDownloadOpened: '已在浏览器打开最新下载页面。请在那里下载最新打包 release，并在准备好后替换当前 app。',
+    latestDownloadFallback: '无法自动打开最新下载页面。你可以手动打开这个链接：{url}',
+    reinstallHelpEmpty: '在这里粘贴 DataMoat 源码文件夹。如果它是 live git checkout，之后可以启用自动更新。',
+    reinstallHelpTyped: '这个文件夹会在重装前检查。如果它是 live git checkout，之后可以启用自动更新。',
+    reinstallHelpUnavailableReason: '这个源码文件夹现在不能用于自动源码更新：{reason}。',
+    reinstallHelpUnavailable: '之前记录的源码文件夹现在不可用。app 仍可正常运行。如果你有 live git checkout，请在这里粘贴并重新安装。',
+    reinstallHelpLive: '这个源码文件夹是 live git checkout。从它重新安装也会启用之后的源码更新。',
+    reinstallHelpNonLive: '这个源码文件夹可以重装 app，但要指向 live git checkout 才会开启自动更新。',
+    referencedPermissionFolder: '某个引用文件夹',
+    referencedPermissionMac: '{folder} 需要文件夹访问权限。打开系统设置 > 隐私与安全性 > 文件与文件夹 > DataMoat，然后启用该文件夹。如果列表里没有，请把 DataMoat 加到完全磁盘访问权限。这个权限关闭时，其他内容仍会继续备份。',
+    referencedPermissionWindows: 'Windows 拒绝访问 {folder}。DataMoat 可以复制当前 Windows 用户可读取的文件；检查文件夹或文件权限后，DataMoat 会在下次扫描重试。',
+    referencedPermissionOther: '{folder} 需要文件夹访问权限。DataMoat 可以复制此用户账号可读取的文件；检查文件夹或文件权限后，DataMoat 会在下次扫描重试。',
+    referencedRunningMac: '引用文件备份已启用。DataMoat 正在处理过往对话，并会自动保护之后通过路径引用的文件。如果 macOS 询问文件夹权限，是因为 DataMoat 需要把原始文件复制进加密 vault。',
+    referencedRunningOther: '引用文件备份已启用。DataMoat 正在处理过往对话，并会在文件可由此用户读取时自动保护之后通过路径引用的文件。',
+    referencedEnabledMessage: '引用文件备份已启用。DataMoat 会自动保护之后通过路径引用的文件，并像之前一样保护内嵌文件和图片。',
+    referencedOffProtected: '引用文件备份已关闭。已经保护在这个 vault 内的文件仍可使用；只有当你想复制之后的 path-only 本地文件时才需要启用。',
+    referencedOffMac: 'DataMoat 已经保护支持会话里保存的内嵌文件和图片。有些对话只用路径提到文件，例如 Downloads、Desktop 或 Documents 里的文件。启用后会把这些原始文件复制进加密 vault；macOS 只会在 DataMoat 真的到达需要权限的文件夹时询问。',
+    referencedOffOther: 'DataMoat 已经保护支持会话里保存的内嵌文件和图片。有些对话只用路径提到文件。启用后会在此用户可读取时把这些原始文件复制进加密 vault。',
+    processing: '处理中',
+    starting: '启动中...',
+    fileSingular: '文件',
+    filePlural: '文件',
+    folder: '文件夹',
+    dataMoatFolder: 'DataMoat 文件夹',
+    transferExportTouchIdWarning: 'Touch ID 不能转移。复制这个文件夹前，请确认你知道旧主密码或 24 词短语。',
+    transferManifestWritten: '转移 manifest 已写入。把整个 DataMoat 文件夹复制到新电脑。',
+    openedPath: '已打开 {path}',
+    transferImportCompleted: '转移完成。已导入 vault 数据的会话列表和搜索现在可用。',
+    transferImportPassed: '转移文件夹通过预检。请用它的旧密码或旧 24 词短语解锁所选备份。',
+    sessionsImported: '已导入会话',
+    duplicatesSkipped: '已跳过重复项',
+    attachmentsImported: '已导入附件',
+    transferFolderPickerUnavailable: '这里无法使用文件夹选择器。请粘贴复制出来的 DataMoat 文件夹路径。',
+    transferFolderPathRequired: '需要转移文件夹路径',
+    transferPhraseRequired: '需要转移文件夹和旧 24 词短语',
+    transferPasswordRequired: '需要转移文件夹和旧 vault 密码',
+    replaceCancelled: '替换已取消。当前数据没有删除。',
+    transferReplaceDone: '当前数据已在安全副本完成后删除，所选备份已成为这个 vault。',
+    transferMergeDone: '备份数据已加入这个 vault。重复项已跳过。',
+    waitingForFolder: '等待文件夹',
+    waitingForExport: '等待 export',
+    needsAttention: '需要注意',
+    cannotTransferYet: '暂时无法转移',
+    unlockRequired: '需要解锁',
+    needsRepair: '需要修复',
+    preflight: '预检',
+    phaseUnlockingSource: '正在解锁来源',
+    phaseValidatingSource: '正在验证来源',
+    phaseImportingSessions: '正在导入会话',
+    phaseImportingAttachments: '正在导入附件',
+    phaseBackingUpCurrentRoot: '正在备份当前数据',
+    phaseReplaceStarted: '已开始替换',
+    phaseCopyingSourceRoot: '正在复制备份数据',
+    phaseCleaningAuth: '正在清理机器绑定认证',
+    phaseFinalizingTransferRoot: '正在完成转移',
+    phaseCurrentRootBackedUp: '当前数据已备份',
+    phaseNeedsReconnect: '需要重新连接',
+    phaseReadingExport: '正在读取 export',
+    phaseImportingConversations: '正在导入对话',
+    phaseCompleted: '已完成',
+    phaseCancelled: '已取消',
+    conversations: '对话',
+    messages: '消息',
+    branches: '分支',
+    offPathMsgs: '非主路径消息',
+    assets: '资源',
+    duplicateFiles: '重复文件',
+    chatgptPickerUnavailable: '这里无法使用文件选择器。请粘贴 chatgpt-export zip 或文件夹路径。',
+    chatgptPathRequired: '需要 chatgpt-export zip 或文件夹路径',
+    chatgptImportReview: 'chatgpt-export 导入完成，但有项目需要检查。',
+  },
+  ja: {
+    manualUpdatePackagedReplace: '最新版をダウンロードし、この app を置き換えてから DataMoat を自動で再起動します。署名は後で追加して Windows 警告を減らせます。',
+    manualUpdateWindowsSigned: '最新の Windows 版をダウンロードして実行します。自動 Windows 更新には署名済みインストーラー/アップデーターが必要で、このビルドでは未有効です。',
+    updateStateReadyToUpdate: '更新できます',
+    updateStateDownloading: '更新をダウンロード中',
+    updateStateReadyInstall: 'インストールできます',
+    updateStateUpToDate: '最新です',
+    updateStateChecking: '更新を確認中',
+    updateStateUpdating: '更新中',
+    updateStateInstalling: 'インストール中',
+    updateStatePaused: '一時停止中',
+    updateStateUnsupported: 'このインストールでは未設定',
+    updateStateNeedsAttention: '確認が必要',
+    installSourceDev: 'live ソースフォルダ',
+    installSourceCopy: '標準インストールコピー',
+    installPackagedRecommended: 'パッケージ app（推奨）',
+    strategySourceGitPull: '自動ソース更新',
+    strategySourceManualReinstall: '手動ソース再インストールのみ',
+    strategyPackagedAuto: '自動パッケージ更新',
+    strategyPackagedManual: '手動パッケージ更新',
+    strategyPackagedManualOnly: '手動パッケージアップグレードのみ',
+    autoUpdateCheckingInstall: 'このインストールで自動更新を使えるか確認中...',
+    autoUpdatePackagedAvailable: 'このパッケージインストールで利用可能で、既定で有効です。DataMoat は署名済み release 更新を確認し、バックグラウンドでダウンロードし、再起動前に確認します。',
+    autoUpdateSourceAvailable: 'このインストールで利用可能で、既定で有効です。修正と改善を自動で最新に保ちます。',
+    autoUpdatePackagedManual: 'このパッケージ app は最新 release から手動でアップグレードできます。このプラットフォームでは自動パッケージ更新はまだ実装されていません。',
+    autoUpdateDmgInstall: 'このパッケージ app は推奨 release パスを使います。自動更新は、マウント済み DMG の外に DataMoat をインストールした後のみ使えます。',
+    autoUpdateSourceInactive: 'このインストールでは有効ではありません。安全のため、今は最新版ダウンロードページだけを開きます。後でその場更新を有効にするには、下で live git ソースフォルダを選んで再インストールしてください。',
+    gitNotNeeded: 'このインストールでは不要',
+    gitClean: 'クリーン',
+    gitLocalChanges: 'ローカル変更あり',
+    gitAhead: 'ahead',
+    gitBehind: 'behind',
+    defaultUpdateSourceManual: 'この app は正常に動作しています。このインストールは今のところ直接自動更新しません。最新版をダウンロードするか、下で live git ソースフォルダを選んで再インストールすると、後で git ベースのその場更新を使えます。',
+    defaultUpdatePackagedAuto: 'このパッケージ app は署名済み release 更新を自動で確認できます。DataMoat は先に新しいバージョンをダウンロードし、準備ができるまで更新を待ちます。',
+    defaultUpdatePackagedManual: 'この app は正常に動作しています。パッケージ app は推奨インストール形式です。最新版をダウンロードして安全に置き換えられます。',
+    defaultUpdatePackagedUnavailable: 'この app は正常に動作しています。パッケージ app は推奨インストール形式です。最新版をダウンロードして手動で最新 release を取得できます。',
+    defaultUpdateGeneric: '自動更新は、対応インストールで修正と改善を最新に保ちます。',
+    updateApplying: '最新更新を適用中...',
+    updateChecking: '更新があるか確認中...',
+    updateAvailable: 'このインストールに新しいバージョンがあります。準備ができたら更新できます。',
+    updateDownloadedPackaged: '新しいパッケージ版のダウンロードが完了しました。インストールできるときに今すぐ更新を押してください。',
+    updateUpToDate: 'すべて最新です。',
+    updateInstalling: 'ダウンロード済み更新を適用するため、DataMoat を閉じて再起動しています...',
+    updateCompleted: '更新が正常に完了しました。',
+    updatePausedLocalChanges: 'ソースフォルダにローカル変更が見つかったため、自動更新は一時停止中です。',
+    updatePausedLocalCommits: 'このソースフォルダに先に確認すべきローカル commit があるため、自動更新は一時停止中です。',
+    updatePausedGeneric: 'このインストールの準備ができるまで自動更新は一時停止します。他のインストール形式は今のところ手動ダウンロードです。',
+    updateErrorPackaged: '前回の更新手順は完了しませんでしたが、app は通常どおり使えます。最新版をダウンロードして最新パッケージ release を手動でインストールしてください。',
+    updateErrorSource: '前回の更新手順は完了しませんでしたが、app は通常どおり使えます。後で再試行するか、下のソース再インストールを使ってください。',
+    chooseSourceBeforeReinstall: 'ソース再インストールを始める前に DataMoat ソースフォルダを選択してください。',
+    reinstallConfirm: 'ソースから再インストールすると DataMoat をすぐ停止し、入力したソースフォルダから現在の app を置き換えます。暗号化された DataMoat データはそのまま残るはずですが、app ウィンドウは今閉じます。続行しますか？',
+    reinstallPrompt: '今すぐソース再インストールを確認するには REINSTALL と入力してください。',
+    reinstallCancelled: 'ソース再インストールをキャンセルしました。続ける場合は REINSTALL と正確に入力してください。',
+    reinstallStarted: 'ソース再インストールを開始しました。処理が完了すると DataMoat は閉じて再起動します。',
+    packagedDownloadStarted: '最新パッケージ release をダウンロードしました。DataMoat は閉じて app を置き換え、自動で再起動します。',
+    latestDownloadOpened: 'ブラウザで最新版ダウンロードページを開きました。そこで最新パッケージ release をダウンロードし、準備ができたら現在の app を置き換えてください。',
+    latestDownloadFallback: '最新版ダウンロードページを自動で開けませんでした。このリンクを手動で開けます: {url}',
+    reinstallHelpEmpty: 'DataMoat ソースフォルダをここに貼り付けます。live git checkout なら、今後の自動更新を有効にできます。',
+    reinstallHelpTyped: 'このフォルダは再インストール前に確認されます。live git checkout なら、今後の自動更新を有効にできます。',
+    reinstallHelpUnavailableReason: 'このソースフォルダは現在、自動ソース更新に使えません: {reason}。',
+    reinstallHelpUnavailable: '以前記録したソースフォルダは現在利用できません。app は通常どおり動作します。live git checkout がある場合はここに貼り付けて再インストールしてください。',
+    reinstallHelpLive: 'このソースフォルダは live git checkout です。ここから再インストールすると、今後のソース更新も有効になります。',
+    reinstallHelpNonLive: 'このソースフォルダで app を再インストールできますが、live git checkout を指定するまで自動更新はオンになりません。',
+    referencedPermissionFolder: '参照フォルダ',
+    referencedPermissionMac: '{folder} へのフォルダアクセスが必要です。システム設定 > プライバシーとセキュリティ > ファイルとフォルダ > DataMoat を開き、そのフォルダを有効にしてください。表示されない場合は DataMoat をフルディスクアクセスに追加してください。この権限がオフでも他のバックアップは続きます。',
+    referencedPermissionWindows: 'Windows が {folder} へのアクセスを拒否しました。DataMoat は現在の Windows ユーザーが読めるファイルをコピーできます。フォルダまたはファイル権限を確認すると、次回スキャンで再試行します。',
+    referencedPermissionOther: '{folder} へのフォルダアクセスが必要です。DataMoat はこのユーザーアカウントが読めるファイルをコピーできます。フォルダまたはファイル権限を確認すると、次回スキャンで再試行します。',
+    referencedRunningMac: '参照ファイルバックアップは有効です。DataMoat は過去の会話を処理中で、今後パスで参照されるファイルも自動で保護します。macOS がフォルダアクセスを求めるのは、DataMoat が元ファイルを暗号化 vault にコピーするためです。',
+    referencedRunningOther: '参照ファイルバックアップは有効です。DataMoat は過去の会話を処理中で、このユーザーが読める場合は今後パスで参照されるファイルも自動で保護します。',
+    referencedEnabledMessage: '参照ファイルバックアップは有効です。DataMoat は今後パスで参照されるファイルを自動で保護し、埋め込みファイルと画像もこれまでどおり保護します。',
+    referencedOffProtected: '参照ファイルバックアップはオフです。この vault 内で保護済みのファイルは引き続き利用できます。今後の path-only ローカルファイルもコピーしたい場合だけ有効にしてください。',
+    referencedOffMac: 'DataMoat は対応セッション内に保存された埋め込みファイルと画像をすでに保護しています。一部の会話は Downloads、Desktop、Documents などのパスだけでファイルに触れます。有効にすると元ファイルを暗号化 vault にコピーします。macOS は DataMoat が権限の必要なフォルダに実際に到達したときだけ確認します。',
+    referencedOffOther: 'DataMoat は対応セッション内に保存された埋め込みファイルと画像をすでに保護しています。一部の会話はパスだけでファイルに触れます。有効にすると、このユーザーが読める場合に元ファイルを暗号化 vault にコピーします。',
+    processing: '処理中',
+    starting: '開始中...',
+    fileSingular: 'ファイル',
+    filePlural: 'ファイル',
+    folder: 'フォルダ',
+    dataMoatFolder: 'DataMoat フォルダ',
+    transferExportTouchIdWarning: 'Touch ID は転送できません。このフォルダをコピーする前に、旧マスターパスワードまたは 24 語フレーズを確認してください。',
+    transferManifestWritten: '転送 manifest を書き込みました。DataMoat フォルダ全体を新しいコンピュータへコピーしてください。',
+    openedPath: '{path} を開きました',
+    transferImportCompleted: '転送が完了しました。インポート済み vault データのセッション一覧と検索が利用できます。',
+    transferImportPassed: '転送フォルダは事前確認に合格しました。選択したバックアップを旧パスワードまたは旧 24 語フレーズで解除してください。',
+    sessionsImported: 'インポート済みセッション',
+    duplicatesSkipped: 'スキップ済み重複',
+    attachmentsImported: 'インポート済み添付ファイル',
+    transferFolderPickerUnavailable: 'ここではフォルダ選択が使えません。コピーした DataMoat フォルダのパスを貼り付けてください。',
+    transferFolderPathRequired: '転送フォルダのパスが必要です',
+    transferPhraseRequired: '転送フォルダと旧 24 語フレーズが必要です',
+    transferPasswordRequired: '転送フォルダと旧 vault パスワードが必要です',
+    replaceCancelled: '置き換えをキャンセルしました。現在のデータは削除されていません。',
+    transferReplaceDone: '安全コピーの作成後に現在のデータを削除し、選択したバックアップをこの vault にしました。',
+    transferMergeDone: 'バックアップデータをこの vault に追加しました。重複はスキップされました。',
+    waitingForFolder: 'フォルダ待ち',
+    waitingForExport: 'export 待ち',
+    needsAttention: '確認が必要',
+    cannotTransferYet: 'まだ転送できません',
+    unlockRequired: '解除が必要',
+    needsRepair: '修復が必要',
+    preflight: '事前確認',
+    phaseUnlockingSource: 'ソースを解除中',
+    phaseValidatingSource: 'ソースを検証中',
+    phaseImportingSessions: 'セッションをインポート中',
+    phaseImportingAttachments: '添付ファイルをインポート中',
+    phaseBackingUpCurrentRoot: '現在のデータをバックアップ中',
+    phaseReplaceStarted: '置き換え開始',
+    phaseCopyingSourceRoot: 'バックアップデータをコピー中',
+    phaseCleaningAuth: '端末固定認証を整理中',
+    phaseFinalizingTransferRoot: '転送を完了中',
+    phaseCurrentRootBackedUp: '現在のデータをバックアップ済み',
+    phaseNeedsReconnect: '再接続が必要',
+    phaseReadingExport: 'export を読み込み中',
+    phaseImportingConversations: '会話をインポート中',
+    phaseCompleted: '完了',
+    phaseCancelled: 'キャンセル済み',
+    conversations: '会話',
+    messages: 'メッセージ',
+    branches: '分岐',
+    offPathMsgs: '別パスメッセージ',
+    assets: 'アセット',
+    duplicateFiles: '重複ファイル',
+    chatgptPickerUnavailable: 'ここではファイル選択が使えません。chatgpt-export zip またはフォルダのパスを貼り付けてください。',
+    chatgptPathRequired: 'chatgpt-export zip またはフォルダのパスが必要です',
+    chatgptImportReview: 'chatgpt-export のインポートは完了しましたが、確認が必要な項目があります。',
+  },
+}
+for (const [language, values] of Object.entries(appTextSettingsExtra)) {
+  Object.assign(appText[language], values)
+}
+const appZhTwPhrases = [
+  ['简体中文', '繁體中文'], ['搜索', '搜尋'], ['对话', '對話'], ['设置', '設定'], ['关闭', '關閉'],
+  ['选择', '選擇'], ['语言', '語言'], ['界面', '介面'], ['自动', '自動'], ['更新', '更新'],
+  ['安装', '安裝'], ['原地', '原地'], ['其他', '其他'], ['方式', '方式'], ['目前', '目前'],
+  ['为了', '為了'], ['安全', '安全'], ['保留', '保留'], ['手动', '手動'], ['下载', '下載'],
+  ['版本', '版本'], ['运行', '執行'], ['升级', '升級'], ['立即', '立即'], ['检查', '檢查'],
+  ['最新', '最新'], ['源码', '源碼'], ['重新安装', '重新安裝'], ['当前', '目前'], ['状态', '狀態'],
+  ['上次', '上次'], ['应用', '套用'], ['引用文件备份', '引用檔案備份'], ['文件', '檔案'],
+  ['转移', '轉移'], ['另一台电脑', '另一部電腦'], ['导入', '匯入'], ['打开', '打開'],
+  ['选择并检查', '選擇並檢查'], ['再次检查', '再次檢查'], ['不导入', '不匯入'],
+  ['导入 Vault', '匯入 Vault'], ['关于', '關於'], ['首次设置', '首次設定'], ['解锁', '解鎖'],
+  ['页面', '頁面'], ['检测', '偵測'], ['就绪', '就緒'], ['已导入', '已匯入'], ['仅', '只'],
+  ['已阻止', '已阻擋'], ['需要注意', '需要留意'], ['可选', '可選'], ['开启', '開啟'],
+  ['运行中', '運行中'], ['未知', '未知'], ['从未', '從未'], ['转移文件夹', '轉移資料夾'],
+  ['所选', '已選'], ['会', '會'], ['旧', '舊'], ['恢复短语', '恢復短語'], ['密码', '密碼'],
+  ['复制', '複製'], ['这个', '這個'], ['然后', '然後'], ['整个', '整個'], ['新电脑', '新電腦'],
+  ['不要', '不要'], ['原始', '原始'], ['快照', '快照'], ['附件', '附件'], ['分支索引', '分支索引'],
+  ['尚未', '尚未'], ['粘贴', '貼上'], ['路径', '路徑'], ['浏览器', '瀏覽器'], ['视图', '畫面'],
+  ['文件选择器', '檔案選擇器'], ['资源', '資源'], ['备份路径', '備份路徑'], ['捕捉', '擷取'],
+  ['处理', '處理'], ['过往', '過往'], ['启用', '啟用'], ['加密', '加密'], ['覆盖应用', '覆蓋應用'],
+  ['会话', '對話'], ['重复项', '重複項'], ['文件夹', '資料夾'], ['签名', '簽名'], ['减少', '減少'],
+  ['干净', '乾淨'], ['发现', '發現'], ['改动', '改動'], ['领先', '領先'], ['落后', '落後'],
+  ['修复', '修復'], ['改进', '改進'], ['支持', '支援'], ['步骤', '步驟'], ['稍后', '稍後'],
+  ['开始', '開始'], ['输入', '輸入'], ['替换', '替換'], ['窗口', '視窗'], ['继续', '繼續'],
+  ['准确', '準確'], ['链接', '連結'], ['系统', '系統'], ['隐私', '隱私'], ['权限', '權限'],
+  ['拒绝', '拒絕'], ['账号', '帳號'], ['询问', '詢問'], ['后台', '背景'], ['实现', '實作'],
+  ['类', '類'], ['获取', '取得'], ['项目', '項目'], ['请', '請'], ['该', '該'],
+  ['推荐', '推薦'], ['已经', '已經'], ['保护', '保護'], ['确认', '確認'], ['短语', '短語'],
+  ['数据', '資料'], ['现在', '現在'], ['属于', '屬於'], ['备份', '備份'], ['删除', '刪除'],
+  ['解压', '解壓'], ['无法', '無法'], ['消息', '訊息'], ['重复', '重複'], ['显示', '顯示'],
+  ['来源', '來源'], ['通过', '通過'], ['词', '詞'], ['内', '內'], ['当', '當'], ['时', '時'],
+  ['覆盖', '覆蓋'], ['进', '進'], ['并', '並'], ['选', '選'], ['过', '過'],
+  ['檔案夹', '資料夾'], ['會话', '對話'], ['还', '還'], ['这', '這'], ['个', '個'],
+  ['里', '裡'], ['后', '後'], ['从', '從'], ['为', '為'], ['与', '與'],
+];
+function appToTraditionalText(text) {
+  return appZhTwPhrases.reduce((value, pair) => value.split(pair[0]).join(pair[1]), String(text || ''));
+}
+appText['zh-TW'] = Object.fromEntries(Object.entries(appText['zh-CN']).map(([key, value]) => [key, appToTraditionalText(value)]))
+let appLanguage = 'en'
+function normalizeAppLanguage(value) {
+  const code = String(value || '').replace('_', '-').toLowerCase()
+  if (code.startsWith('zh') || code.startsWith('yue')) {
+    if (/(^|-)hant($|-)|(^|-)tw($|-)|(^|-)hk($|-)|(^|-)mo($|-)/.test(code)) return 'zh-TW'
+    if (/(^|-)hans($|-)|(^|-)cn($|-)|(^|-)sg($|-)/.test(code)) return 'zh-CN'
+    return 'en'
+  }
+  if (code === 'ja' || code.startsWith('ja-') || code === 'jp') return 'ja'
+  return 'en'
+}
+function detectAppLanguage() {
+  const languages = Array.isArray(navigator.languages) && navigator.languages.length > 0
+    ? navigator.languages
+    : [navigator.language || '']
+  for (const raw of languages) {
+    const code = String(raw || '').replace('_', '-')
+    if (/^(zh|yue)(-|$)/i.test(code) && /(^|-)hant($|-)|(^|-)tw($|-)|(^|-)hk($|-)|(^|-)mo($|-)/i.test(code)) return 'zh-TW'
+    if (/^(zh|yue)(-|$)/i.test(code) && /(^|-)hans($|-)|(^|-)cn($|-)|(^|-)sg($|-)/i.test(code)) return 'zh-CN'
+    if (/^ja/i.test(code)) return 'ja'
+    if (/^en/i.test(code)) return 'en'
+  }
+  return 'en'
+}
+function appTr(key) {
+  return (appText[appLanguage] && appText[appLanguage][key]) || appText.en[key] || key
+}
+const APP_STATUS_TEXT_KEYS = {
+  'checking': 'checking',
+  'checking...': 'checking',
+  'checking…': 'checkingEllipsis',
+  'checking transfer': 'checkingTransfer',
+  'checking export': 'checkingExport',
+  'checking previous sessions': 'referencedProcessing',
+  'not checked': 'notChecked',
+  'waiting': 'waiting',
+  'waiting for folder': 'waitingForFolder',
+  'waiting for export': 'waitingForExport',
+  'ready': 'ready',
+  'needs attention': 'needsAttention',
+  'cannot transfer yet': 'cannotTransferYet',
+  'blocked': 'blocked',
+  'failed': 'failed',
+  'imported': 'imported',
+  'checked': 'checked',
+  'checked only': 'checkedOnly',
+  'unlock required': 'unlockRequired',
+  'needs repair': 'needsRepair',
+  'preflight': 'preflight',
+  'raw-archives': 'phasePreparingRawArchives',
+  'manifest': 'phaseWritingTransferManifest',
+  'unlocking-source': 'phaseUnlockingSource',
+  'validating-source': 'phaseValidatingSource',
+  'importing-sessions': 'phaseImportingSessions',
+  'importing-attachments': 'phaseImportingAttachments',
+  'backing-up-current-root': 'phaseBackingUpCurrentRoot',
+  'replace-started': 'phaseReplaceStarted',
+  'copying-source-root': 'phaseCopyingSourceRoot',
+  'cleaning-machine-bound-auth': 'phaseCleaningAuth',
+  'finalizing-transfer-root': 'phaseFinalizingTransferRoot',
+  'current-root-backed-up': 'phaseCurrentRootBackedUp',
+  'needs-reconnect': 'phaseNeedsReconnect',
+  'reading-export': 'phaseReadingExport',
+  'importing-conversations': 'phaseImportingConversations',
+  'completed': 'phaseCompleted',
+  'cancelled': 'phaseCancelled',
+}
+function appStatusText(value) {
+  const raw = String(value || '').trim()
+  const key = APP_STATUS_TEXT_KEYS[raw.toLowerCase()]
+  return key ? appTr(key) : raw
+}
+function setAppText(id, key) {
+  const el = document.getElementById(id)
+  if (el) el.textContent = appTr(key)
+}
+const APP_LANGUAGE_LABELS = {
+  en: 'EN',
+  'zh-CN': '简体中文',
+  'zh-TW': '繁體中文',
+  ja: '日本語',
+}
+function closeLanguageMenu() {
+  const menu = document.getElementById('app-language-switch')
+  const current = document.getElementById('app-language-current')
+  if (menu) menu.hidden = true
+  if (current) current.setAttribute('aria-expanded', 'false')
+}
+function toggleLanguageMenu() {
+  const menu = document.getElementById('app-language-switch')
+  const current = document.getElementById('app-language-current')
+  if (!menu || !current) return
+  menu.hidden = !menu.hidden
+  current.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true')
+}
+function applyAppLanguage() {
+  document.documentElement.lang = appLanguage === 'zh-CN' ? 'zh-CN' : appLanguage
+  const currentLanguageButton = document.getElementById('app-language-current')
+  if (currentLanguageButton) {
+    currentLanguageButton.textContent = APP_LANGUAGE_LABELS[appLanguage] || APP_LANGUAGE_LABELS.en
+    currentLanguageButton.setAttribute('aria-label', appTr('chooseLanguage'))
+  }
+  document.querySelectorAll('#app-language-switch [data-language]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.language === appLanguage)
+    btn.setAttribute('aria-selected', btn.dataset.language === appLanguage ? 'true' : 'false')
+  })
+  const search = document.getElementById('search')
+  if (search) search.placeholder = appTr('searchPlaceholder')
+  const settingsBtn = document.getElementById('open-settings-btn')
+  if (settingsBtn) settingsBtn.setAttribute('aria-label', appTr('settings'))
+  const closeSettingsBtn = document.getElementById('close-settings-btn')
+  if (closeSettingsBtn) closeSettingsBtn.setAttribute('aria-label', appTr('closeSettings'))
+  const about = document.querySelector('.header-link')
+  if (about) about.textContent = appTr('about')
+  setAppText('notice-dismiss-btn', 'noticeDismiss')
+  setAppText('settings-title', 'settings')
+  setAppText('language-settings-title', 'languageTitle')
+  setAppText('language-settings-subtitle', 'languageSubtitle')
+  setAppText('transfer-export-title', 'transferTo')
+  setAppText('transfer-import-title', 'transferFrom')
+  setAppText('transfer-import-folder-label', 'transferFolder')
+  setAppText('transfer-import-folder-help', 'transferFolderHelp')
+  setAppText('transfer-import-auth-label', 'oldVaultUnlock')
+  setAppText('transfer-import-auth-help', 'oldVaultUnlockHelp')
+  setAppText('transfer-import-auth-password', 'oldPassword')
+  setAppText('transfer-import-auth-phrase', 'oldPhrase')
+  setAppText('transfer-import-merge-btn', 'addBackupData')
+  setAppText('transfer-import-replace-btn', 'replaceWithBackup')
+  setAppText('referenced-attachments-progress-label', 'referencedProcessing')
+  setAppText('transfer-export-progress-label', 'checkingFiles')
+  setAppText('transfer-import-progress-label', 'checkingTransfer')
+  setAppText('chatgpt-import-title', 'chatgptImport')
+  setAppText('chatgpt-import-progress-label', 'checkingExport')
+  setAppText('chatgpt-import-manual-help', 'chatgptManualHelp')
+  setAppText('reinstall-source-label', 'sourceInstallFolder')
+  setAppText('backup-paths-title', 'backupPathsTitle')
+  setAppText('backup-paths-subtitle', 'backupPathsSubtitle')
+  const transferPassword = document.getElementById('transfer-import-password')
+  if (transferPassword) transferPassword.placeholder = appTr('oldMasterPassword')
+  const transferPhrase = document.getElementById('transfer-import-mnemonic')
+  if (transferPhrase) transferPhrase.placeholder = appTr('oldRecoveryPhrase')
+  document.querySelector('#update-toggle .switch-title') && (document.querySelector('#update-toggle .switch-title').textContent = appTr('autoUpdate'))
+  document.querySelector('#update-toggle .switch-subtitle') && (document.querySelector('#update-toggle .switch-subtitle').textContent = appTr('autoUpdateCopy'))
+  setAppText('manual-update-title', 'manualUpdates')
+  setAppText('manual-update-subtitle', 'manualUpdatesCopy')
+  setAppText('update-check-btn', 'checkNow')
+  setAppText('update-apply-btn', 'updateNow')
+  setAppText('update-install-latest-btn', 'downloadLatest')
+  setAppText('update-reinstall-btn', 'reinstallSource')
+  setAppText('transfer-export-check-btn', 'checkNow')
+  const labelMap = [
+    ['update-install-type', 'currentInstall'],
+    ['update-app-version', 'appVersion'],
+    ['update-path', 'updateMethod'],
+    ['update-state', 'updateStatus'],
+    ['update-last-checked', 'lastChecked'],
+    ['update-last-applied', 'lastApplied'],
+    ['update-git-status', 'sourceCheck'],
+    ['referenced-attachments-state', 'referencedBackup'],
+    ['transfer-export-state', 'transferTo'],
+    ['transfer-import-state', 'transferFrom'],
+    ['chatgpt-import-state', 'chatgptImport'],
+  ]
+  for (const [valueId, key] of labelMap) {
+    const value = document.getElementById(valueId)
+    const label = value?.previousElementSibling
+    if (label?.classList.contains('settings-label')) label.textContent = appTr(key)
+  }
+  setAppText('transfer-import-select-btn', 'chooseFolder')
+  setAppText('transfer-export-open-btn', 'openFolder')
+  setAppText('chatgpt-import-select-btn', 'chooseCheckExport')
+  setAppText('chatgpt-import-check-btn', 'checkAgain')
+  setAppText('chatgpt-import-start-btn', 'importVault')
+}
+function rerenderLocalizedSettingsPanels() {
+  if (!settingsOpen) return
+  renderUpdatePanel()
+  renderTransferExportPanel()
+  renderTransferImportPanel()
+  renderChatGptImportPanel()
+}
+async function loadAppPreferences() {
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/preferences'))
+    if (data && data.configured === true) {
+      appLanguage = normalizeAppLanguage(data.language)
+    } else {
+      appLanguage = normalizeAppLanguage(data?.language || detectAppLanguage())
+    }
+  } catch {}
+  applyAppLanguage()
+  rerenderLocalizedSettingsPanels()
+}
+async function saveAppLanguage(language) {
+  appLanguage = normalizeAppLanguage(language)
+  applyAppLanguage()
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: appLanguage }),
+    }))
+    appLanguage = normalizeAppLanguage(data.language)
+  } catch {}
+  applyAppLanguage()
+  rerenderLocalizedSettingsPanels()
 }
 
 async function jsonOrThrow(res) {
@@ -2134,8 +3357,8 @@ function dismissNotice() {
   const banner = document.getElementById('notice-banner')
   const actionBtn = document.getElementById('notice-action-btn')
   if (!banner || !actionBtn) return
-  if (activeNoticeKey === 'touchid-upgrade') {
-    persistTouchIdUpgradeDismissed()
+  if (activeNoticeKey === 'touchid-upgrade' || activeNoticeKey === 'touchid-refresh') {
+    persistTouchIdNoticeDismissed(activeNoticeKey)
   } else if (activeNoticeKey.startsWith('update-ready:')) {
     persistUpdateReadyDismissed(activeNoticeKey.slice('update-ready:'.length))
   }
@@ -2147,20 +3370,29 @@ function dismissNotice() {
   activeNoticeKey = ''
 }
 
-function touchIdUpgradeDismissed() {
+function touchIdNoticeStorageKey(noticeKey) {
+  return noticeKey === 'touchid-refresh'
+    ? TOUCH_ID_REFRESH_DISMISSED_KEY
+    : TOUCH_ID_UPGRADE_DISMISSED_KEY
+}
+
+function touchIdNoticeDismissed(noticeKey) {
   try {
-    return localStorage.getItem(TOUCH_ID_UPGRADE_DISMISSED_KEY) === '1'
+    return localStorage.getItem(touchIdNoticeStorageKey(noticeKey)) === '1'
   } catch {
     return false
   }
 }
 
-function persistTouchIdUpgradeDismissed() {
-  try { localStorage.setItem(TOUCH_ID_UPGRADE_DISMISSED_KEY, '1') } catch {}
+function persistTouchIdNoticeDismissed(noticeKey) {
+  try { localStorage.setItem(touchIdNoticeStorageKey(noticeKey), '1') } catch {}
 }
 
-function clearTouchIdUpgradeDismissed() {
-  try { localStorage.removeItem(TOUCH_ID_UPGRADE_DISMISSED_KEY) } catch {}
+function clearTouchIdNoticeDismissed() {
+  try {
+    localStorage.removeItem(TOUCH_ID_UPGRADE_DISMISSED_KEY)
+    localStorage.removeItem(TOUCH_ID_REFRESH_DISMISSED_KEY)
+  } catch {}
 }
 
 function updateReadyDismissedVersion() {
@@ -2195,6 +3427,59 @@ function persistUpdateAppliedNoticeVersion(version) {
   try { localStorage.setItem(UPDATE_APPLIED_NOTICE_KEY, version || '') } catch {}
 }
 
+function updateAppliedFeatureNoticeVersion() {
+  try {
+    return localStorage.getItem(UPDATE_APPLIED_FEATURE_NOTICE_KEY) || ''
+  } catch {
+    return ''
+  }
+}
+
+function persistUpdateAppliedFeatureNoticeVersion(version) {
+  try { localStorage.setItem(UPDATE_APPLIED_FEATURE_NOTICE_KEY, version || '') } catch {}
+}
+
+function chatGptExportFeatureNoticeVersion(version) {
+  return `chatgpt-export:${version || 'unknown'}`
+}
+
+function noticeIsVisible() {
+  const banner = document.getElementById('notice-banner')
+  return !!banner?.classList.contains('show')
+}
+
+function showChatGptExportFeatureNotice(version, options = {}) {
+  const featureNoticeVersion = chatGptExportFeatureNoticeVersion(version)
+  if (!options.force && updateAppliedFeatureNoticeVersion() === featureNoticeVersion) return false
+  if (!options.force && activeNoticeKey.startsWith('update-ready:')) return false
+  if (!options.force && noticeIsVisible()) return false
+  persistUpdateAppliedFeatureNoticeVersion(featureNoticeVersion)
+  showNotice(
+    `DataMoat has been updated to version ${version || 'this build'}. New: chatgpt-export ZIP/folder import is now supported.`,
+    {
+      actionLabel: 'Open Settings',
+      onAction: openSettingsToChatGptExport,
+    },
+  )
+  return true
+}
+
+async function checkChatGptExportFeatureNotice() {
+  if (chatGptExportFeatureNoticeCheckStarted) return
+  chatGptExportFeatureNoticeCheckStarted = true
+  let version = settingsAppVersion || ''
+  if (!version) {
+    try {
+      const meta = await jsonOrThrow(await apiFetch('/api/meta'))
+      version = meta.version || ''
+      settingsAppVersion = version || settingsAppVersion
+    } catch {
+      // If metadata is temporarily unavailable, show a generic build notice.
+    }
+  }
+  showChatGptExportFeatureNotice(version)
+}
+
 function syncPackagedUpdateNotice() {
   const isPackaged = updateState?.installMode === 'packaged' && updateState?.updateStrategy === 'packaged-auto-update'
   if (!isPackaged) return
@@ -2215,9 +3500,12 @@ function syncPackagedUpdateNotice() {
 
   if (updateState?.lastResult === 'updated' && updateState?.currentVersion) {
     clearUpdateReadyDismissed(updateState.currentVersion)
-    if (updateAppliedNoticeVersion() !== updateState.currentVersion) {
+    if (
+      updateAppliedNoticeVersion() !== updateState.currentVersion
+      || updateAppliedFeatureNoticeVersion() !== chatGptExportFeatureNoticeVersion(updateState.currentVersion)
+    ) {
       persistUpdateAppliedNoticeVersion(updateState.currentVersion)
-      showNotice(`DataMoat has been updated to version ${updateState.currentVersion}.`)
+      showChatGptExportFeatureNotice(updateState.currentVersion, { force: true })
       return
     }
   }
@@ -2363,14 +3651,17 @@ async function sendActivityPing(force = false) {
 
 async function loadSessions() {
   await relockOnReload()
-  sessions = await fetchSessionsSnapshot()
-  await loadSkillsBackupStatus()
+  const nextSessions = await fetchSessionsSnapshot()
+  restoreWeeklyAnalyticsCache(sessionAnalyticsSignature(nextSessions))
+  const weeklyChanged = invalidateWeeklyAnalyticsIfSessionsChanged(nextSessions)
+  sessions = nextSessions
   renderList()
   renderOverview()
-  void loadWeeklyAnalytics()
   renderBackupPathsPanel()
   renderSkillsBackupPanel()
-  await refreshUpdatePanel()
+  void loadSkillsBackupStatus().finally(() => renderSkillsBackupPanel())
+  scheduleWeeklyAnalyticsLoad(weeklyChanged ? 250 : 900, { force: weeklyChanged })
+  void refreshUpdatePanel()
   void checkTouchIdUpgradeOffer()
   void refreshActiveSessionIfChanged()
 }
@@ -2378,6 +3669,41 @@ async function loadSessions() {
 async function fetchSessionsSnapshot() {
   const res = await apiFetch('/api/sessions')
   return await res.json()
+}
+
+function isExactWeeklyAnalytics(data) {
+  return !!data && data.computedFrom !== 'index-fallback'
+}
+
+function restoreWeeklyAnalyticsCache(signature) {
+  if (weeklyAnalytics || !signature) return false
+  try {
+    const raw = localStorage.getItem(WEEKLY_ANALYTICS_CACHE_KEY)
+    if (!raw) return false
+    const cached = JSON.parse(raw)
+    if (!cached || cached.signature !== signature || !isExactWeeklyAnalytics(cached.data)) return false
+    if (Date.now() - Number(cached.savedAt || 0) > WEEKLY_ANALYTICS_CACHE_MAX_AGE_MS) return false
+    weeklyAnalytics = cached.data
+    weeklyAnalyticsLoadedAt = Number(cached.savedAt || 0)
+    weeklyAnalyticsSessionSignature = signature
+    weeklyAnalyticsError = ''
+    return true
+  } catch {
+    return false
+  }
+}
+
+function rememberWeeklyAnalyticsCache(data, signature) {
+  if (!isExactWeeklyAnalytics(data) || !signature) return
+  try {
+    localStorage.setItem(WEEKLY_ANALYTICS_CACHE_KEY, JSON.stringify({
+      data,
+      signature,
+      savedAt: Date.now(),
+    }))
+  } catch {
+    // Cache is only a display hint; storage failures should never affect the app.
+  }
 }
 
 async function loadSkillsBackupStatus() {
@@ -2392,44 +3718,132 @@ async function loadSkillsBackupStatus() {
 
 async function loadWeeklyAnalytics() {
   if (weeklyAnalyticsLoading) return
+  const requestedSignature = sessionAnalyticsSignature()
+  let reschedule = false
   weeklyAnalyticsLoading = true
   weeklyAnalyticsError = ''
   renderOverview()
   try {
     const data = await jsonOrThrow(await apiFetch('/api/analytics/weekly?days=7'))
-    weeklyAnalytics = data
+    const currentSignature = sessionAnalyticsSignature()
+    if (requestedSignature === currentSignature) {
+      if (!isExactWeeklyAnalytics(data) && isExactWeeklyAnalytics(weeklyAnalytics)) {
+        weeklyAnalyticsError = data?.error || 'exact scan temporarily unavailable'
+      } else {
+        weeklyAnalytics = data
+        weeklyAnalyticsError = ''
+        rememberWeeklyAnalyticsCache(data, currentSignature)
+      }
+      weeklyAnalyticsLoadedAt = Date.now()
+      weeklyAnalyticsSessionSignature = currentSignature
+    } else {
+      weeklyAnalyticsLoadedAt = 0
+      weeklyAnalyticsSessionSignature = currentSignature
+      reschedule = true
+    }
   } catch (error) {
     weeklyAnalyticsError = error instanceof Error ? error.message : String(error)
+    weeklyAnalyticsLoadedAt = Date.now()
+    weeklyAnalyticsSessionSignature = sessionAnalyticsSignature()
   } finally {
     weeklyAnalyticsLoading = false
     renderOverview()
+    if (reschedule) scheduleWeeklyAnalyticsLoad(250, { force: true })
   }
 }
 
-async function enableTouchIdUpgrade() {
+function scheduleWeeklyAnalyticsLoad(delay = 900, options = {}) {
+  if (weeklyAnalyticsLoading) return
+  if (!options.force && weeklyAnalyticsLoadedAt && Date.now() - weeklyAnalyticsLoadedAt < WEEKLY_ANALYTICS_REFRESH_MS) return
+  if (weeklyAnalyticsTimer) window.clearTimeout(weeklyAnalyticsTimer)
+  weeklyAnalyticsTimer = window.setTimeout(() => {
+    weeklyAnalyticsTimer = null
+    void loadWeeklyAnalytics()
+  }, delay)
+}
+
+function sessionAnalyticsSignature(list = sessions) {
+  const next = Array.isArray(list) ? list : []
+  let latest = 0
+  let totalMessages = 0
+  let newestId = ''
+  const sourceCounts = {}
+  for (const session of next) {
+    const stamp = Math.max(timeValue(session.firstTimestamp), timeValue(session.lastTimestamp))
+    if (stamp > latest) {
+      latest = stamp
+      newestId = session.uid || session.id || ''
+    }
+    totalMessages += Number(session.messageCount || 0)
+    const source = session.source || 'unknown'
+    sourceCounts[source] = (sourceCounts[source] || 0) + 1
+  }
+  const sources = Object.entries(sourceCounts)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([source, count]) => `${source}:${count}`)
+    .join(',')
+  return `${next.length}:${latest}:${totalMessages}:${newestId}:${sources}`
+}
+
+function invalidateWeeklyAnalyticsIfSessionsChanged(nextSessions) {
+  const nextSignature = sessionAnalyticsSignature(nextSessions)
+  const changed = !!weeklyAnalyticsSessionSignature && nextSignature !== weeklyAnalyticsSessionSignature
+  weeklyAnalyticsSessionSignature = nextSignature
+  if (!changed) return false
+  weeklyAnalyticsError = ''
+  weeklyAnalyticsLoadedAt = 0
+  if (weeklyAnalyticsTimer) {
+    window.clearTimeout(weeklyAnalyticsTimer)
+    weeklyAnalyticsTimer = null
+  }
+  return true
+}
+
+async function enableTouchIdUpgrade(mode = 'enable') {
   try {
-    showNotice('Waiting for Touch ID approval on this Mac…')
+    showNotice(mode === 'refresh' ? 'Waiting for Touch ID approval to refresh this Mac…' : 'Waiting for Touch ID approval on this Mac…')
     const data = await jsonOrThrow(await apiFetch('/api/auth/touchid-upgrade', { method: 'POST' }))
     if (data.ok) {
-      clearTouchIdUpgradeDismissed()
-      showNotice('Touch ID + Secure Enclave is now enabled for this Mac. It will appear on the next unlock screen.')
+      clearTouchIdNoticeDismissed()
+      showNotice(data.refreshed
+        ? 'Touch ID + Secure Enclave has been refreshed for this Mac. It will appear on the next unlock screen.'
+        : 'Touch ID + Secure Enclave is now enabled for this Mac. It will appear on the next unlock screen.')
       return
     }
-    showNotice('Touch ID could not be enabled right now.')
+    persistTouchIdNoticeDismissed(mode === 'refresh' ? 'touchid-refresh' : 'touchid-upgrade')
+    showNotice(mode === 'refresh'
+      ? 'Touch ID could not be refreshed right now. Use your password for now.'
+      : 'Touch ID could not be enabled right now. Use your password for now.')
   } catch (error) {
-    showNotice(error instanceof Error ? error.message : String(error))
+    persistTouchIdNoticeDismissed(mode === 'refresh' ? 'touchid-refresh' : 'touchid-upgrade')
+    const message = error instanceof Error ? error.message : String(error)
+    showNotice(message || (mode === 'refresh'
+      ? 'Touch ID could not be refreshed right now. Use your password for now.'
+      : 'Touch ID could not be enabled right now. Use your password for now.'))
   }
 }
 
 async function checkTouchIdUpgradeOffer() {
   if (touchIdUpgradeCheckStarted) return
   touchIdUpgradeCheckStarted = true
-  if (touchIdUpgradeDismissed()) return
   if (updateState?.installMode === 'packaged' && ['downloaded', 'installing'].includes(updateState?.lastResult || '')) return
   if (activeNoticeKey && activeNoticeKey.startsWith('update-ready:')) return
   try {
     const data = await jsonOrThrow(await apiFetch('/api/auth/touchid-upgrade'))
     if (!data.available) return
+    if (data.refreshRequired) {
+      if (touchIdNoticeDismissed('touchid-refresh')) return
+      showNotice(
+        'Touch ID needs a one-time refresh on this Mac. Your password and recovery methods stay unchanged.',
+        {
+          noticeKey: 'touchid-refresh',
+          actionLabel: 'Refresh Touch ID',
+          onAction: () => enableTouchIdUpgrade('refresh'),
+        },
+      )
+      return
+    }
+    if (touchIdNoticeDismissed('touchid-upgrade')) return
     showNotice(
       'This Mac can add Touch ID + Secure Enclave unlock to your existing vault. Your current password and recovery methods stay unchanged.',
       {
@@ -2502,6 +3916,7 @@ function renderList() {
           <span class="source-dot ${s.source}"></span>
           <span class="session-model">${safeModel}</span>
           ${s.hasThinking ? '<span class="thinking-badge">thinking</span>' : ''}
+          ${s.graph?.branchCount ? `<span class="thinking-badge">${fmtNumber(s.graph.branchCount)} branches</span>` : ''}
         </div>
         <div class="session-cwd">${safeCwd}</div>
         ${safeSourceAccount}
@@ -2514,6 +3929,14 @@ function renderList() {
     }).join('')
   }
   list.scrollTop = preservedScrollTop
+}
+
+function setSourceFilter(source) {
+  filterSrc = source || 'all'
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.src === filterSrc)
+  })
+  renderList()
 }
 
 function sessionMatchesSearchMetadata(session, query) {
@@ -2530,11 +3953,12 @@ function renderOverview() {
   const data = weeklyAnalytics || buildWeeklyFallback()
   const summary = data.summary
   const exactReady = !!weeklyAnalytics && weeklyAnalytics.computedFrom !== 'index-fallback'
+  const exactRefreshing = exactReady && weeklyAnalyticsLoading
   const analyticsFailed = !!weeklyAnalyticsError && !exactReady
   const latestSession = latestSessionForOverview()
   const useLatestPills = summary.conversations === 0 && !!latestSession
   const tokenNote = exactReady && summary.estimatedTranscriptTokens > 0
-    ? `${fmtCompact(summary.estimatedInputLikeTokens)} input-like · ${fmtCompact(summary.estimatedAssistantTokens)} assistant`
+    ? `visible text estimate${exactRefreshing ? ' · refreshing' : ''}`
     : analyticsFailed
       ? 'exact scan temporarily unavailable'
       : 'calculating visible transcript estimate…'
@@ -2544,7 +3968,7 @@ function renderOverview() {
     ? fmtNumber(summary.messages)
     : (summary.activeConversationMessages > 0 ? fmtNumber(summary.activeConversationMessages) : scanningValue)
   const messagesNote = exactReady
-    ? 'exact in range'
+    ? (exactRefreshing ? 'exact in range · refreshing' : 'exact in range')
     : analyticsFailed
       ? 'from session index'
       : 'active workstreams · scanning range'
@@ -2571,13 +3995,13 @@ function renderOverview() {
       : emptyPill
   strip.innerHTML = `
     <div class="weekly-strip-inner">
-      <div class="weekly-period">last 7 days</div>
+      <div class="weekly-period">your work, last 7 days</div>
       <div class="weekly-metrics">
         ${weeklyMetric('Conversations', fmtNumber(summary.conversations), `${fmtNumber(summary.newConversations)} new · ${fmtNumber(summary.continuedConversations)} continued`, true)}
         ${weeklyMetric('Messages exchanged', messagesValue, messagesNote)}
         ${weeklyMetric('Est. transcript tokens', transcriptValue, tokenNote, false, scanningClass)}
-        ${weeklyMetric('Tool outputs', toolOutputsValue, exactReady ? 'captured from work' : 'scanning tool activity', false, scanningClass)}
-        ${weeklyMetric('Visible work', visibleWorkValue, exactReady ? 'chars archived' : 'scanning visible text', false, scanningClass)}
+        ${weeklyMetric('Tool outputs', toolOutputsValue, exactReady ? (exactRefreshing ? 'captured from work · refreshing' : 'captured from work') : 'scanning tool activity', false, scanningClass)}
+        ${weeklyMetric('Visible work', visibleWorkValue, exactReady ? (exactRefreshing ? 'chars archived · refreshing' : 'chars archived') : 'scanning visible text', false, scanningClass)}
         ${weeklyMetric('Largest workstream', fmtNumber(summary.largestWorkstreamMessages), 'messages')}
       </div>
       <div class="weekly-detail-row">
@@ -2731,6 +4155,7 @@ async function doContentSearch(q) {
 async function selectSession(id) {
   activeId = id
   activeMeta = null
+  activeBranchData = null
   renderList()
 
   const conv = document.getElementById('conversation')
@@ -2766,6 +4191,52 @@ async function selectSession(id) {
   renderConversation(session, messages, { resetScroll: true, pageInfo: activePageInfo })
 }
 
+function renderConversationMap(session) {
+  const graph = session?.graph
+  if (!graph || graph.kind !== 'chatgpt-tree') return ''
+  const branches = Array.isArray(graph.branches) ? graph.branches : []
+  if (!branches.length && !graph.branchCount) return ''
+  const branchRows = branches.map(branch => {
+    const role = branch.role ? ` · starts with ${esc(branch.role)}` : ''
+    return `
+    <div class="branch-row">
+      <div>
+        <div class="branch-name">${esc(branch.label || 'Branch')}</div>
+        <div class="branch-meta">${fmtNumber(branch.pathMessageCount || branch.messageCount || 0)} branch-only msgs · ${fmtNumber(branch.attachmentCount || 0)} files · splits after ${esc(String(branch.parentMessageId || '').slice(0, 8))}${role}</div>
+      </div>
+      <button class="branch-btn" type="button" data-chatgpt-branch-id="${escAttr(branch.id)}">View</button>
+    </div>`
+  }).join('')
+  return `
+    <div class="conversation-map">
+      <div class="conversation-map-head">
+        <div>
+          <div class="conversation-map-title">Conversation branches</div>
+          <div class="conversation-map-sub">Main path is ChatGPT's current conversation. Each branch shares the earlier messages, then splits after one message and follows another regenerated or edited path.</div>
+        </div>
+        ${activeBranchData ? '<button class="branch-btn" type="button" data-chatgpt-main="1">Main path</button>' : ''}
+      </div>
+      <div class="conversation-map-stats">
+        <div class="conversation-map-stat"><strong>${fmtNumber(graph.currentPathMessageCount || session.messageCount || 0)}</strong>main-path msgs</div>
+        <div class="conversation-map-stat"><strong>${fmtNumber(graph.branchCount || 0)}</strong>alternate paths</div>
+        <div class="conversation-map-stat"><strong>${fmtNumber(graph.offPathMessageCount || 0)}</strong>branch-only msgs</div>
+        <div class="conversation-map-stat"><strong>${fmtNumber(graph.offPathAttachmentCount || 0)}</strong>branch-only files</div>
+      </div>
+      ${branchRows ? `<div class="branch-list">${branchRows}</div>` : ''}
+    </div>
+  `
+}
+
+function renderBranchBanner() {
+  if (!activeBranchData) return ''
+  return `
+    <div class="branch-banner">
+      <div class="branch-banner-text">Viewing ${esc(activeBranchData.label || 'alternate branch')}. Earlier messages are shared with the main path; after the split, this shows the alternate path from the ChatGPT export.</div>
+      <button class="branch-btn" type="button" data-chatgpt-main="1">Back to main</button>
+    </div>
+  `
+}
+
 function renderConversation(session, messages, opts = {}) {
   const conv = document.getElementById('conversation')
   const resetScroll = !!opts.resetScroll
@@ -2797,6 +4268,8 @@ function renderConversation(session, messages, opts = {}) {
         <span class="badge">${fmtDate(session.firstTimestamp)}</span>
       </div>
     </div>
+    ${renderBranchBanner()}
+    ${renderConversationMap(session)}
     ${renderSessionSkillsPanel(session, messages)}
     ${messages.map(renderMessage).join('')}
   `
@@ -2852,8 +4325,53 @@ async function loadMoreConversation() {
   }
 }
 
+async function loadChatGptBranch(branchId) {
+  if (!activeId || !branchId) return
+  const seq = ++activeLoadSeq
+  const conv = document.getElementById('conversation')
+  conv.innerHTML = '<div class="no-session"><div class="no-session-text">loading branch...</div></div>'
+  try {
+    const data = await jsonOrThrow(await apiFetch(`/api/session/${encodeURIComponent(activeId)}/branch/${encodeURIComponent(branchId)}`))
+    if (seq !== activeLoadSeq || !activeId) return
+    activeSessionData = data.session
+    activeMessages = data.messages || []
+    activePageInfo = null
+    activeBranchData = data.branch || { id: branchId, label: 'Branch' }
+    renderConversation(activeSessionData, activeMessages, { resetScroll: true, pageInfo: null })
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), { isError: true })
+    if (activeId) void selectSession(activeId)
+  }
+}
+
+function backToMainPath() {
+  if (!activeId) return
+  void selectSession(activeId)
+}
+
+async function openAttachmentFile(button) {
+  const attachmentId = button?.dataset?.attachmentOpenId || ''
+  if (!attachmentId) return
+  const oldText = button.textContent
+  button.disabled = true
+  button.textContent = 'Opening...'
+  try {
+    await jsonOrThrow(await apiFetch(`/api/attachment/${encodeURIComponent(attachmentId)}/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: button.dataset.attachmentName || '' }),
+    }))
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), { isError: true })
+  } finally {
+    button.disabled = false
+    button.textContent = oldText
+  }
+}
+
 async function refreshActiveSessionIfChanged() {
   if (!activeId) return
+  if (activeBranchData) return
   const current = sessions.find(s => (s.uid || s.id) === activeId)
   if (!current) return
   const changed = !activeMeta ||
@@ -3222,7 +4740,7 @@ function renderMessage(msg) {
       const imageHtml = imgs.map(id =>
         `<div class="attachment-block"><img src="/api/attachment/${attachmentPath(id)}" alt="screenshot" style="max-width:100%;max-height:480px;border-radius:4px;border:1px solid var(--border);display:block;margin:4px 0"></div>`
       ).join('')
-      const rawOutput = pretty(block.content ?? block.text ?? '')
+      const rawOutput = pretty(block.text ?? block.content ?? '')
       return `<div class="tool-block">
         <div class="tool-meta">
           <span class="tool-kind">tool output</span>
@@ -3249,9 +4767,9 @@ function renderMessage(msg) {
             <span class="tool-kind">attachment</span>
             <span class="tool-name">${label}</span>
           </div>
-          <a href="/api/attachment/${attachmentPath(block.attachmentId)}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;gap:8px;margin-top:8px;color:var(--accent);text-decoration:none;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:#0f131a">
+          <button class="attachment-open-btn" type="button" data-attachment-open-id="${escAttr(block.attachmentId)}" data-attachment-name="${escAttr(block.attachmentName || '')}">
             <span>Open ${block.mediaType === 'application/pdf' ? 'PDF' : 'file'}</span>
-          </a>
+          </button>
         </div>`
       }
       return `<div class="tool-block" style="color:var(--muted)">📎 ${label} (pre-capture)</div>`
@@ -3289,48 +4807,48 @@ function toggleThinking(id) {
 }
 
 function formatDateTime(ts) {
-  if (!ts) return 'never'
+  if (!ts) return appTr('never')
   return new Date(ts).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 function humanUpdateState(result) {
   switch (result) {
-    case 'available': return 'ready to update'
-    case 'downloading': return 'downloading update'
-    case 'downloaded': return 'ready to install'
-    case 'up-to-date': return 'up to date'
-    case 'checking': return 'checking for updates'
-    case 'updating': return 'updating'
-    case 'installing': return 'installing'
-    case 'updated': return 'updated'
-    case 'blocked': return 'paused'
-    case 'unsupported': return 'not set up on this install'
-    case 'error': return 'needs attention'
+    case 'available': return appTr('updateStateReadyToUpdate')
+    case 'downloading': return appTr('updateStateDownloading')
+    case 'downloaded': return appTr('updateStateReadyInstall')
+    case 'up-to-date': return appTr('updateStateUpToDate')
+    case 'checking': return appTr('updateStateChecking')
+    case 'updating': return appTr('updateStateUpdating')
+    case 'installing': return appTr('updateStateInstalling')
+    case 'updated': return appTr('updated')
+    case 'blocked': return appTr('updateStatePaused')
+    case 'unsupported': return appTr('updateStateUnsupported')
+    case 'error': return appTr('updateStateNeedsAttention')
     case 'idle':
     default:
-      return 'not checked'
+      return appTr('notChecked')
   }
 }
 
 function humanInstallMode(mode) {
   switch (mode) {
-    case 'source-dev': return 'live source folder'
-    case 'source-copy': return 'standard installed copy'
-    case 'packaged': return 'packaged app (recommended)'
-    case 'unknown': return 'unknown'
-    default: return 'detecting…'
+    case 'source-dev': return appTr('installSourceDev')
+    case 'source-copy': return appTr('installSourceCopy')
+    case 'packaged': return appTr('installPackagedRecommended')
+    case 'unknown': return appTr('unknown')
+    default: return appTr('detecting')
   }
 }
 
 function humanUpdateStrategy(strategy) {
   switch (strategy) {
-    case 'source-git-pull': return 'automatic source updates'
-    case 'source-manual-reinstall': return 'manual source reinstall only'
-    case 'packaged-auto-update': return 'automatic packaged updates'
-    case 'packaged-manual-update': return 'manual packaged update'
-    case 'packaged-auto-unavailable': return 'manual packaged upgrade only'
-    case 'unknown': return 'unknown'
-    default: return 'detecting…'
+    case 'source-git-pull': return appTr('strategySourceGitPull')
+    case 'source-manual-reinstall': return appTr('strategySourceManualReinstall')
+    case 'packaged-auto-update': return appTr('strategyPackagedAuto')
+    case 'packaged-manual-update': return appTr('strategyPackagedManual')
+    case 'packaged-auto-unavailable': return appTr('strategyPackagedManualOnly')
+    case 'unknown': return appTr('unknown')
+    default: return appTr('detecting')
   }
 }
 
@@ -3361,93 +4879,93 @@ function installCanAutoUpdate(state) {
 
 function autoUpdateToggleSubtitle() {
   if (!updateState) {
-    return 'Checking whether this install can use automatic updates…'
+    return appTr('autoUpdateCheckingInstall')
   }
   if (installCanAutoUpdate(updateState)) {
     if (updateState?.installMode === 'packaged') {
-      return 'Available on this packaged install and enabled by default. DataMoat checks for signed release updates, downloads them in the background, and asks before restart.'
+      return appTr('autoUpdatePackagedAvailable')
     }
-    return 'Available on this install and enabled by default. This keeps fixes and improvements current automatically.'
+    return appTr('autoUpdateSourceAvailable')
   }
   if (updateState.installMode === 'packaged') {
     if (updateState.updateStrategy === 'packaged-auto-unavailable') {
-      return 'This packaged app can be upgraded manually from the latest release. Automatic packaged updates are not implemented on this platform yet.'
+      return appTr('autoUpdatePackagedManual')
     }
-    return 'This packaged app uses the recommended release path. Automatic updates are only available after DataMoat is installed outside the mounted DMG.'
+    return appTr('autoUpdateDmgInstall')
   }
-  return 'Not active on this install. For safety for now, this copy will only open the latest download page. To enable in-place updates later, choose a live git source folder below and reinstall from it.'
+  return appTr('autoUpdateSourceInactive')
 }
 
 function gitStatusSummary(state) {
-  if (!state || state.supported === null) return 'not checked'
-  if (state.supported === false) return 'not needed on this install'
+  if (!state || state.supported === null) return appTr('notChecked')
+  if (state.supported === false) return appTr('gitNotNeeded')
   const parts = []
-  if (state.clean === true) parts.push('clean')
-  if (state.clean === false) parts.push('local changes found')
-  if (typeof state.ahead === 'number') parts.push(`ahead ${state.ahead}`)
-  if (typeof state.behind === 'number') parts.push(`behind ${state.behind}`)
-  return parts.length ? parts.join(' / ') : 'unknown'
+  if (state.clean === true) parts.push(appTr('gitClean'))
+  if (state.clean === false) parts.push(appTr('gitLocalChanges'))
+  if (typeof state.ahead === 'number') parts.push(`${appTr('gitAhead')} ${state.ahead}`)
+  if (typeof state.behind === 'number') parts.push(`${appTr('gitBehind')} ${state.behind}`)
+  return parts.length ? parts.join(' / ') : appTr('unknown')
 }
 
 function defaultUpdateMessage() {
   const normalized = normalizeUpdateStateForUi(updateState)
   if (normalized?.updateStrategy === 'source-manual-reinstall') {
-    return 'This app is working normally. This install does not auto-update directly for now. Use Download Latest Version, or choose a live git source folder below and reinstall if you want git-based in-place updates later.'
+    return appTr('defaultUpdateSourceManual')
   }
   if (normalized?.updateStrategy === 'packaged-auto-update') {
-    return 'This packaged app can check signed release updates automatically. DataMoat downloads the new version first and then waits for you to update the app when you are ready.'
+    return appTr('defaultUpdatePackagedAuto')
   }
   if (normalized?.updateStrategy === 'packaged-manual-update') {
-    return 'This app is working normally. This packaged app is the recommended install type. Use Download Latest Version to download and replace the app safely.'
+    return appTr('defaultUpdatePackagedManual')
   }
   if (normalized?.updateStrategy === 'packaged-auto-unavailable') {
-    return 'This app is working normally. This packaged app is the recommended install type. Use Download Latest Version to get the newest release manually.'
+    return appTr('defaultUpdatePackagedUnavailable')
   }
-  return 'Automatic updates help keep fixes and improvements current on supported installs.'
+  return appTr('defaultUpdateGeneric')
 }
 
 function friendlyStatusMessage(state) {
   if (!state) return defaultUpdateMessage()
   if (state.running) {
     return state.lastResult === 'updating'
-      ? 'Applying the latest update…'
-      : 'Checking whether an update is available…'
+      ? appTr('updateApplying')
+      : appTr('updateChecking')
   }
 
   switch (state.lastResult) {
     case 'available':
-      return 'A newer version is available for this install. You can update when ready.'
+      return appTr('updateAvailable')
     case 'downloading':
-      return updateState?.message || 'Downloading the latest packaged update now…'
+      return updateState?.message || appTr('updateStateDownloading')
     case 'downloaded':
       return updateState?.installMode === 'packaged'
-        ? 'A newer packaged version has finished downloading. Click Update Now whenever you are ready to install it.'
-        : 'A newer version is available for this install. You can update when ready.'
+        ? appTr('updateDownloadedPackaged')
+        : appTr('updateAvailable')
     case 'up-to-date':
-      return 'Everything is up to date.'
+      return appTr('updateUpToDate')
     case 'installing':
-      return 'Closing and reopening DataMoat to apply the downloaded update…'
+      return appTr('updateInstalling')
     case 'updated':
-      return 'Update completed successfully.'
+      return appTr('updateCompleted')
     case 'blocked':
       if (state.clean === false) {
-        return 'Automatic updating is paused because local changes were found in the source folder.'
+        return appTr('updatePausedLocalChanges')
       }
       if ((state.ahead || 0) > 0) {
-        return 'Automatic updating is paused because this source folder has local commits that should be reviewed first.'
+        return appTr('updatePausedLocalCommits')
       }
-      return 'Automatic updating is paused until this install is ready for it. Other install types stay on manual download for now.'
+      return appTr('updatePausedGeneric')
     case 'unsupported':
       return defaultUpdateMessage()
     case 'error':
       if (state.installMode === 'packaged') {
-        return 'The last update step did not finish, but the app can still be used normally. Use Download Latest Version to install the newest packaged release manually.'
+        return appTr('updateErrorPackaged')
       }
-      return 'The last update step did not finish, but the app can still be used normally. You can try again later or use the source reinstall option below.'
+      return appTr('updateErrorSource')
     case 'checking':
-      return 'Checking whether an update is available…'
+      return appTr('updateChecking')
     case 'updating':
-      return 'Applying the latest update…'
+      return appTr('updateApplying')
     case 'idle':
     default:
       return defaultUpdateMessage()
@@ -3456,18 +4974,18 @@ function friendlyStatusMessage(state) {
 
 function defaultReinstallHelp(info) {
   if (!info || !info.root) {
-    return 'Paste a DataMoat source folder here. If it is a live git checkout, future automatic updates can be enabled.'
+    return appTr('reinstallHelpEmpty')
   }
   if (!info.available) {
     if (info.reason) {
-      return `This source folder cannot be used for automatic source updates right now: ${info.reason}.`
+      return appTr('reinstallHelpUnavailableReason').replace('{reason}', info.reason)
     }
-    return `The previously recorded source folder is not available right now. The app still works normally. If you have a live git checkout, paste it here and reinstall.`
+    return appTr('reinstallHelpUnavailable')
   }
   if (info.liveCheckout) {
-    return `This source folder is a live git checkout. Reinstalling from it will also enable future source updates.`
+    return appTr('reinstallHelpLive')
   }
-  return `This source folder can reinstall the app, but it will not turn on automatic updates until you point this to a live git checkout.`
+  return appTr('reinstallHelpNonLive')
 }
 
 function setSwitchState(enabled, disabled = false) {
@@ -3509,7 +5027,7 @@ function renderReinstallHelp() {
     return
   }
   if (value) {
-    help.textContent = 'This folder will be checked before reinstall. If it is a live git checkout, future automatic updates can be enabled.'
+    help.textContent = appTr('reinstallHelpTyped')
     return
   }
   help.textContent = defaultReinstallHelp(reinstallInfo)
@@ -3543,19 +5061,19 @@ function renderUpdatePanel() {
   const showSourceControls = !isPackagedInstall
   const wantsAutoUpdate = updateSettings?.autoUpdateEnabled !== false
   setSwitchState(canAutoUpdate && wantsAutoUpdate, updatePanelBusy || !canAutoUpdate)
-  if (toggleTitle) toggleTitle.textContent = canAutoUpdate ? 'Auto-update' : 'Auto-update unavailable'
+  if (toggleTitle) toggleTitle.textContent = canAutoUpdate ? appTr('autoUpdate') : appTr('autoUpdateUnavailable')
   if (toggleSubtitle) toggleSubtitle.textContent = autoUpdateToggleSubtitle()
-  if (manualUpdateTitle) manualUpdateTitle.textContent = 'Manual Updates'
+  if (manualUpdateTitle) manualUpdateTitle.textContent = appTr('manualUpdates')
   if (manualUpdateSubtitle) {
     manualUpdateSubtitle.textContent = updateState?.updateStrategy === 'packaged-manual-update'
-      ? 'Download the latest Windows version, replace this app, and reopen DataMoat automatically. Signing can be added later to reduce Windows warnings.'
-      : 'Download the latest Windows version and run it to upgrade. Automatic Windows updates need a signed installer/updater and are not enabled in this build.'
+      ? appTr('manualUpdatePackagedReplace')
+      : appTr('manualUpdateWindowsSigned')
   }
   document.getElementById('update-install-type').textContent = humanInstallMode(updateState?.installMode)
-  document.getElementById('update-app-version').textContent = settingsAppVersion ? `v${settingsAppVersion}` : 'unknown'
+  document.getElementById('update-app-version').textContent = settingsAppVersion ? `v${settingsAppVersion}` : appTr('unknown')
   document.getElementById('update-path').textContent = humanUpdateStrategy(updateState?.updateStrategy)
   document.getElementById('update-state').textContent = updateState?.running
-    ? 'running'
+    ? appTr('running')
     : humanUpdateState(updateState?.lastResult)
   document.getElementById('update-last-checked').textContent = formatDateTime(updateState?.lastCheckedAt)
   document.getElementById('update-last-applied').textContent = formatDateTime(updateState?.lastAppliedAt)
@@ -3574,9 +5092,7 @@ function renderUpdatePanel() {
   }
   if (applyUpdateButton) {
     applyUpdateButton.hidden = !canAutoUpdate
-    applyUpdateButton.textContent = updateState?.installMode === 'packaged' && updateState?.lastResult === 'downloaded'
-      ? 'Update Now'
-      : 'Update Now'
+    applyUpdateButton.textContent = appTr('updateNow')
   }
   document.getElementById('update-apply-btn').disabled = updatePanelBusy || !canApplyUpdate(updateState)
   if (reinstallButton) {
@@ -3592,6 +5108,7 @@ function renderUpdatePanel() {
   renderReferencedAttachmentPanel()
   renderBackupPathsPanel()
   renderSkillsBackupPanel()
+  applyAppLanguage()
 }
 
 function referencedAttachmentAppsText(status) {
@@ -3616,14 +5133,14 @@ function scheduleReferencedAttachmentPoll() {
 }
 
 function referencedAttachmentPermissionText(status, folders) {
-  const folderText = folders || 'a referenced folder'
+  const folderText = folders || appTr('referencedPermissionFolder')
   if (status?.platform === 'darwin') {
-    return `Folder access needed for ${folderText}. Open System Settings > Privacy & Security > Files and Folders > DataMoat, then enable that folder. If the folder is not listed there, add DataMoat under Full Disk Access. Everything else keeps backing up while this permission is off.`
+    return appTr('referencedPermissionMac').replace('{folder}', folderText)
   }
   if (status?.platform === 'win32') {
-    return `Windows denied access to ${folderText}. DataMoat can copy files that are readable by the current Windows user; check the folder or file permissions, then DataMoat will retry on the next scan.`
+    return appTr('referencedPermissionWindows').replace('{folder}', folderText)
   }
-  return `Folder access needed for ${folderText}. DataMoat can copy files that are readable by this user account; check the folder or file permissions, then DataMoat will retry on the next scan.`
+  return appTr('referencedPermissionOther').replace('{folder}', folderText)
 }
 
 function renderReferencedAttachmentPanel() {
@@ -3648,37 +5165,37 @@ function renderReferencedAttachmentPanel() {
   const isMac = status?.platform === 'darwin'
 
   stateEl.textContent = !status
-    ? 'checking...'
+    ? appTr('checking')
     : enabled
       ? running
-        ? 'processing previous conversations'
-        : 'enabled'
-      : 'not enabled'
+        ? appTr('referencedProcessing')
+        : appTr('enabled')
+      : appTr('notEnabled')
 
   badgeEl.textContent = loading
-    ? 'checking'
+    ? appTr('checking')
     : running
-      ? 'processing'
+      ? appTr('processing')
       : enabled
-        ? 'on'
-        : 'off'
+        ? appTr('on')
+        : appTr('off')
   badgeEl.classList.toggle('off', !enabled && !running && !loading)
 
   const protectedFiles = status?.protectedFiles || 0
   if (!status) {
-    messageEl.textContent = 'Checking referenced file backup status...'
+    messageEl.textContent = appTr('referencedChecking')
   } else if (enabled && running) {
     messageEl.textContent = isMac
-      ? 'Referenced file backup is enabled. DataMoat is processing previous conversations now and will also protect future path-referenced files automatically. If macOS asks for folder access, it is so DataMoat can copy the original file into your encrypted vault.'
-      : 'Referenced file backup is enabled. DataMoat is processing previous conversations now and will also protect future path-referenced files automatically when those files are readable by this user account.'
+      ? appTr('referencedRunningMac')
+      : appTr('referencedRunningOther')
   } else if (enabled) {
-    messageEl.textContent = 'Referenced file backup is enabled. DataMoat protects future path-referenced files automatically and keeps embedded files and images protected as before.'
+    messageEl.textContent = appTr('referencedEnabledMessage')
   } else if (protectedFiles > 0) {
-    messageEl.textContent = 'Referenced file backup is off. Files already protected inside this vault stay available; enable only if you want DataMoat to copy future path-only local files too.'
+    messageEl.textContent = appTr('referencedOffProtected')
   } else {
     messageEl.textContent = isMac
-      ? 'DataMoat already protects embedded files and images saved inside supported sessions. Some conversations only mention files by path, such as files in Downloads, Desktop, or Documents. Enable this to copy those originals into your encrypted vault; macOS only asks when DataMoat actually reaches a folder that needs permission.'
-      : 'DataMoat already protects embedded files and images saved inside supported sessions. Some conversations only mention files by path. Enable this to copy those originals into your encrypted vault when they are readable by this user account.'
+      ? appTr('referencedOffMac')
+      : appTr('referencedOffOther')
   }
 
   if (running) {
@@ -3686,8 +5203,8 @@ function renderReferencedAttachmentPanel() {
     const total = Number(progress?.total || 0)
     const pct = total > 0 ? Math.max(4, Math.min(100, Math.round((checked / total) * 100))) : 12
     progressEl.hidden = false
-    progressLabelEl.textContent = 'Processing previous conversations'
-    progressCountEl.textContent = total > 0 ? `${fmtNumber(checked)} / ${fmtNumber(total)}` : 'starting...'
+    progressLabelEl.textContent = appTr('referencedProcessing')
+    progressCountEl.textContent = total > 0 ? `${fmtNumber(checked)} / ${fmtNumber(total)}` : appTr('starting')
     progressFillEl.style.width = `${pct}%`
   } else {
     progressEl.hidden = true
@@ -3698,7 +5215,7 @@ function renderReferencedAttachmentPanel() {
   const permissionIssues = Array.isArray(status?.permissionIssues) ? status.permissionIssues : []
   if (permissionIssues.length > 0) {
     const labels = permissionIssues.map(issue => issue?.label).filter(Boolean)
-    const folders = labels.length ? labels.join(', ') : 'a referenced folder'
+    const folders = labels.length ? labels.join(', ') : appTr('referencedPermissionFolder')
     permissionEl.hidden = false
     permissionEl.textContent = referencedAttachmentPermissionText(status, folders)
   } else {
@@ -3710,13 +5227,13 @@ function renderReferencedAttachmentPanel() {
   const coveredApps = referencedAttachmentAppsText(status)
   const stats = []
   if (protectedFiles > 0) {
-    stats.push(`<div class="referenced-attachment-stat"><strong>${fmtNumber(protectedFiles)}</strong><span>referenced files protected</span></div>`)
+    stats.push(`<div class="referenced-attachment-stat"><strong>${fmtNumber(protectedFiles)}</strong><span>${esc(appTr('referencedFilesProtected'))}</span></div>`)
   }
   if (checked > 0) {
-    stats.push(`<div class="referenced-attachment-stat"><strong>${fmtNumber(checked)}</strong><span>previous sessions checked</span></div>`)
+    stats.push(`<div class="referenced-attachment-stat"><strong>${fmtNumber(checked)}</strong><span>${esc(appTr('previousSessionsChecked'))}</span></div>`)
   }
   if (coveredApps) {
-    stats.push(`<div class="referenced-attachment-stat"><strong>${esc(coveredApps)}</strong><span>covered apps</span></div>`)
+    stats.push(`<div class="referenced-attachment-stat"><strong>${esc(coveredApps)}</strong><span>${esc(appTr('coveredApps'))}</span></div>`)
   }
   statsEl.hidden = stats.length === 0
   statsEl.innerHTML = stats.join('')
@@ -3725,8 +5242,8 @@ function renderReferencedAttachmentPanel() {
   foldersEl.hidden = protectedFolders.length === 0
   foldersEl.innerHTML = protectedFolders.map(folder => {
     const count = Number(folder?.files || 0)
-    const fileLabel = count === 1 ? 'file' : 'files'
-    return `<div class="referenced-folder-chip"><strong>${esc(folder?.label || 'Folder')}</strong><span>${fmtNumber(count)} ${fileLabel}</span></div>`
+    const fileLabel = count === 1 ? appTr('fileSingular') : appTr('filePlural')
+    return `<div class="referenced-folder-chip"><strong>${esc(folder?.label || appTr('folder'))}</strong><span>${fmtNumber(count)} ${esc(fileLabel)}</span></div>`
   }).join('')
 
   enableBtn.hidden = false
@@ -3735,10 +5252,10 @@ function renderReferencedAttachmentPanel() {
   enableBtn.setAttribute('aria-pressed', enabled ? 'true' : 'false')
   const toggleTitle = enableBtn.querySelector('.referenced-toggle-copy strong')
   const toggleSub = enableBtn.querySelector('.referenced-toggle-copy span')
-  if (toggleTitle) toggleTitle.textContent = enabled ? 'Referenced file backup enabled' : 'Enable referenced file backup'
+  if (toggleTitle) toggleTitle.textContent = enabled ? appTr('referencedEnabledTitle') : appTr('referencedEnableTitle')
   if (toggleSub) toggleSub.textContent = enabled
-    ? 'Path-only files will be copied when available'
-    : 'Copy path-only files into the encrypted vault'
+    ? appTr('referencedEnabledSub')
+    : appTr('referencedEnableSub')
 }
 
 async function loadReferencedAttachmentPanel() {
@@ -3782,9 +5299,9 @@ function formatBytes(value) {
 function transferStatsHtml(counts) {
   if (!counts) return ''
   return [
-    `<div class="referenced-attachment-stat"><strong>${fmtNumber(counts.sessions || 0)}</strong><span>sessions</span></div>`,
-    `<div class="referenced-attachment-stat"><strong>${fmtNumber(counts.attachments || 0)}</strong><span>attachments</span></div>`,
-    `<div class="referenced-attachment-stat"><strong>${formatBytes(counts.totalBytes || 0)}</strong><span>folder size</span></div>`,
+    `<div class="referenced-attachment-stat"><strong>${fmtNumber(counts.sessions || 0)}</strong><span>${esc(appTr('sessions'))}</span></div>`,
+    `<div class="referenced-attachment-stat"><strong>${fmtNumber(counts.attachments || 0)}</strong><span>${esc(appTr('attachments'))}</span></div>`,
+    `<div class="referenced-attachment-stat"><strong>${formatBytes(counts.totalBytes || 0)}</strong><span>${esc(appTr('folderSize'))}</span></div>`,
   ].join('')
 }
 
@@ -3796,26 +5313,32 @@ function renderTransferExportPanel() {
   const statsEl = document.getElementById('transfer-export-stats')
   const foldersEl = document.getElementById('transfer-export-folder-list')
   const progressEl = document.getElementById('transfer-export-progress')
+  const progressLabelEl = document.getElementById('transfer-export-progress-label')
   const progressFillEl = document.getElementById('transfer-export-progress-fill')
   const progressCountEl = document.getElementById('transfer-export-progress-count')
   const checkBtn = document.getElementById('transfer-export-check-btn')
   const openBtn = document.getElementById('transfer-export-open-btn')
-  if (!stateEl || !badgeEl || !messageEl || !warningEl || !statsEl || !foldersEl || !progressEl || !progressFillEl || !progressCountEl || !checkBtn || !openBtn) return
+  if (!stateEl || !badgeEl || !messageEl || !warningEl || !statsEl || !foldersEl || !progressEl || !progressLabelEl || !progressFillEl || !progressCountEl || !checkBtn || !openBtn) return
 
   const data = transferExportData
-  const loading = transferBusy && !data
-  stateEl.textContent = loading ? 'checking…' : (data?.status || 'not checked')
-  badgeEl.textContent = loading ? 'checking' : data?.status === 'ready' ? 'ready' : data?.status === 'needs attention' ? 'attention' : 'blocked'
-  badgeEl.classList.toggle('off', !loading && data?.status !== 'ready')
-  messageEl.textContent = data
-    ? 'Copy this whole DataMoat folder to the new computer. Do not copy only vault/ or only sessions.json.'
-    : 'Check the current DataMoat data folder before copying it to another computer.'
+  const preparation = data?.preparation
+  const preparationRunning = !!preparation?.running
+  const busy = transferBusy || preparationRunning
+  const loading = busy && !data
+  stateEl.textContent = loading ? appTr('checkingEllipsis') : appStatusText(preparationRunning ? preparation.phase : (data?.status || 'not checked'))
+  badgeEl.textContent = busy ? appTr('checking') : data?.status === 'ready' ? appTr('ready') : data?.status === 'needs attention' ? appTr('attention') : appTr('blocked')
+  badgeEl.classList.toggle('off', !busy && data?.status !== 'ready')
+  messageEl.textContent = preparationRunning
+    ? appTr('transferExportPreparing')
+    : data
+    ? appTr('transferExportReady')
+    : appTr('transferExportIntro')
 
   const warnings = Array.isArray(data?.warnings) ? data.warnings : []
   if (warnings.length > 0) {
     warningEl.hidden = false
     warningEl.textContent = warnings.includes('touch-id-not-portable')
-      ? 'Touch ID cannot be transferred. Make sure you know the old master password or 24-word phrase before copying this folder.'
+      ? appTr('transferExportTouchIdWarning')
       : warnings.join(' · ')
   } else {
     warningEl.hidden = true
@@ -3824,12 +5347,22 @@ function renderTransferExportPanel() {
 
   statsEl.innerHTML = transferStatsHtml(data?.counts)
   foldersEl.hidden = !data?.root
-  foldersEl.innerHTML = data?.root ? `<div class="referenced-folder-chip"><strong>DataMoat folder</strong><span>${esc(data.root)}</span></div>` : ''
-  progressEl.hidden = !transferBusy
-  progressFillEl.style.width = transferBusy ? '45%' : '0'
-  progressCountEl.textContent = transferBusy ? 'checking' : ''
-  checkBtn.disabled = transferBusy
-  openBtn.disabled = transferBusy || !data?.root
+  foldersEl.innerHTML = data?.root ? `<div class="referenced-folder-chip"><strong>${esc(appTr('dataMoatFolder'))}</strong><span>${esc(data.root)}</span></div>` : ''
+  if (busy) {
+    const done = Number(preparation?.sessionsProcessed || 0)
+    const total = Number(preparation?.totalSessions || 0)
+    const pct = total > 0 ? Math.max(8, Math.min(96, Math.round((done / total) * 92))) : 18
+    progressEl.hidden = false
+    progressLabelEl.textContent = appStatusText(preparation?.phase || 'checking')
+    progressFillEl.style.width = `${pct}%`
+    progressCountEl.textContent = total > 0 ? `${fmtNumber(done)} / ${fmtNumber(total)}` : appTr('checking')
+  } else {
+    progressEl.hidden = true
+    progressFillEl.style.width = '0'
+    progressCountEl.textContent = ''
+  }
+  checkBtn.disabled = busy
+  openBtn.disabled = !data?.root
 }
 
 function renderTransferImportPanel() {
@@ -3853,14 +5386,14 @@ function renderTransferImportPanel() {
   const job = data?.job || (data?.version ? data : null)
   const status = job?.phase || data?.status || 'waiting for folder'
   const running = transferBusy || (job && !job.done && job.phase !== 'failed')
-  stateEl.textContent = status
-  badgeEl.textContent = running ? 'working' : job?.phase === 'completed' ? 'ready' : data?.ok ? 'ready' : status === 'failed' ? 'failed' : 'waiting'
+  stateEl.textContent = appStatusText(status)
+  badgeEl.textContent = running ? appTr('working') : job?.phase === 'completed' ? appTr('ready') : data?.ok ? appTr('ready') : status === 'failed' ? appTr('failed') : appTr('waiting')
   badgeEl.classList.toggle('off', !(data?.ok || job?.phase === 'completed') || status === 'failed')
   messageEl.textContent = job?.phase === 'completed'
-    ? 'Transfer completed. Session list and search are available from the imported vault data.'
+    ? appTr('transferImportCompleted')
     : data?.ok
-      ? 'Transfer folder passed preflight. Unlock the selected backup with its old password or old 24-word phrase.'
-      : data?.error || data?.errors?.join(' · ') || 'Choose the copied whole .datamoat folder, unlock the old vault, then add backup data or delete current data and use the backup.'
+      ? appTr('transferImportPassed')
+      : data?.error || data?.errors?.join(' · ') || appTr('transferImportIntro')
 
   const auth = data?.auth
   const passwordUnavailable = auth && auth.hasPassword === false
@@ -3888,9 +5421,9 @@ function renderTransferImportPanel() {
   const skipped = job?.skipped
   statsEl.innerHTML = job
     ? [
-        `<div class="referenced-attachment-stat"><strong>${fmtNumber(imported?.sessions || 0)}</strong><span>sessions imported</span></div>`,
-        `<div class="referenced-attachment-stat"><strong>${fmtNumber(skipped?.duplicates || 0)}</strong><span>duplicates skipped</span></div>`,
-        `<div class="referenced-attachment-stat"><strong>${fmtNumber(imported?.attachments || 0)}</strong><span>attachments imported</span></div>`,
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(imported?.sessions || 0)}</strong><span>${esc(appTr('sessionsImported'))}</span></div>`,
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(skipped?.duplicates || 0)}</strong><span>${esc(appTr('duplicatesSkipped'))}</span></div>`,
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(imported?.attachments || 0)}</strong><span>${esc(appTr('attachmentsImported'))}</span></div>`,
       ].join('')
     : transferStatsHtml(counts)
 
@@ -3899,8 +5432,8 @@ function renderTransferImportPanel() {
     const sessionDone = Number(job?.imported?.sessions || 0) + Number(job?.skipped?.sessions || 0) + Number(job?.failed?.sessions || 0)
     const pct = sessionTotal > 0 ? Math.max(6, Math.min(100, Math.round((sessionDone / sessionTotal) * 100))) : (job?.phase === 'completed' ? 100 : 18)
     progressEl.hidden = false
-    progressLabelEl.textContent = job?.phase || 'checking transfer'
-    progressCountEl.textContent = sessionTotal > 0 ? `${fmtNumber(sessionDone)} / ${fmtNumber(sessionTotal)}` : (running ? 'working' : '')
+    progressLabelEl.textContent = appStatusText(job?.phase || 'checking transfer')
+    progressCountEl.textContent = sessionTotal > 0 ? `${fmtNumber(sessionDone)} / ${fmtNumber(sessionTotal)}` : (running ? appTr('working') : '')
     progressFillEl.style.width = `${pct}%`
   } else {
     progressEl.hidden = true
@@ -3983,6 +5516,7 @@ async function loadTransferPanels() {
   renderTransferImportPanel()
   try {
     transferExportData = await jsonOrThrow(await apiFetch('/api/transfer/export/status'))
+    scheduleTransferExportPollIfRunning()
     try {
       transferImportData = await jsonOrThrow(await apiFetch('/api/transfer/import/status'))
       scheduleTransferImportPollIfRunning()
@@ -3996,6 +5530,29 @@ async function loadTransferPanels() {
     renderTransferExportPanel()
     renderTransferImportPanel()
   }
+}
+
+function transferExportPreparationIsRunning() {
+  return !!transferExportData?.preparation?.running
+}
+
+function scheduleTransferExportPollIfRunning(delay = 900) {
+  if (transferExportPollTimer) {
+    window.clearTimeout(transferExportPollTimer)
+    transferExportPollTimer = null
+  }
+  if (!settingsOpen) return
+  if (!transferBusy && !transferExportPreparationIsRunning()) return
+  transferExportPollTimer = window.setTimeout(async () => {
+    transferExportPollTimer = null
+    try {
+      transferExportData = await jsonOrThrow(await apiFetch('/api/transfer/export/status'))
+      renderTransferExportPanel()
+    } catch {
+      // Keep the last visible progress; the check request will surface errors.
+    }
+    scheduleTransferExportPollIfRunning()
+  }, delay)
 }
 
 function currentTransferImportJob() {
@@ -4030,15 +5587,17 @@ function scheduleTransferImportPollIfRunning(delay = 900) {
 async function checkTransferExport() {
   transferBusy = true
   renderTransferExportPanel()
+  scheduleTransferExportPollIfRunning()
   try {
     const data = await jsonOrThrow(await apiFetch('/api/transfer/export/check', { method: 'POST' }))
     transferExportData = data.status || data
-    setUpdatePanelMessage('Transfer manifest written. Copy the whole DataMoat folder to the new computer.', false)
+    setUpdatePanelMessage(appTr('transferManifestWritten'), false)
   } catch (error) {
     setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
   } finally {
     transferBusy = false
     renderTransferExportPanel()
+    scheduleTransferExportPollIfRunning()
   }
 }
 
@@ -4047,7 +5606,7 @@ async function openTransferExportFolder() {
   renderTransferExportPanel()
   try {
     const data = await jsonOrThrow(await apiFetch('/api/transfer/export/open-folder', { method: 'POST' }))
-    setUpdatePanelMessage(data.ok ? `Opened ${data.path}` : (data.error || data.path), !data.ok)
+    setUpdatePanelMessage(data.ok ? appTr('openedPath').replace('{path}', data.path) : (data.error || data.path), !data.ok)
   } catch (error) {
     setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
   } finally {
@@ -4071,7 +5630,7 @@ function setTransferImportAuthMode(mode) {
 async function selectTransferImportFolder() {
   const selector = window.datamoatDesktop?.transfer?.selectFolder
   if (!selector) {
-    transferImportData = { error: 'Folder picker is unavailable here. Paste the copied DataMoat folder path.' }
+    transferImportData = { error: appTr('transferFolderPickerUnavailable') }
     renderTransferImportPanel()
     return
   }
@@ -4101,7 +5660,7 @@ function transferImportInputs() {
 async function preflightTransferImport() {
   const input = transferImportInputs()
   if (!input.sourceRoot) {
-    transferImportData = { error: 'Transfer folder path required' }
+    transferImportData = { error: appTr('transferFolderPathRequired') }
     renderTransferImportPanel()
     return
   }
@@ -4146,8 +5705,8 @@ async function startTransferImport(mode) {
   if (!input.sourceRoot || missingUnlock) {
     transferImportData = {
       error: input.authMode === 'phrase'
-        ? 'Transfer folder and old 24-word phrase are required'
-        : 'Transfer folder and old vault password are required',
+        ? appTr('transferPhraseRequired')
+        : appTr('transferPasswordRequired'),
     }
     renderTransferImportPanel()
     return
@@ -4155,7 +5714,7 @@ async function startTransferImport(mode) {
   if (mode === 'replace') {
     const replaceConfirmation = await confirmTransferReplace()
     if (!replaceConfirmation) {
-      transferImportData = { error: 'Replace cancelled. Current data was not deleted.' }
+      transferImportData = { error: appTr('replaceCancelled') }
       renderTransferImportPanel()
       return
     }
@@ -4176,12 +5735,273 @@ async function startTransferImport(mode) {
     }))
     scheduleTransferImportPollIfRunning()
     await loadSessions()
-    setUpdatePanelMessage(mode === 'replace' ? 'Current data was deleted after a safety copy was made, then the selected backup became this vault.' : 'Backup data added to this vault. Duplicates were skipped.', false)
+    setUpdatePanelMessage(mode === 'replace' ? appTr('transferReplaceDone') : appTr('transferMergeDone'), false)
   } catch (error) {
     transferImportData = { error: error instanceof Error ? error.message : String(error) }
   } finally {
     transferBusy = false
     renderTransferImportPanel()
+  }
+}
+
+function currentChatGptImportJob() {
+  const data = chatGptImportData
+  return data?.job || (data?.version ? data : null)
+}
+
+function chatGptImportJobIsRunning(job = currentChatGptImportJob()) {
+  return !!job && !job.done && job.phase !== 'failed' && job.phase !== 'completed'
+}
+
+function chatGptImportStatsHtml(counts = {}) {
+  if (!counts) return ''
+  const items = [
+    [appTr('conversations'), counts.conversations],
+    [appTr('messages'), counts.currentPathMessages],
+    [appTr('branches'), counts.branches],
+    [appTr('offPathMsgs'), counts.offPathMessages],
+    [appTr('assets'), counts.assetFiles],
+    [appTr('duplicateFiles'), counts.duplicateAssetFiles],
+  ]
+  return items.map(([label, value]) => `
+    <div class="referenced-attachment-stat"><strong>${fmtNumber(value || 0)}</strong><span>${esc(label)}</span></div>
+  `).join('')
+}
+
+function renderChatGptImportPanel() {
+  const stateEl = document.getElementById('chatgpt-import-state')
+  const badgeEl = document.getElementById('chatgpt-import-badge')
+  const messageEl = document.getElementById('chatgpt-import-message')
+  const warningEl = document.getElementById('chatgpt-import-warning')
+  const statsEl = document.getElementById('chatgpt-import-stats')
+  const progressEl = document.getElementById('chatgpt-import-progress')
+  const progressLabelEl = document.getElementById('chatgpt-import-progress-label')
+  const progressCountEl = document.getElementById('chatgpt-import-progress-count')
+  const progressFillEl = document.getElementById('chatgpt-import-progress-fill')
+  const selectBtn = document.getElementById('chatgpt-import-select-btn')
+  const checkBtn = document.getElementById('chatgpt-import-check-btn')
+  const startBtn = document.getElementById('chatgpt-import-start-btn')
+  const pathSummaryEl = document.getElementById('chatgpt-import-path-summary')
+  const manualRowEl = document.getElementById('chatgpt-import-manual-row')
+  const manualHelpEl = document.getElementById('chatgpt-import-manual-help')
+  if (!stateEl || !badgeEl || !messageEl || !warningEl || !statsEl || !progressEl || !progressLabelEl || !progressCountEl || !progressFillEl || !selectBtn || !checkBtn || !startBtn || !pathSummaryEl || !manualRowEl || !manualHelpEl) return
+
+  const data = chatGptImportData
+  const job = currentChatGptImportJob()
+  const status = job?.phase || data?.status || 'waiting for export'
+  const running = chatGptImportBusy || chatGptImportJobIsRunning(job)
+  const selectedPath = chatGptImportInputPath()
+  const hasPicker = !!window.datamoatDesktop?.chatgptExport?.selectSource
+  const displayStatus = job?.phase === 'completed'
+    ? 'imported'
+    : data?.ok && !job
+      ? 'checked only'
+      : status
+  stateEl.textContent = appStatusText(displayStatus)
+  badgeEl.textContent = running ? appTr('working') : job?.phase === 'completed' ? appTr('imported') : data?.ok ? appTr('checked') : status === 'failed' ? appTr('failed') : appTr('waiting')
+  badgeEl.classList.toggle('off', !(data?.ok || job?.phase === 'completed') || status === 'failed')
+  messageEl.textContent = job?.phase === 'completed'
+    ? appTr('chatgptImported')
+    : data?.ok
+      ? appTr('chatgptChecked')
+      : data?.error || data?.errors?.join(' · ') || appTr('chatgptChooseExport')
+  pathSummaryEl.textContent = selectedPath
+    ? `${appTr('chatgptSelected')}: ${selectedPath}`
+    : hasPicker
+      ? appTr('chatgptNoExportPicker')
+      : appTr('chatgptNoExportPaste')
+  manualRowEl.hidden = hasPicker
+  manualHelpEl.hidden = hasPicker
+  selectBtn.hidden = !hasPicker
+
+  const warnings = job?.phase === 'completed'
+    ? []
+    : Array.isArray(job?.warnings) ? job.warnings : Array.isArray(data?.warnings) ? data.warnings : []
+  const jobError = job?.phase === 'failed' ? job?.lastError : ''
+  if (warnings.length > 0 || data?.error || jobError) {
+    warningEl.hidden = false
+    warningEl.textContent = data?.error || jobError || warnings.join(' · ')
+  } else {
+    warningEl.hidden = true
+    warningEl.textContent = ''
+  }
+
+  const counts = job?.counts || data?.counts
+  const imported = job?.imported
+  const updated = job?.updated
+  const skipped = job?.skipped
+  statsEl.innerHTML = job
+    ? [
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(imported?.sessions || 0)}</strong><span>${esc(appTr('newSessions'))}</span></div>`,
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(updated?.sessions || 0)}</strong><span>${esc(appTr('updated'))}</span></div>`,
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(skipped?.duplicates || 0)}</strong><span>${esc(appTr('duplicates'))}</span></div>`,
+        `<div class="referenced-attachment-stat"><strong>${fmtNumber(imported?.attachments || 0)}</strong><span>${esc(appTr('newAssets'))}</span></div>`,
+      ].join('')
+    : chatGptImportStatsHtml(counts)
+
+  if (running || job) {
+    const total = Number(job?.counts?.conversations || 0)
+    const done = Number(job?.imported?.sessions || 0) + Number(job?.updated?.sessions || 0) + Number(job?.skipped?.sessions || 0) + Number(job?.failed?.sessions || 0)
+    const pct = job?.phase === 'importing-attachments'
+      ? Math.max(6, Math.min(55, Math.round((Number(job?.cursor?.attachmentIndex || 0) / Math.max(1, Number(job?.counts?.assetFiles || 1))) * 55)))
+      : total > 0
+        ? Math.max(12, Math.min(100, Math.round((done / total) * 100)))
+        : job?.phase === 'completed' ? 100 : 18
+    progressEl.hidden = false
+    progressLabelEl.textContent = appStatusText(job?.phase || 'checking export')
+    progressCountEl.textContent = total > 0 ? `${fmtNumber(done)} / ${fmtNumber(total)}` : (running ? appTr('working') : '')
+    progressFillEl.style.width = `${pct}%`
+  } else {
+    progressEl.hidden = true
+    progressFillEl.style.width = '0'
+    progressCountEl.textContent = ''
+  }
+
+  const ready = data?.ok || job?.phase === 'completed'
+  selectBtn.textContent = selectedPath ? appTr('chooseDifferentExport') : appTr('chooseCheckExport')
+  selectBtn.disabled = chatGptImportBusy
+  checkBtn.hidden = !selectedPath && hasPicker
+  checkBtn.textContent = data?.ok ? appTr('checkAgain') : appTr('checkSelectedExport')
+  checkBtn.disabled = chatGptImportBusy || !selectedPath
+  startBtn.textContent = job?.phase === 'completed' ? appTr('importComplete') : appTr('importVault')
+  startBtn.disabled = chatGptImportBusy || !ready || job?.phase === 'completed'
+}
+
+async function loadChatGptImportPanel() {
+  chatGptImportBusy = true
+  renderChatGptImportPanel()
+  try {
+    chatGptImportData = await jsonOrThrow(await apiFetch('/api/chatgpt-export/import/status'))
+    scheduleChatGptImportPollIfRunning()
+  } catch {
+    chatGptImportData = null
+  } finally {
+    chatGptImportBusy = false
+    renderChatGptImportPanel()
+  }
+}
+
+function scheduleChatGptImportPollIfRunning(delay = 900) {
+  if (chatGptImportPollTimer) {
+    window.clearTimeout(chatGptImportPollTimer)
+    chatGptImportPollTimer = null
+  }
+  if (!settingsOpen) return
+  if (!chatGptImportJobIsRunning()) return
+  chatGptImportPollTimer = window.setTimeout(async () => {
+    chatGptImportPollTimer = null
+    try {
+      chatGptImportData = await jsonOrThrow(await apiFetch('/api/chatgpt-export/import/status'))
+      renderChatGptImportPanel()
+    } catch {
+      // Keep last visible progress.
+    }
+    scheduleChatGptImportPollIfRunning()
+  }, delay)
+}
+
+function chatGptImportInputPath() {
+  return document.getElementById('chatgpt-import-path')?.value.trim() || ''
+}
+
+async function selectChatGptImportSource() {
+  const selector = window.datamoatDesktop?.chatgptExport?.selectSource
+  if (!selector) {
+    chatGptImportData = { error: appTr('chatgptPickerUnavailable') }
+    renderChatGptImportPanel()
+    return
+  }
+  chatGptImportBusy = true
+  renderChatGptImportPanel()
+  try {
+    const selected = await selector()
+    if (!selected || selected.canceled || !selected.path) return
+    const input = document.getElementById('chatgpt-import-path')
+    if (input) input.value = selected.path
+    await preflightChatGptImport()
+  } catch (error) {
+    chatGptImportData = { error: error instanceof Error ? error.message : String(error) }
+  } finally {
+    chatGptImportBusy = false
+    renderChatGptImportPanel()
+  }
+}
+
+async function preflightChatGptImport() {
+  const sourcePath = chatGptImportInputPath()
+  if (!sourcePath) {
+    chatGptImportData = { error: appTr('chatgptPathRequired') }
+    renderChatGptImportPanel()
+    return
+  }
+  chatGptImportBusy = true
+  renderChatGptImportPanel()
+  try {
+    chatGptImportData = await jsonOrThrow(await apiFetch('/api/chatgpt-export/import/preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourcePath }),
+    }))
+  } catch (error) {
+    chatGptImportData = { error: error instanceof Error ? error.message : String(error) }
+  } finally {
+    chatGptImportBusy = false
+    renderChatGptImportPanel()
+  }
+}
+
+function scheduleChatGptImportPreflight() {
+  if (chatGptImportPreflightTimer) {
+    window.clearTimeout(chatGptImportPreflightTimer)
+    chatGptImportPreflightTimer = null
+  }
+  const sourcePath = chatGptImportInputPath()
+  if (!sourcePath) {
+    chatGptImportData = null
+    renderChatGptImportPanel()
+    return
+  }
+  chatGptImportData = { status: 'checking', warnings: [], counts: null }
+  renderChatGptImportPanel()
+  chatGptImportPreflightTimer = window.setTimeout(() => {
+    chatGptImportPreflightTimer = null
+    void preflightChatGptImport()
+  }, 450)
+}
+
+async function startChatGptImport() {
+  const sourcePath = chatGptImportInputPath()
+  if (!sourcePath) {
+    chatGptImportData = { error: appTr('chatgptPathRequired') }
+    renderChatGptImportPanel()
+    return
+  }
+  chatGptImportBusy = true
+  chatGptImportData = { job: { phase: 'reading-export', done: false, counts: {}, imported: {}, updated: {}, skipped: {}, failed: {}, warnings: [] } }
+  renderChatGptImportPanel()
+  scheduleChatGptImportPollIfRunning(500)
+  try {
+    chatGptImportData = await jsonOrThrow(await apiFetch('/api/chatgpt-export/import/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sourcePath }),
+    }))
+    scheduleChatGptImportPollIfRunning()
+    await loadSessions()
+    const completed = chatGptImportData?.phase === 'completed' || chatGptImportData?.job?.phase === 'completed'
+    const failedSessions = Number(chatGptImportData?.failed?.sessions || chatGptImportData?.job?.failed?.sessions || 0)
+    if (completed && failedSessions === 0) {
+      setSourceFilter('chatgpt-export')
+      closeSettings()
+      showNotice(appTr('chatgptImported'))
+    } else {
+      setUpdatePanelMessage(appTr('chatgptImportReview'), true)
+    }
+  } catch (error) {
+    chatGptImportData = { error: error instanceof Error ? error.message : String(error) }
+  } finally {
+    chatGptImportBusy = false
+    renderChatGptImportPanel()
   }
 }
 
@@ -4219,6 +6039,12 @@ function sourceRootFromOriginalPath(source, originalPath) {
     const after = normalized.slice(idx + marker.length).split('/').filter(Boolean)
     return after[0] ? `${normalized.slice(0, idx + marker.length - 1)}/${after[0]}` : normalized.slice(0, idx + marker.length - 1)
   }
+  if (source === 'chatgpt-export') {
+    if (!normalized.startsWith('chatgpt-export://')) return null
+    const rest = normalized.slice('chatgpt-export://'.length)
+    const account = rest.split('/').filter(Boolean)[0]
+    return account ? `chatgpt-export://${account}` : 'chatgpt-export://unknown'
+  }
   return null
 }
 
@@ -4251,7 +6077,7 @@ function renderBackupPathsPanel() {
     return
   }
 
-  const sourceOrder = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw', 'cursor']
+  const sourceOrder = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw', 'cursor', 'chatgpt-export']
   const html = sourceOrder
     .filter(source => groups.has(source))
     .map(source => {
@@ -4553,6 +6379,21 @@ async function handleSkillActionClick(e) {
 
 document.getElementById('skills-backup-list')?.addEventListener('click', handleSkillActionClick)
 document.getElementById('conversation')?.addEventListener('click', handleSkillActionClick)
+document.getElementById('conversation')?.addEventListener('click', e => {
+  const target = e.target instanceof Element ? e.target : null
+  const attachmentButton = target ? target.closest('button[data-attachment-open-id]') : null
+  if (attachmentButton) {
+    void openAttachmentFile(attachmentButton)
+    return
+  }
+  const branchButton = target ? target.closest('button[data-chatgpt-branch-id]') : null
+  if (branchButton) {
+    void loadChatGptBranch(branchButton.dataset.chatgptBranchId || '')
+    return
+  }
+  const mainButton = target ? target.closest('button[data-chatgpt-main]') : null
+  if (mainButton) backToMainPath()
+})
 document.getElementById('conversation')?.addEventListener('toggle', e => {
   const detail = e.target
   if (!detail || detail.tagName !== 'DETAILS') return
@@ -4615,6 +6456,7 @@ async function refreshUpdatePanel() {
     }
     updateState = normalizeUpdateStateForUi(latestState)
     syncPackagedUpdateNotice()
+    void checkChatGptExportFeatureNotice()
     if (settingsOpen) renderUpdatePanel()
   } catch {
     // Ignore background refresh errors; the next manual action will surface them.
@@ -4624,20 +6466,45 @@ async function refreshUpdatePanel() {
 function openSettings() {
   settingsOpen = true
   document.getElementById('settings-backdrop').hidden = false
+  void loadAppPreferences()
   void loadUpdatePanel()
   void loadReferencedAttachmentPanel()
   void loadTransferPanels()
+  void loadChatGptImportPanel()
+}
+
+function openSettingsToChatGptExport() {
+  openSettings()
+  window.setTimeout(() => {
+    const card = document.getElementById('chatgpt-import-card')
+    const firstButton = document.getElementById('chatgpt-import-select-btn')
+    card?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    firstButton?.focus({ preventScroll: true })
+  }, 80)
 }
 
 function closeSettings() {
   settingsOpen = false
+  closeLanguageMenu()
   if (referencedAttachmentPollTimer) {
     window.clearTimeout(referencedAttachmentPollTimer)
     referencedAttachmentPollTimer = null
   }
+  if (transferExportPollTimer) {
+    window.clearTimeout(transferExportPollTimer)
+    transferExportPollTimer = null
+  }
   if (transferImportPollTimer) {
     window.clearTimeout(transferImportPollTimer)
     transferImportPollTimer = null
+  }
+  if (chatGptImportPollTimer) {
+    window.clearTimeout(chatGptImportPollTimer)
+    chatGptImportPollTimer = null
+  }
+  if (chatGptImportPreflightTimer) {
+    window.clearTimeout(chatGptImportPreflightTimer)
+    chatGptImportPreflightTimer = null
   }
   document.getElementById('settings-backdrop').hidden = true
 }
@@ -4710,14 +6577,14 @@ async function reinstallFromSource() {
   if (!input) return
   const sourcePath = input.value.trim()
   if (!sourcePath) {
-    setUpdatePanelMessage('Choose a DataMoat source folder before starting a source reinstall.', true)
+    setUpdatePanelMessage(appTr('chooseSourceBeforeReinstall'), true)
     return
   }
-  const proceed = window.confirm('Reinstall From Source will stop DataMoat immediately and replace the current app from the source folder you entered. Your encrypted DataMoat data should stay in place, but the app window will close now. Continue?')
+  const proceed = window.confirm(appTr('reinstallConfirm'))
   if (!proceed) return
-  const confirmation = window.prompt('Type REINSTALL to confirm source reinstall now.')
+  const confirmation = window.prompt(appTr('reinstallPrompt'))
   if (confirmation !== 'REINSTALL') {
-    setUpdatePanelMessage('Source reinstall cancelled. Type REINSTALL exactly if you want to continue.', true)
+    setUpdatePanelMessage(appTr('reinstallCancelled'), true)
     return
   }
   updatePanelBusy = true
@@ -4736,7 +6603,7 @@ async function reinstallFromSource() {
     updateState = normalizeUpdateStateForUi(data.state || updateState)
     input.value = reinstallInfo?.root || sourcePath
     delete input.dataset.dirty
-    setUpdatePanelMessage('Source reinstall started. DataMoat will close and relaunch after the reinstall flow finishes.', false)
+    setUpdatePanelMessage(appTr('reinstallStarted'), false)
   } catch (error) {
     setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
   } finally {
@@ -4755,11 +6622,11 @@ async function installLatestVersion() {
     releasesUrl = data.url || releasesUrl
     if (data.state) updateState = normalizeUpdateStateForUi(data.state)
     setUpdatePanelMessage(data.manualUpdateStarted
-      ? 'Downloaded the latest packaged release. DataMoat will close, replace the app, and reopen automatically.'
-      : 'Opened the latest download page in your browser. Download the newest packaged release there and replace the current app when ready.', false)
+      ? appTr('packagedDownloadStarted')
+      : appTr('latestDownloadOpened'), false)
   } catch (error) {
     const fallback = releasesUrl
-      ? `Could not open the latest download page automatically. You can open this link manually: ${releasesUrl}`
+      ? appTr('latestDownloadFallback').replace('{url}', releasesUrl)
       : (error instanceof Error ? error.message : String(error))
     setUpdatePanelMessage(fallback, true)
   } finally {
@@ -4771,10 +6638,7 @@ async function installLatestVersion() {
 // ── Filters + search ──
 document.querySelectorAll('.filter-btn').forEach(btn => {
   btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'))
-    btn.classList.add('active')
-    filterSrc = btn.dataset.src
-    renderList()
+    setSourceFilter(btn.dataset.src)
   })
 })
 document.getElementById('search').addEventListener('input', e => {
@@ -4836,9 +6700,31 @@ function fmtDate(ts) { return new Date(ts).toLocaleDateString() }
 function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) }
 function wordCount(s) { return s ? s.trim().split(/\s+/).length : 0 }
 
-loadSessions()
+async function initApp() {
+  await loadAppPreferences()
+  await loadSessions()
+}
+applyAppLanguage()
+void initApp()
 document.getElementById('open-settings-btn').addEventListener('click', () => openSettings())
 document.getElementById('close-settings-btn').addEventListener('click', () => closeSettings())
+document.getElementById('app-language-current')?.addEventListener('click', event => {
+  event.preventDefault()
+  toggleLanguageMenu()
+})
+document.querySelectorAll('#app-language-switch [data-language]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    closeLanguageMenu()
+    void saveAppLanguage(btn.dataset.language)
+  })
+})
+document.addEventListener('click', event => {
+  const picker = document.getElementById('app-language-picker')
+  if (picker && event.target instanceof Node && !picker.contains(event.target)) closeLanguageMenu()
+})
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeLanguageMenu()
+})
 document.getElementById('recovery-reset-later').addEventListener('click', () => closeRecoveryPasswordResetPrompt(true))
 document.getElementById('recovery-reset-save').addEventListener('click', () => { void submitRecoveryPasswordReset() })
 document.getElementById('recovery-reset-password').addEventListener('keydown', e => {
@@ -4871,6 +6757,17 @@ document.getElementById('transfer-import-auth-password').addEventListener('click
 document.getElementById('transfer-import-auth-phrase').addEventListener('click', () => setTransferImportAuthMode('phrase'))
 document.getElementById('transfer-import-merge-btn').addEventListener('click', () => { void startTransferImport('merge') })
 document.getElementById('transfer-import-replace-btn').addEventListener('click', () => { void startTransferImport('replace') })
+document.getElementById('chatgpt-import-select-btn').addEventListener('click', () => { void selectChatGptImportSource() })
+document.getElementById('chatgpt-import-check-btn').addEventListener('click', () => { void preflightChatGptImport() })
+document.getElementById('chatgpt-import-start-btn').addEventListener('click', () => { void startChatGptImport() })
+document.getElementById('chatgpt-import-path').addEventListener('input', () => scheduleChatGptImportPreflight())
+document.getElementById('chatgpt-import-path').addEventListener('change', () => { void preflightChatGptImport() })
+document.getElementById('chatgpt-import-path').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    void preflightChatGptImport()
+  }
+})
 document.getElementById('reinstall-source-path').addEventListener('input', e => {
   const input = e.target
   if (!(input instanceof HTMLInputElement)) return

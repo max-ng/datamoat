@@ -2,7 +2,7 @@
 
 Language: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
-[![Version](https://img.shields.io/badge/version-2.0.3-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.4-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -16,23 +16,24 @@ Language: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [�
 [![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
+[![ChatGPT export](https://img.shields.io/badge/ChatGPT%20export-ZIP%2Ffolder%20import-10B981?style=flat-square)](#supported-today)
 
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and backup all your Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw data, skills, and attachments." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
-> **Export and backup all your Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
+> **Protect and back up all your ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
 > DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
 >
 > **Your most valuable future AI data is already disappearing.**
-> Download DataMoat now to see how much Claude, Codex, Cursor, OpenClaw, DeepSeek, and Qwen work history you can still capture.
+> Download DataMoat now to see how much ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw work history you can still capture.
 
 **Core backup scope:** DataMoat backs up supported **skills + sessions + attachments** into the same encrypted local memory archive. Skills are saved as full folder snapshots, not just names.
 
 **The people and companies that own their AI data will win the future.**
 
-DataMoat is an AI work history memory archive for people and teams working across Claude CLI, Claude Desktop, DeepSeek and Qwen through Claude Code GUI workflows, Codex CLI, Codex app, Cursor, OpenClaw, and other AI tools. It preserves the full working record: sessions, locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, skills folder contents, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
+DataMoat is an AI work history memory archive for people and teams working across ChatGPT exports, Claude CLI, Claude Desktop, Codex CLI, Codex app, Cursor, DeepSeek and Qwen through Claude Code GUI workflows, OpenClaw, and other AI tools. It preserves the full working record: sessions, locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, skills folder contents, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
 
 ![DataMoat sessions, skills backup, and encrypted local memory archive UI](.github/assets/screenshot.png)
 
@@ -43,8 +44,17 @@ DataMoat keeps two layers:
 - **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots, and any locally stored thinking tokens or reasoning blocks are preserved as close to the source format as possible.
 - **Normalized index:** records from different tools are converted into a common schema so you can search, review, export, analyze, reuse, and hand off work across tools.
 
-**Supported sources today:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, DeepSeek and Qwen sessions when written locally by Claude Code GUI workflows, supported local OpenClaw session records, and supported local Cursor agent transcripts.
-**More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.
+**Supported sources today:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local Cursor agent transcripts, DeepSeek and Qwen sessions when written locally by Claude Code GUI workflows, and supported local OpenClaw session records.
+**More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
+
+## New In 2.0.4: ChatGPT Export Memory Import
+
+DataMoat now imports supported ChatGPT export ZIP files or extracted export folders into the same encrypted local memory archive used for Claude, Codex, Cursor, DeepSeek, Qwen, OpenClaw, skills, and attachments.
+
+- **Restore, view, search, and backup ChatGPT exports.** Supported conversations, alternate branches, attachments, assets, and raw export files are imported into the encrypted vault.
+- **Keep the raw export without wasting disk.** DataMoat preserves original source records and can store repetitive raw backup data in compressed encrypted archives; real source-record tests showed raw archive storage around 60% of original source bytes.
+- **Move work across computers.** Copy the DataMoat folder to another machine and restore it across macOS, Windows, and Linux, including Mac to Windows and Linux to Mac.
+- **Carry a second backup.** Save the encrypted DataMoat folder to USB or an external drive so your AI work history can travel separately from the source computer.
 
 ## Why Install DataMoat
 
@@ -90,6 +100,7 @@ DataMoat keeps two layers:
 | **Qwen via Claude Code GUI** | ✅ | When Claude Code GUI writes local records for Qwen-backed sessions, transcript text, tool output, timestamps, metadata, skills folder snapshots, images, and supported attachments are preserved |
 | **OpenClaw** | ✅ | Supported local OpenClaw session transcripts and metadata |
 | **Cursor** | ✅ | Captures readable local Cursor `agent-transcripts` JSONL records, including text and tool blocks when present |
+| **ChatGPT export** | ✅ | Imports supported ChatGPT export ZIPs or extracted folders, including conversations, branches, assets, and raw export files |
 | **Attachments** | ✅ | Encrypted image and supported file/PDF blocks, linked back to their source sessions |
 | **Skills folders** | ✅ | Global and project `SKILL.md` folder snapshots, including `SKILL.md` and included helper files, not just the skill name |
 
@@ -292,7 +303,7 @@ Questions or deployment help:
 
 ## License
 
-DataMoat is distributed under **Business Source License 1.1 (`BUSL-1.1`)** with an **Additional Use Grant**.
+DataMoat is open-sourced under **Business Source License 1.1 (`BUSL-1.1`)** with an **Additional Use Grant**.
 
 This means:
 

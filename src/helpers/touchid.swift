@@ -390,15 +390,38 @@ func resetTouchIdKey() throws {
     try deletePrivateKey()
 }
 
+func helperKeychainAccessGroup() -> String? {
+    guard let task = SecTaskCreateFromSelf(kCFAllocatorDefault) else {
+        return nil
+    }
+    guard let value = SecTaskCopyValueForEntitlement(task, "keychain-access-groups" as CFString, nil) else {
+        return nil
+    }
+    if let groups = value as? [String] {
+        return groups.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+    if let group = value as? String, !group.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        return group
+    }
+    return nil
+}
+
+func addHelperKeychainAccessGroup(_ query: inout [String: Any]) {
+    if let accessGroup = helperKeychainAccessGroup() {
+        query[kSecAttrAccessGroup as String] = accessGroup
+    }
+}
+
 func storeGenericSecret(service: String, account: String, secret: String) throws {
     guard let secretData = secret.data(using: .utf8) else {
         throw HelperError.message("invalid secret utf8")
     }
-    let query: [String: Any] = [
+    var query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: service,
         kSecAttrAccount as String: account
     ]
+    addHelperKeychainAccessGroup(&query)
     let attributes: [String: Any] = [
         kSecValueData as String: secretData,
         kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
@@ -421,7 +444,7 @@ func storeGenericSecret(service: String, account: String, secret: String) throws
 func loadGenericSecret(service: String, account: String) throws -> String {
     let context = LAContext()
     context.interactionNotAllowed = true
-    let query: [String: Any] = [
+    var query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: service,
         kSecAttrAccount as String: account,
@@ -430,6 +453,7 @@ func loadGenericSecret(service: String, account: String) throws -> String {
         kSecUseAuthenticationUI as String: kSecUseAuthenticationUIFail,
         kSecUseAuthenticationContext as String: context
     ]
+    addHelperKeychainAccessGroup(&query)
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
     guard status == errSecSuccess else {
@@ -446,11 +470,12 @@ func loadGenericSecret(service: String, account: String) throws -> String {
 }
 
 func deleteGenericSecret(service: String, account: String) throws {
-    let query: [String: Any] = [
+    var query: [String: Any] = [
         kSecClass as String: kSecClassGenericPassword,
         kSecAttrService as String: service,
         kSecAttrAccount as String: account
     ]
+    addHelperKeychainAccessGroup(&query)
     let status = SecItemDelete(query as CFDictionary)
     guard status == errSecSuccess || status == errSecItemNotFound else {
         throw HelperError.message("keychain secret delete failed: \(status)")

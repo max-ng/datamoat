@@ -214,6 +214,23 @@ linux_systemctl_user() {
   fi
 }
 
+linux_enable_linger() {
+  if [[ "$(uname)" != "Linux" ]]; then
+    return 1
+  fi
+  if ! command -v loginctl >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local user_name
+  user_name="$(id -un)"
+  if loginctl show-user "${user_name}" -p Linger 2>/dev/null | grep -q '^Linger=yes$'; then
+    return 0
+  fi
+
+  loginctl enable-linger "${user_name}" >/dev/null 2>&1
+}
+
 # LaunchAgent (macOS auto-start on login)
 if [[ "$(uname)" == "Darwin" ]]; then
   PLIST="$HOME/Library/LaunchAgents/com.datamoat.daemon.plist"
@@ -304,6 +321,13 @@ elif [[ "$(uname)" == "Linux" ]]; then
   AUTOSTART_DIR="$HOME/.config/autostart"
   AUTOSTART_FILE="$AUTOSTART_DIR/datamoat-tray.desktop"
   LINUX_SYSTEMD_DAEMON_ACTIVE=0
+  if [ "$BOOTSTRAP_CAPTURE" -eq 1 ]; then
+    if linux_enable_linger; then
+      echo -e "  ${GREEN}✓${RESET} systemd lingering enabled for remote no-screen capture"
+    else
+      echo "  ! systemd lingering could not be enabled; remote no-screen capture may stop when this login session ends"
+    fi
+  fi
   mkdir -p "$SYSTEMD_USER_DIR"
   cat > "$SERVICE_FILE" << SERVICE
 [Unit]

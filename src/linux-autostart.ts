@@ -94,6 +94,24 @@ function runSystemctlUser(args: string[]): void {
   })
 }
 
+function enableSystemdLinger(): boolean {
+  try {
+    const userName = os.userInfo().username
+    if (!userName) return false
+    const current = child_process.execFileSync('loginctl', ['show-user', userName, '-p', 'Linger'], {
+      stdio: ['ignore', 'pipe', 'ignore'],
+      encoding: 'utf8',
+    })
+    if (current.trim() === 'Linger=yes') return true
+    child_process.execFileSync('loginctl', ['enable-linger', userName], {
+      stdio: 'ignore',
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
 function ensureLinuxSystemdDaemon(): boolean {
   const servicePath = daemonServicePath()
   writeDaemonSystemdService(servicePath)
@@ -105,6 +123,7 @@ function ensureLinuxSystemdDaemon(): boolean {
 export function ensureLinuxRemoteNoScreenAutostart(): boolean {
   if (process.platform !== 'linux') return false
 
+  const lingerEnabled = enableSystemdLinger()
   try {
     ensureLinuxSystemdDaemon()
     const desktopPath = path.join(autostartDir(), REMOTE_AUTOSTART_FILE)
@@ -118,6 +137,7 @@ export function ensureLinuxRemoteNoScreenAutostart(): boolean {
       service: DAEMON_SERVICE_FILE,
       startupScript: daemonServicePath(),
       launcher: launcherBinaryForScripts(),
+      lingerEnabled,
       updatedAt: new Date().toISOString(),
     })
     writeLog('info', 'autostart', 'linux_remote_no_screen_autostart_ready', {
@@ -126,6 +146,7 @@ export function ensureLinuxRemoteNoScreenAutostart(): boolean {
       startupScript: daemonServicePath(),
       restartOnFailure: true,
       launcher: launcherBinaryForScripts(),
+      lingerEnabled,
     })
     return true
   } catch (error) {

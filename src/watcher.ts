@@ -1,9 +1,9 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as crypto from 'crypto'
-import { Source, Session, Message, OffsetState, RawRecord } from './types'
-import { ALL_SOURCES, GLOB_PATTERNS, HEALTH_FILE, resolveWatchPaths } from './config'
-import { clearCaptureSession, hasVaultSession, loadOffsets, saveOffsets, upsertSession, appendMessages, appendRawRecords, makeVaultPath, saveAttachment, loadSessions } from './store'
+import { Source, WatchedSource, Session, Message, OffsetState, RawRecord } from './types'
+import { ALL_SOURCES, GLOB_PATTERNS, HEALTH_FILE, STATE_DIR, resolveWatchPaths } from './config'
+import { clearCaptureSession, hasVaultSession, loadOffsets, saveOffsets, upsertSession, appendMessages, appendRawRecords, makeVaultPath, saveAttachment, loadSessions, getCaptureSessionId, getVaultSessionId } from './store'
 import {
   appendBootstrapCapture,
   clearBootstrapCaptureData,
@@ -22,6 +22,7 @@ import { detectInstallContext } from './install-context'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from './logging'
 import { buildSessionUid, sourceAccountFromPath } from './session-identity'
 import { queueReferencedAttachmentBackupForRawRecords } from './referenced-attachments'
+import { appendSourceArchiveChunk } from './source-archive'
 
 function log(event: string, fields: Record<string, unknown> = {}): void {
   writeLog('info', 'watcher', event, fields)
@@ -175,7 +176,7 @@ const CLAUDE_TOPLEVEL_KEYS = [
 
 // Known event types per source — anything outside this set is counted as an
 // "unknown event type" for drift observability. Keep in sync with extractors.
-export const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
+export const KNOWN_EVENT_TYPES: Record<WatchedSource, Set<string>> = {
   'claude-cli': new Set(CLAUDE_EVENT_TYPES),
   'claude-app': new Set(CLAUDE_EVENT_TYPES),
   'codex-cli': new Set([
@@ -254,7 +255,7 @@ export const KNOWN_EVENT_TYPES: Record<Source, Set<string>> = {
 // Known top-level keys per source — same as above but for attribute drift.
 // Kept intentionally narrow: only the keys the current extractor actually
 // reads. Everything else bumps unknownTopLevelKeys counters.
-export const KNOWN_TOPLEVEL_KEYS: Record<Source, Set<string>> = {
+export const KNOWN_TOPLEVEL_KEYS: Record<WatchedSource, Set<string>> = {
   'claude-cli': new Set(CLAUDE_TOPLEVEL_KEYS),
   'claude-app': new Set(CLAUDE_TOPLEVEL_KEYS),
   'codex-cli': new Set(['type', 'timestamp', 'payload']),
@@ -294,7 +295,7 @@ export type WatcherStartupProgress = {
   updatedAt: string | null
 }
 
-function observeDrift(source: Source, obj: unknown, buckets: DriftBuckets): void {
+function observeDrift(source: WatchedSource, obj: unknown, buckets: DriftBuckets): void {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return
   const o = obj as Record<string, unknown>
 
@@ -310,7 +311,7 @@ function observeDrift(source: Source, obj: unknown, buckets: DriftBuckets): void
   }
 }
 
-export function normalizedEventType(source: Source, obj: Record<string, unknown>): string | null {
+export function normalizedEventType(source: WatchedSource, obj: Record<string, unknown>): string | null {
   const type = typeof obj.type === 'string' ? obj.type : null
   if (!type) return null
   if (source !== 'codex-cli') return type
@@ -433,8 +434,24 @@ const BOOTSTRAP_IMPORT_FLUSH_LINES = positiveTimeoutMs(process.env.DATAMOAT_BOOT
 const WATCHER_POLL_INTERVAL_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_POLL_INTERVAL_MS, 2_000)
 const WATCHER_BINARY_POLL_INTERVAL_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_BINARY_POLL_INTERVAL_MS, 5_000)
 const WATCHER_USE_POLLING = watcherUsePollingDefault()
+const TRANSFER_REPLACE_JOURNAL_FILE = path.join(STATE_DIR, 'transfer-replace-journal.json')
+const TRANSFER_INITIAL_SCAN_GUARD_FILE = path.join(STATE_DIR, 'transfer-initial-scan-guard.json')
 
 type StartupPhaseStatus = 'completed' | 'timed_out'
+
+type TransferReplaceJournal = {
+  version?: number
+  mode?: string
+  sourceRoot?: string
+  destinationRoot?: string
+  phase?: string
+  completedAt?: string
+}
+
+type TransferInitialScanGuard = {
+  version?: number
+  journalKey?: string
+}
 
 function positiveTimeoutMs(value: string | undefined, fallback: number): number {
   const parsed = value ? Number(value) : fallback
@@ -563,14 +580,14 @@ function markWatcherStartupProcessed(filePath: string, source: Source, mode: Wat
   })
 }
 
-function watchPatternMatches(source: Source, filePath: string): boolean {
+function watchPatternMatches(source: WatchedSource, filePath: string): boolean {
   const normalized = filePath.replace(/\\/g, '/')
   if (source === 'claude-app') return path.basename(filePath) === 'audit.jsonl'
   if (source === 'cursor') return normalized.includes('/agent-transcripts/') && normalized.endsWith('.jsonl')
   return normalized.endsWith('.jsonl')
 }
 
-function countExistingWatchFilesForSource(source: Source, root: string): void {
+function countExistingWatchFilesForSource(source: WatchedSource, root: string): void {
   const stack = [root]
   while (stack.length > 0) {
     const current = stack.pop()
@@ -593,9 +610,9 @@ function countExistingWatchFilesForSource(source: Source, root: string): void {
   }
 }
 
-function countExistingWatchFiles(watchPaths: Record<Source, string[]>): void {
+function countExistingWatchFiles(watchPaths: Record<WatchedSource, string[]>): void {
   for (const [source, basePaths] of Object.entries(watchPaths)) {
-    const src = source as Source
+    const src = source as WatchedSource
     for (const basePath of basePaths) {
       if (!fs.existsSync(basePath)) continue
       countExistingWatchFilesForSource(src, basePath)
@@ -603,7 +620,7 @@ function countExistingWatchFiles(watchPaths: Record<Source, string[]>): void {
   }
 }
 
-function listWatchFilesForSource(source: Source, root: string): string[] {
+function listWatchFilesForSource(source: WatchedSource, root: string): string[] {
   const out: string[] = []
   const stack = [root]
   while (stack.length > 0) {
@@ -641,6 +658,101 @@ function safeMtimeMs(filePath: string): number {
   }
 }
 
+function readJsonRecord<T>(filePath: string): T | null {
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T
+  } catch {
+    return null
+  }
+}
+
+function writePrivateJson(filePath: string, value: unknown): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 })
+  const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`
+  fs.writeFileSync(tmpPath, `${JSON.stringify(value, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 })
+  fs.renameSync(tmpPath, filePath)
+  try { fs.chmodSync(filePath, 0o600) } catch { /* non-fatal */ }
+}
+
+function transferJournalKey(journal: TransferReplaceJournal): string {
+  return [
+    journal.version || 0,
+    journal.mode || '',
+    journal.phase || '',
+    journal.sourceRoot || '',
+    journal.destinationRoot || '',
+    journal.completedAt || '',
+  ].join('\0')
+}
+
+async function guardInitialBackfillAfterTransfer(
+  mode: WatcherMode,
+  offsets: OffsetState,
+  watchPaths: Record<WatchedSource, string[]>,
+): Promise<void> {
+  if (mode !== 'vault') return
+  const journal = readJsonRecord<TransferReplaceJournal>(TRANSFER_REPLACE_JOURNAL_FILE)
+  if (!journal || journal.phase !== 'completed') return
+  if (journal.mode !== 'adopt' && journal.mode !== 'replace') return
+
+  const journalKey = transferJournalKey(journal)
+  const guard = readJsonRecord<TransferInitialScanGuard>(TRANSFER_INITIAL_SCAN_GUARD_FILE)
+  if (guard?.journalKey === journalKey) return
+
+  let seededFiles = 0
+  let seededBytes = 0
+  for (const [source, basePaths] of Object.entries(watchPaths)) {
+    const src = source as WatchedSource
+    for (const basePath of basePaths) {
+      if (!fs.existsSync(basePath)) continue
+      for (const filePath of listWatchFilesForSource(src, basePath)) {
+        let stat: fs.Stats
+        try {
+          stat = fs.statSync(filePath)
+        } catch {
+          continue
+        }
+        if (!stat.isFile()) continue
+        const existing = offsets[filePath]
+        if (existing && existing.offset >= 0 && existing.offset <= stat.size) continue
+        offsets[filePath] = {
+          offset: stat.size,
+          sessionId: existing?.sessionId || '',
+          source: src,
+          lastMod: stat.mtimeMs,
+        }
+        seededFiles += 1
+        seededBytes += stat.size
+      }
+    }
+  }
+
+  if (seededFiles > 0) await saveOffsets(offsets)
+  writePrivateJson(TRANSFER_INITIAL_SCAN_GUARD_FILE, {
+    version: 1,
+    journalKey,
+    mode: journal.mode,
+    seededFiles,
+    seededBytes,
+    completedAt: new Date().toISOString(),
+  })
+  log('transfer_initial_backfill_guarded', {
+    mode: journal.mode || null,
+    seededFiles,
+    seededBytes,
+  })
+  writeAuditEvent('watcher', 'transfer_initial_backfill_guarded', {
+    mode: journal.mode || null,
+    seededFiles,
+    seededBytes,
+  })
+  updateHealth('watcher', {
+    transferInitialBackfillGuardedAt: new Date().toISOString(),
+    transferInitialBackfillGuardSeededFiles: seededFiles,
+    transferInitialBackfillGuardSeededBytes: seededBytes,
+  })
+}
+
 function pollingSignature(filePath: string): string | null {
   try {
     const stat = fs.statSync(filePath)
@@ -658,7 +770,7 @@ function createPollingWatcher(source: Source, basePath: string): { handle: Watch
   const scan = (eventForNewFiles: 'add' | 'change'): void => {
     if (closed) return
     const currentFiles = new Set<string>()
-    for (const filePath of listWatchFilesForSource(source, basePath)) {
+    for (const filePath of listWatchFilesForSource(source as WatchedSource, basePath)) {
       currentFiles.add(filePath)
       const signature = pollingSignature(filePath)
       if (!signature) continue
@@ -735,7 +847,7 @@ export function countExistingWatchSessions(): { totalSessions: number; bySource:
             stack.push(fullPath)
             continue
           }
-          if (!entry.isFile() || !watchPatternMatches(src, fullPath)) continue
+          if (!entry.isFile() || !watchPatternMatches(src as WatchedSource, fullPath)) continue
           const key = watcherStartupSessionKey(fullPath, src)
           sessions.add(key)
           sourceSessions.add(key)
@@ -1017,11 +1129,12 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
   const offsets = await loadWatcherOffsets(mode)
   offsetsPromise = Promise.resolve(offsets)
   const watchPaths = resolveWatchPaths()
+  await guardInitialBackfillAfterTransfer(mode, offsets, watchPaths)
   countExistingWatchFiles(watchPaths)
   const readyPromises: Promise<void>[] = []
 
   for (const [source, basePaths] of Object.entries(watchPaths)) {
-    const src = source as Source
+    const src = source as WatchedSource
     const pattern = GLOB_PATTERNS[src]
 
     for (const basePath of basePaths) {
@@ -1249,6 +1362,8 @@ async function processFile(
         lastNoopReason: 'file_size_at_or_below_offset',
         lastNoopFileSize: fileSize,
         lastNoopOffset: savedOffset,
+        lastErrorAt: null,
+        lastError: null,
       })
       return  // nothing new
     }
@@ -1316,7 +1431,7 @@ async function processFile(
       } catch (err) {
         parseError = err instanceof Error ? err.message : String(err)
       }
-      if (parseError === undefined) observeDrift(source, parsed, drift)
+      if (parseError === undefined) observeDrift(source as WatchedSource, parsed, drift)
       rawRecords.push({
         v: 1,
         source,
@@ -1419,7 +1534,16 @@ async function processFile(
       originalPath: filePath,
     })
     try {
-      await appendRawRecords(source, rawSessionUid, rawRecords)
+      const archiveSessionId = getCaptureSessionId() ?? getVaultSessionId()
+      if (!archiveSessionId) throw new Error('vault capture session missing')
+      await appendSourceArchiveChunk(archiveSessionId, {
+        source,
+        sessionUid: rawSessionUid,
+        sourcePath: filePath,
+        startOffset: savedOffset,
+        endOffset: batch.endOffset,
+        bytes: batch.buffer,
+      })
     } catch (err) {
       writeLog('error', 'watcher', 'raw_append_failed', {
         source,
@@ -1465,7 +1589,10 @@ async function processFile(
     updateHealth(`watcher:${source}`, {
       lastRawWriteAt: new Date().toISOString(),
       lastRawWriteCount: rawRecords.length,
+      lastRawArchiveBytes: batch.buffer.length,
       lastRawWriteUsedFallbackSession: usedFallbackRawSession,
+      lastErrorAt: null,
+      lastError: null,
     })
 
     // Advance offsets only after a successful raw + vault write.
@@ -1617,7 +1744,7 @@ async function processLine(
     if (result.sessionId && !state.sessionId) state.sessionId = result.sessionId
     if (result.sourceClient && !state.sourceClient) state.sourceClient = result.sourceClient
     if (result.appVersion && !state.appVersion) state.appVersion = result.appVersion
-    if (result.model && state.model === 'unknown') state.model = result.model
+    if (result.model) state.model = result.model
     if (result.cwd && !state.cwd) state.cwd = result.cwd
     if (result.message) {
       if (captureAttachments) {
@@ -1634,7 +1761,7 @@ async function processLine(
     const result = extractOpenclawLine(line)
     if (!result) return
     if (result.sessionId && !state.sessionId) state.sessionId = result.sessionId
-    if (result.model && state.model === 'unknown') state.model = result.model
+    if (result.model) state.model = result.model
     if (result.modelProvider) state.modelProvider = result.modelProvider
     if (result.cwd && !state.cwd) state.cwd = result.cwd
     if (result.message) {
@@ -1651,7 +1778,7 @@ async function processLine(
     if (result.sessionId && !state.sessionId) state.sessionId = result.sessionId
     if (result.sourceClient && !state.sourceClient) state.sourceClient = result.sourceClient
     if (result.appVersion && !state.appVersion) state.appVersion = result.appVersion
-    if (result.model && state.model === 'unknown') state.model = result.model
+    if (result.model) state.model = result.model
     if (result.cwd && !state.cwd) state.cwd = result.cwd
     if (result.message) {
       if (captureAttachments) {
@@ -1898,7 +2025,7 @@ export async function importBootstrapCaptureIntoVault(
             } catch (err) {
               parseError = err instanceof Error ? err.message : String(err)
             }
-            if (parseError === undefined) observeDrift(entry.source, parsed, drift)
+            if (parseError === undefined) observeDrift(entry.source as WatchedSource, parsed, drift)
             rawRecords.push({
               v: 1,
               source: entry.source,

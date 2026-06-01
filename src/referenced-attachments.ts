@@ -8,9 +8,9 @@ import type { RawRecord, Session, Source } from './types'
 import {
   getCaptureSessionId,
   getVaultSessionId,
+  forEachRawRecordBatch,
   loadSessions,
-  readRawRecords,
-  saveAttachment,
+  saveAttachmentFromStream,
 } from './store'
 import {
   decryptStateForSession,
@@ -27,11 +27,11 @@ const STATE_PREFIX = 'dmstate1:'
 const INDEX_VERSION = 2
 const MAX_REFERENCE_SCAN_CHARS = 256 * 1024
 const MAX_REFERENCES_PER_TEXT = 50
-const MAX_REFERENCED_FILE_BYTES = 100 * 1024 * 1024
+const MAX_REFERENCED_FILE_BYTES = positiveInt(process.env.DATAMOAT_REFERENCED_ATTACHMENT_MAX_FILE_MB, 100) * 1024 * 1024
 const MAX_BACKFILL_SESSIONS_PER_RUN = 5000
 const MAX_BACKFILL_RECORDS_PER_SESSION = 5000
 const MAX_QUEUE_BATCHES_PER_DRAIN = 25
-const MAX_BACKFILL_CONCURRENCY = Math.max(1, Math.min(4, Number(process.env.DATAMOAT_REFERENCED_ATTACHMENT_BACKFILL_CONCURRENCY || 3) || 3))
+const MAX_BACKFILL_CONCURRENCY = Math.max(1, Math.min(3, Number(process.env.DATAMOAT_REFERENCED_ATTACHMENT_BACKFILL_CONCURRENCY || 2) || 2))
 const AUTO_BACKFILL_DELAY_MS = positiveInt(process.env.DATAMOAT_REFERENCED_ATTACHMENT_AUTO_BACKFILL_DELAY_MS, 45000)
 const AUTO_BACKFILL_COOLDOWN_MS = positiveInt(process.env.DATAMOAT_REFERENCED_ATTACHMENT_AUTO_BACKFILL_COOLDOWN_MS, 6 * 60 * 60 * 1000)
 
@@ -575,10 +575,19 @@ export async function scanPreviousSessionsForReferencedAttachments(
       const session = sessionsToScan[nextSessionIndex]
       nextSessionIndex += 1
       try {
-        const rawRecords = (await readRawRecords(session.source, session.uid)).slice(0, MAX_BACKFILL_RECORDS_PER_SESSION)
-        const result = await backUpRawRecordReferences(index, session.source, session.uid, rawRecords)
-        index = result.index
-        if (!result.hadPermissionIssue) markSessionChecked(index, session)
+        let scannedRecords = 0
+        let hadPermissionIssue = false
+        await forEachRawRecordBatch(session.source, session.uid, async rawRecords => {
+          const remaining = MAX_BACKFILL_RECORDS_PER_SESSION - scannedRecords
+          if (remaining <= 0) return false
+          const limited = rawRecords.length > remaining ? rawRecords.slice(0, remaining) : rawRecords
+          scannedRecords += limited.length
+          const result = await backUpRawRecordReferences(index, session.source, session.uid, limited)
+          index = result.index
+          hadPermissionIssue = hadPermissionIssue || result.hadPermissionIssue
+          return scannedRecords < MAX_BACKFILL_RECORDS_PER_SESSION
+        })
+        if (!hadPermissionIssue) markSessionChecked(index, session)
       } catch (error) {
         writeLog('warn', 'referenced-attachments', 'session_scan_skipped', {
           source: session.source,
@@ -703,10 +712,18 @@ async function tryBackUpReferencedFile(filePath: string): Promise<{
   try {
     const stat = fs.statSync(filePath)
     if (!stat.isFile()) return { saved: null, permissionIssue: null }
-    if (stat.size <= 0 || stat.size > MAX_REFERENCED_FILE_BYTES) return { saved: null, permissionIssue: null }
+    if (stat.size <= 0) return { saved: null, permissionIssue: null }
+    if (stat.size > MAX_REFERENCED_FILE_BYTES) {
+      writeLog('info', 'referenced-attachments', 'referenced_file_skipped', {
+        reason: 'too_large',
+        size: stat.size,
+        maxBytes: MAX_REFERENCED_FILE_BYTES,
+        pathHash: crypto.createHash('sha256').update(filePath).digest('hex').slice(0, 16),
+      })
+      return { saved: null, permissionIssue: null }
+    }
     const mediaType = mediaTypeForPath(filePath)
-    const data = fs.readFileSync(filePath)
-    const attachmentId = await saveAttachment(data.toString('base64'), mediaType)
+    const attachmentId = await saveAttachmentFromStream(fs.createReadStream(filePath), mediaType)
     return {
       saved: {
         attachmentId,

@@ -1,7 +1,7 @@
 {
   "name": "datamoat",
-  "version": "2.0.3",
-  "description": "DataMoat backs up Claude CLI, Claude Desktop, Codex CLI, Codex app, OpenClaw, and Cursor work records into an encrypted local vault.",
+  "version": "2.0.4",
+  "description": "DataMoat imports ChatGPT exports and backs up Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw work records into an encrypted local vault.",
   "license": "BUSL-1.1",
   "homepage": "https://datamoat.org",
   "repository": {
@@ -31,16 +31,20 @@
     "smoke:auth-migration": "node scripts/auth-migration-smoke.js",
     "smoke:auth-options": "node scripts/auth-options-smoke.js",
     "smoke:transfer": "node scripts/transfer-smoke.js",
+    "smoke:vault-maintenance": "node scripts/vault-maintenance-smoke.js",
+    "smoke:source-archive": "node scripts/source-archive-smoke.js",
     "smoke:release-app": "node scripts/release-app-smoke.js",
     "smoke:codex-parser": "node scripts/codex-parser-smoke.js",
     "smoke:parser-reparse": "node scripts/parser-reparse-smoke.js",
+    "smoke:chatgpt-import": "node scripts/chatgpt-import-smoke.js",
     "smoke:skills-permissions": "node scripts/skills-backup-permission-smoke.js",
     "smoke:referenced-attachments": "node scripts/referenced-attachments-smoke.js",
     "github:traffic": "node scripts/github-traffic-report.js",
     "github:traffic:all": "node scripts/github-traffic-report.js",
     "github:growth": "node scripts/github-release-growth-check.js",
     "github:growth:chart": "node scripts/github-growth-chart.js",
-    "github:growth:image": "node scripts/github-growth-image.js"
+    "github:growth:image": "node scripts/github-growth-image.js",
+    "r2:downloads": "set -a; [ ! -f .env ] || . ./.env; [ ! -f .env.local ] || . ./.env.local; set +a; node scripts/r2-download-stats.js"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",

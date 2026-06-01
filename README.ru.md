@@ -2,7 +2,7 @@
 
 Язык: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
-[![Version](https://img.shields.io/badge/version-2.0.3-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.4-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -16,23 +16,24 @@
 [![Codex CLI](https://img.shields.io/badge/Codex%20CLI-supported-2563EB?style=flat-square)](#supported-today)
 [![OpenClaw](https://img.shields.io/badge/OpenClaw-supported-9333EA?style=flat-square)](#supported-today)
 [![Cursor](https://img.shields.io/badge/Cursor-supported-D8B640?style=flat-square)](#supported-today)
+[![ChatGPT export](https://img.shields.io/badge/ChatGPT%20export-ZIP%2Ffolder%20import-10B981?style=flat-square)](#supported-today)
 
 Официальный сайт: [https://datamoat.org](https://datamoat.org)
 GitHub репозиторий: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Экспортируйте и создавайте резервные копии всех данных, skills и вложений Claude, Codex, Cursor, DeepSeek, Qwen и OpenClaw." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
-> **Экспортируйте и создавайте резервные копии всех данных + skills + вложений Claude / Codex / Cursor / DeepSeek / Qwen.**
+> **Экспортируйте и создавайте резервные копии всех данных + skills + вложений ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen.**
 > DataMoat хранит вашу историю работы с AI локально и в зашифрованном виде, сохраняет исходные raw source records нетронутыми и создает normalized index для поиска, экспорта, повторного использования, handoff и private AI memory.
 >
 > **Ваши самые ценные будущие AI-данные уже исчезают.**
-> Скачайте DataMoat сейчас, чтобы увидеть, сколько истории работы Claude, Codex, Cursor, OpenClaw, DeepSeek и Qwen вы еще можете захватить.
+> Скачайте DataMoat сейчас, чтобы увидеть, сколько истории работы ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen и OpenClaw вы еще можете захватить.
 
 **Основной объем backup:** DataMoat делает backup поддерживаемых **skills + sessions + attachments** в один и тот же encrypted local memory archive. Skills сохраняются как полные snapshots папок, а не только как имена.
 
 **Люди и компании, которые владеют своими AI-данными, выиграют будущее.**
 
-DataMoat — это AI work history memory archive для людей и команд, работающих с Claude CLI, Claude Desktop, DeepSeek и Qwen через Claude Code GUI workflows, Codex CLI, Codex app, Cursor, OpenClaw и другие AI tools. Он сохраняет полный рабочий record: sessions, локально сохраненные thinking tokens и reasoning blocks при наличии, prompts, responses, tool output, files, attachments, metadata, содержимое skills folders и исходные source records на той же машине, чтобы ваша работа оставалась reviewable, protected, reusable и проще передавалась дальше.
+DataMoat — это AI work history memory archive для людей и команд, работающих с ChatGPT exports, Claude CLI, Claude Desktop, DeepSeek и Qwen через Claude Code GUI workflows, Codex CLI, Codex app, Cursor, OpenClaw и другие AI tools. Он сохраняет полный рабочий record: sessions, локально сохраненные thinking tokens и reasoning blocks при наличии, prompts, responses, tool output, files, attachments, metadata, содержимое skills folders и исходные source records на той же машине, чтобы ваша работа оставалась reviewable, protected, reusable и проще передавалась дальше.
 
 ![DataMoat sessions, skills backup и encrypted local memory archive UI](.github/assets/screenshot.png)
 
@@ -43,7 +44,7 @@ DataMoat хранит два слоя:
 - **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots и любые locally stored thinking tokens или reasoning blocks сохраняются максимально близко к source format.
 - **Normalized index:** records из разных tools переводятся в common schema, чтобы можно было искать, review, export, analyze, reuse и handoff работу между tools.
 
-**Поддерживаемые сегодня sources:** Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions на macOS, DeepSeek и Qwen sessions, когда они записываются local через Claude Code GUI workflows, поддерживаемые local OpenClaw session records и поддерживаемые local Cursor agent transcripts.
+**Поддерживаемые сегодня sources:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions на macOS, DeepSeek и Qwen sessions, когда они записываются local через Claude Code GUI workflows, поддерживаемые local OpenClaw session records и поддерживаемые local Cursor agent transcripts.
 **Больше data sources и platform releases находятся в roadmap:** поставьте star и watch этому repository, чтобы следить за новыми capture integrations и platform updates.
 
 ## Зачем Устанавливать DataMoat
@@ -152,7 +153,7 @@ Release downloads:
 
 Для Mac users сначала используйте signed и notarized packaged DMG: [Download DMG](https://datamoat.org/download/macos). Не начинайте с `git clone` на macOS, если user явно не хочет source install или packaged release недоступен.
 
-Вы можете попросить Claude CLI, Codex CLI или OpenClaw установить DataMoat, когда смотрите на target desktop.
+Вы можете попросить ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI или OpenClaw установить DataMoat, когда смотрите на target desktop.
 
 Typical prompt:
 
@@ -278,7 +279,7 @@ Live git source installs поддерживают in-place source updates. Packa
 
 DataMoat делает backup supported local transcript files, которые уже присутствуют на вашем device и уже доступны вам.
 
-Он не дает дополнительных прав на content или source services. Вы сами отвечаете за соблюдение terms, policies, plan restrictions и internal rules, которые применяются к Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor и любому другому source service, который вы используете.
+Он не дает дополнительных прав на content или source services. Вы сами отвечаете за соблюдение terms, policies, plan restrictions и internal rules, которые применяются к ChatGPT, Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor и любому другому source service, который вы используете.
 
 ## Enterprise
 
@@ -292,7 +293,7 @@ Enterprise deployment и management features находятся в roadmap. Бо
 
 ## License
 
-DataMoat распространяется под **Business Source License 1.1 (`BUSL-1.1`)** с **Additional Use Grant**.
+DataMoat is open-sourced под **Business Source License 1.1 (`BUSL-1.1`)** с **Additional Use Grant**.
 
 Это означает:
 

@@ -5,9 +5,14 @@ import * as readline from 'readline'
 import { Session, SessionsIndex, OffsetState, OffsetsIndex, Source, Message, RawRecord } from './types'
 import { normalizeSessionIdentity } from './session-identity'
 import {
+  forEachSourceArchiveRawRecordBatch,
+  readSourceArchiveRawRecords,
+} from './source-archive'
+import {
   VAULT_DIR,
   ATTACHMENTS_DIR,
   RAW_DIR,
+  RAW_ARCHIVE_DIR,
   SKILLS_BACKUP_DIR,
   SKILLS_BLOBS_DIR,
   SKILLS_MANIFESTS_DIR,
@@ -16,6 +21,7 @@ import {
   SESSIONS_FILE,
   PUBLIC_STATUS_FILE,
   ALL_SOURCES,
+  WATCHED_SOURCES,
 } from './config'
 import {
   decryptBytesForSession,
@@ -39,6 +45,8 @@ type PublicStatus = {
 const OFFSETS_SCHEMA_VERSION = 2
 const SESSIONS_SCHEMA_VERSION = 2
 const STATE_PREFIX = 'dmstate1:'
+const RAW_RECORD_STREAM_BATCH_LINES = 25
+const RAW_RECORD_STREAM_BATCH_BYTES = 8 * 1024 * 1024
 
 function ensurePrivateDir(dirPath: string): void {
   if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true, mode: 0o700 })
@@ -146,11 +154,13 @@ export function ensureDirs(): void {
     VAULT_DIR,
     ATTACHMENTS_DIR,
     RAW_DIR,
+    RAW_ARCHIVE_DIR,
     SKILLS_BACKUP_DIR,
     SKILLS_BLOBS_DIR,
     SKILLS_MANIFESTS_DIR,
     ...ALL_SOURCES.map(source => path.join(VAULT_DIR, source)),
     ...ALL_SOURCES.map(source => path.join(RAW_DIR, source)),
+    ...ALL_SOURCES.map(source => path.join(RAW_ARCHIVE_DIR, source)),
   ]
   let firstError: Error | null = null
   for (const dir of dirs) {
@@ -173,12 +183,28 @@ const EXT_MAP: Record<string, string> = {
   'image/jpg': 'jpg',
   'image/gif': 'gif',
   'image/webp': 'webp',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
+  'audio/mpeg': 'mp3',
+  'audio/wav': 'wav',
   'application/pdf': 'pdf',
+  'application/zip': 'zip',
+  'text/plain': 'txt',
+  'text/html': 'html',
+  'text/markdown': 'md',
+  'text/csv': 'csv',
+  'application/json': 'json',
 }
 
 const EXT_MIME: Record<string, string> = Object.fromEntries(
   Object.entries(EXT_MAP).map(([mime, ext]) => [ext, mime]),
 ) as Record<string, string>
+
+type AttachmentFileInfo = { path: string; ext: string; encrypted: 'single' | 'chunked' | false }
+
+const CHUNKED_ATTACHMENT_MAGIC = Buffer.from('dmattchunk1\n', 'utf8')
+const CHUNKED_ATTACHMENT_PLAINTEXT_BYTES = 2 * 1024 * 1024
 
 function validAttachmentId(id: string): boolean {
   return /^[a-f0-9]{64}$/i.test(id)
@@ -197,15 +223,83 @@ export async function saveAttachment(base64Data: string, mediaType: string): Pro
   return hash
 }
 
-function attachmentFileInfo(id: string): { path: string; ext: string; encrypted: boolean } | null {
+export async function saveAttachmentFromStream(readable: NodeJS.ReadableStream, mediaType: string): Promise<string> {
+  const sessionId = requireWriteSession()
+  const ext = EXT_MAP[mediaType] ?? 'bin'
+  ensurePrivateDir(ATTACHMENTS_DIR)
+  const tmpPath = path.join(ATTACHMENTS_DIR, `.attachment-${process.pid}-${crypto.randomBytes(6).toString('hex')}.dmchunk.tmp`)
+  const fd = fs.openSync(tmpPath, 'w', 0o600)
+  const hash = crypto.createHash('sha256')
+  let closed = false
+  let pending: Buffer<ArrayBufferLike> = Buffer.alloc(0)
+
+  const close = (): void => {
+    if (closed) return
+    closed = true
+    fs.closeSync(fd)
+  }
+
+  const writeEncryptedChunk = async (plaintext: Buffer): Promise<void> => {
+    if (plaintext.length === 0) return
+    const encrypted = await encryptBytesForSession(sessionId, plaintext)
+    const lengthPrefix = Buffer.alloc(4)
+    lengthPrefix.writeUInt32BE(encrypted.length, 0)
+    fs.writeSync(fd, lengthPrefix)
+    fs.writeSync(fd, encrypted)
+  }
+
+  try {
+    fs.writeSync(fd, CHUNKED_ATTACHMENT_MAGIC)
+    for await (const rawChunk of readable as AsyncIterable<Buffer | string>) {
+      const chunk = Buffer.isBuffer(rawChunk) ? rawChunk : Buffer.from(rawChunk)
+      hash.update(chunk)
+      let combined = pending.length > 0 ? Buffer.concat([pending, chunk]) : chunk
+      while (combined.length >= CHUNKED_ATTACHMENT_PLAINTEXT_BYTES) {
+        await writeEncryptedChunk(combined.subarray(0, CHUNKED_ATTACHMENT_PLAINTEXT_BYTES))
+        combined = combined.subarray(CHUNKED_ATTACHMENT_PLAINTEXT_BYTES)
+      }
+      pending = combined
+    }
+    await writeEncryptedChunk(pending)
+    try {
+      fs.fsyncSync(fd)
+    } catch {
+      /* non-fatal */
+    }
+    close()
+    const attachmentId = hash.digest('hex')
+    const filePath = path.join(ATTACHMENTS_DIR, `${attachmentId}.${ext}.dmchunk`)
+    if (fs.existsSync(filePath)) {
+      fs.rmSync(tmpPath, { force: true })
+    } else {
+      fs.renameSync(tmpPath, filePath)
+      try {
+        fs.chmodSync(filePath, 0o600)
+      } catch {
+        /* non-fatal */
+      }
+    }
+    return attachmentId
+  } catch (error) {
+    close()
+    fs.rmSync(tmpPath, { force: true })
+    throw error
+  }
+}
+
+function attachmentFileInfo(id: string): AttachmentFileInfo | null {
   if (!validAttachmentId(id)) return null
   const normalizedId = id.toLowerCase()
   try {
     const files = fs.readdirSync(ATTACHMENTS_DIR)
     for (const file of files) {
+      const chunkedMatch = file.match(new RegExp(`^${normalizedId}\\.([^.]+)\\.dmchunk$`, 'i'))
+      if (chunkedMatch) {
+        return { path: path.join(ATTACHMENTS_DIR, file), ext: chunkedMatch[1], encrypted: 'chunked' }
+      }
       const encryptedMatch = file.match(new RegExp(`^${normalizedId}\\.([^.]+)\\.dmenc$`, 'i'))
       if (encryptedMatch) {
-        return { path: path.join(ATTACHMENTS_DIR, file), ext: encryptedMatch[1], encrypted: true }
+        return { path: path.join(ATTACHMENTS_DIR, file), ext: encryptedMatch[1], encrypted: 'single' }
       }
       const legacyMatch = file.match(new RegExp(`^${normalizedId}\\.([^.]+)$`, 'i'))
       if (legacyMatch) {
@@ -218,13 +312,143 @@ function attachmentFileInfo(id: string): { path: string; ext: string; encrypted:
   return null
 }
 
+function readExact(fd: number, length: number): Buffer | null {
+  const buffer = Buffer.alloc(length)
+  let offset = 0
+  while (offset < length) {
+    const bytesRead = fs.readSync(fd, buffer, offset, length - offset, null)
+    if (bytesRead === 0) {
+      if (offset === 0) return null
+      throw new Error('unexpected end of attachment file')
+    }
+    offset += bytesRead
+  }
+  return buffer
+}
+
+async function forEachChunkedAttachment(
+  info: AttachmentFileInfo,
+  onPlaintext: (chunk: Buffer) => Promise<void> | void,
+): Promise<void> {
+  const sessionId = requireReadSession()
+  const fd = fs.openSync(info.path, 'r')
+  try {
+    const magic = readExact(fd, CHUNKED_ATTACHMENT_MAGIC.length)
+    if (!magic || !magic.equals(CHUNKED_ATTACHMENT_MAGIC)) throw new Error('invalid chunked attachment')
+    for (;;) {
+      const lengthPrefix = readExact(fd, 4)
+      if (!lengthPrefix) break
+      const encryptedLength = lengthPrefix.readUInt32BE(0)
+      if (encryptedLength <= 0) throw new Error('invalid chunked attachment length')
+      const encrypted = readExact(fd, encryptedLength)
+      if (!encrypted) throw new Error('truncated chunked attachment')
+      await onPlaintext(await decryptBytesForSession(sessionId, encrypted))
+    }
+  } finally {
+    fs.closeSync(fd)
+  }
+}
+
 export async function readAttachment(id: string): Promise<{ data: Buffer; mediaType: string } | null> {
   const info = attachmentFileInfo(id)
   if (!info) return null
   const mediaType = EXT_MIME[info.ext] ?? 'application/octet-stream'
+  if (info.encrypted === 'chunked') {
+    const chunks: Buffer[] = []
+    await forEachChunkedAttachment(info, chunk => {
+      chunks.push(chunk)
+    })
+    return { data: Buffer.concat(chunks), mediaType }
+  }
   const data = fs.readFileSync(info.path)
   if (!info.encrypted) return { data, mediaType }
   return { data: await decryptBytesForSession(requireReadSession(), data), mediaType }
+}
+
+export function attachmentMetadata(id: string): { mediaType: string; chunked: boolean } | null {
+  const info = attachmentFileInfo(id)
+  if (!info) return null
+  return {
+    mediaType: EXT_MIME[info.ext] ?? 'application/octet-stream',
+    chunked: info.encrypted === 'chunked',
+  }
+}
+
+async function writeBufferToWritable(writable: NodeJS.WritableStream, chunk: Buffer): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onError = (error: Error): void => {
+      cleanup()
+      reject(error)
+    }
+    const onDrain = (): void => {
+      cleanup()
+      resolve()
+    }
+    const cleanup = (): void => {
+      writable.removeListener('error', onError)
+      writable.removeListener('drain', onDrain)
+    }
+    writable.once('error', onError)
+    if (writable.write(chunk)) {
+      cleanup()
+      resolve()
+    } else {
+      writable.once('drain', onDrain)
+    }
+  })
+}
+
+export async function writeAttachmentToWritable(id: string, writable: NodeJS.WritableStream): Promise<{ mediaType: string } | null> {
+  const info = attachmentFileInfo(id)
+  if (!info) return null
+  const mediaType = EXT_MIME[info.ext] ?? 'application/octet-stream'
+  if (info.encrypted === 'chunked') {
+    await forEachChunkedAttachment(info, async chunk => {
+      await writeBufferToWritable(writable, chunk)
+    })
+    return { mediaType }
+  }
+  const attachment = await readAttachment(id)
+  if (!attachment) return null
+  await writeBufferToWritable(writable, attachment.data)
+  return { mediaType: attachment.mediaType }
+}
+
+export async function writeAttachmentToFile(id: string, destinationPath: string): Promise<{ mediaType: string } | null> {
+  const info = attachmentFileInfo(id)
+  if (!info) return null
+  const mediaType = EXT_MIME[info.ext] ?? 'application/octet-stream'
+  ensurePrivateDir(path.dirname(destinationPath))
+  if (info.encrypted !== 'chunked') {
+    const attachment = await readAttachment(id)
+    if (!attachment) return null
+    writePrivateBytes(destinationPath, attachment.data)
+    return { mediaType: attachment.mediaType }
+  }
+  const tmpPath = `${destinationPath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`
+  const fd = fs.openSync(tmpPath, 'w', 0o600)
+  try {
+    await forEachChunkedAttachment(info, chunk => {
+      fs.writeSync(fd, chunk)
+    })
+    try {
+      fs.fsyncSync(fd)
+    } catch {
+      /* non-fatal */
+    }
+  } catch (error) {
+    fs.closeSync(fd)
+    fs.rmSync(tmpPath, { force: true })
+    throw error
+  }
+  fs.closeSync(fd)
+  fs.renameSync(tmpPath, destinationPath)
+  try {
+    fs.chmodSync(destinationPath, 0o600)
+  } catch {
+    /* non-fatal */
+  }
+  return { mediaType }
 }
 
 async function decryptJsonLine<T>(line: string): Promise<T> {
@@ -389,10 +613,13 @@ export async function upsertSession(session: Session): Promise<void> {
 }
 
 export async function appendMessages(session: Session, messages: Message[]): Promise<void> {
-  if (messages.length === 0) return
   const filePath = path.join(VAULT_DIR, session.vaultPath)
   const dir = path.dirname(filePath)
   ensurePrivateDir(dir)
+  if (messages.length === 0) {
+    if (!fs.existsSync(filePath)) writePrivateText(filePath, '')
+    return
+  }
 
   const serialized = messages.map(message => JSON.stringify(message))
   const encrypted = await encryptLinesForSession(requireWriteSession(), serialized)
@@ -420,6 +647,35 @@ export function makeRawPath(source: Source, sessionUid: string): string {
   return path.join(source, `${sessionUid}.jsonl`)
 }
 
+function rawRecordDedupeKey(record: RawRecord): string {
+  return JSON.stringify({
+    sourcePath: record.sourcePath || '',
+    sourceByteOffset: record.sourceByteOffset ?? null,
+    rawHash: record.rawHash || '',
+    raw: record.raw ?? null,
+  })
+}
+
+function dedupeRawRecords(records: RawRecord[]): RawRecord[] {
+  const seen = new Set<string>()
+  const out: RawRecord[] = []
+  for (const record of records) {
+    const key = rawRecordDedupeKey(record)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(record)
+  }
+  return out
+}
+
+function parseRawRecordLine(line: string): RawRecord | null {
+  try {
+    return JSON.parse(line) as RawRecord
+  } catch {
+    return null
+  }
+}
+
 export async function appendRawRecords(source: Source, sessionUid: string, records: RawRecord[]): Promise<void> {
   if (records.length === 0) return
   const filePath = path.join(RAW_DIR, makeRawPath(source, sessionUid))
@@ -436,23 +692,107 @@ export async function appendRawRecords(source: Source, sessionUid: string, recor
   }
 }
 
+export async function replaceRawRecords(source: Source, sessionUid: string, records: RawRecord[]): Promise<void> {
+  const filePath = path.join(RAW_DIR, makeRawPath(source, sessionUid))
+  const dir = path.dirname(filePath)
+  ensurePrivateDir(dir)
+
+  const serialized = records.map(record => JSON.stringify(record))
+  const encrypted = serialized.length > 0
+    ? await encryptLinesForSession(requireWriteSession(), serialized)
+    : []
+  writePrivateText(filePath, encrypted.length > 0 ? `${encrypted.join('\n')}\n` : '')
+}
+
 export async function readRawRecords(source: Source, sessionUid: string): Promise<RawRecord[]> {
   const filePath = path.join(RAW_DIR, makeRawPath(source, sessionUid))
-  if (!fs.existsSync(filePath)) return []
+  const sessionId = getVaultSessionId()
+  const archiveRecords = sessionId ? await readSourceArchiveRawRecords(sessionId, source, sessionUid) : []
+  if (!fs.existsSync(filePath)) {
+    return archiveRecords
+  }
   const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean)
-  if (lines.length === 0) return []
+  if (lines.length === 0) {
+    return archiveRecords
+  }
 
   const decrypted = hasVaultSession() && !lines[0].startsWith('{')
     ? await decryptLinesForSession(requireReadSession(), lines)
     : lines
 
-  return decrypted.map(line => {
-    try {
-      return JSON.parse(line) as RawRecord
-    } catch {
-      return null
+  const legacyRecords = decrypted.map(parseRawRecordLine).filter((r): r is RawRecord => r !== null)
+  return dedupeRawRecords([...legacyRecords, ...archiveRecords])
+}
+
+export async function forEachRawRecordBatch(
+  source: Source,
+  sessionUid: string,
+  visitor: (records: RawRecord[]) => boolean | Promise<boolean | void> | void,
+  options: { batchLines?: number; batchBytes?: number } = {},
+): Promise<void> {
+  const filePath = path.join(RAW_DIR, makeRawPath(source, sessionUid))
+  const sessionId = getVaultSessionId()
+  const batchLines = Math.max(1, Math.floor(options.batchLines || RAW_RECORD_STREAM_BATCH_LINES))
+  const batchBytes = Math.max(1024, Math.floor(options.batchBytes || RAW_RECORD_STREAM_BATCH_BYTES))
+  const seen = new Set<string>()
+
+  const emitRecords = async (records: RawRecord[]): Promise<boolean> => {
+    if (records.length === 0) return true
+    const out: RawRecord[] = []
+    for (const record of records) {
+      const key = rawRecordDedupeKey(record)
+      if (seen.has(key)) continue
+      seen.add(key)
+      out.push(record)
     }
-  }).filter((r): r is RawRecord => r !== null)
+    if (out.length === 0) return true
+    return (await visitor(out)) !== false
+  }
+
+  if (fs.existsSync(filePath)) {
+    const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
+    const reader = readline.createInterface({ input: stream, crlfDelay: Infinity })
+    let encryptedLegacy: boolean | null = null
+    let lines: string[] = []
+    let bytes = 0
+
+    const flush = async (): Promise<boolean> => {
+      if (lines.length === 0) return true
+      const current = lines
+      lines = []
+      bytes = 0
+      const decrypted = encryptedLegacy
+        ? await decryptLinesForSession(requireReadSession(), current)
+        : current
+      return emitRecords(decrypted.map(parseRawRecordLine).filter((r): r is RawRecord => r !== null))
+    }
+
+    for await (const rawLine of reader) {
+      const line = rawLine.trim()
+      if (!line) continue
+      if (encryptedLegacy === null) encryptedLegacy = hasVaultSession() && !line.startsWith('{')
+      const lineBytes = Buffer.byteLength(line, 'utf8')
+      if (lines.length > 0 && (lines.length >= batchLines || bytes + lineBytes > batchBytes)) {
+        if (!(await flush())) {
+          reader.close()
+          stream.destroy()
+          return
+        }
+      }
+      lines.push(line)
+      bytes += lineBytes
+      if (lineBytes >= batchBytes && !(await flush())) {
+        reader.close()
+        stream.destroy()
+        return
+      }
+    }
+    if (!(await flush())) return
+  }
+
+  if (sessionId) {
+    await forEachSourceArchiveRawRecordBatch(sessionId, source, sessionUid, batchLines, emitRecords)
+  }
 }
 
 export async function readSessionMessages(session: Session): Promise<Message[]> {
@@ -592,7 +932,7 @@ function fileStartsWithPlaintextJsonLine(filePath: string): boolean {
 
 export async function encryptVaultFiles(): Promise<void> {
   if (!hasVaultSession()) return
-  for (const source of ALL_SOURCES) {
+  for (const source of WATCHED_SOURCES) {
     const dir = path.join(VAULT_DIR, source)
     if (!fs.existsSync(dir)) continue
     for (const file of fs.readdirSync(dir)) {

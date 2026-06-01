@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as http from 'http'
 import * as crypto from 'crypto'
+import { spawn } from 'child_process'
 import QRCode from 'qrcode'
 import {
   loadSessions,
@@ -11,7 +12,9 @@ import {
   readSessionMessagesPage,
   readRawRecords,
   forEachSessionMessageLineBatch,
-  readAttachment,
+  attachmentMetadata,
+  writeAttachmentToFile,
+  writeAttachmentToWritable,
   readPublicStatus,
   setVaultSession,
   encryptVaultFiles,
@@ -34,9 +37,10 @@ import {
   AUTH_SCHEMA_VERSION, deleteAuthConfig,
   backupAuthConfigForMigration, passwordHashNeedsMigration, retireRecoveryCodeFields,
 } from '../auth'
-import { authConfigHasTouchId, shouldExposeTouchIdUnlock } from '../auth-options'
+import { authConfigHasTouchId, shouldExposeTouchIdUnlock, touchIdFailureNeedsPasswordRefresh } from '../auth-options'
 import { IS_MAC, secureEnclaveStatus, backgroundCaptureSecretDelete } from '../keychain'
 import { updateHealth, writeAuditEvent, writeLog } from '../logging'
+import { scheduleVaultDuplicateMaintenance } from '../vault-maintenance'
 import { BootstrapImportProgress, getWatcherStartupProgress, importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from '../watcher'
 import { ensureBackgroundCaptureConfigured, startBackgroundCapture, stopBackgroundCapture } from '../background-capture'
 import {
@@ -96,6 +100,17 @@ import {
   verifyTransferredRootCanLoadSessions,
 } from '../transfer-import'
 import type { TransferMode } from '../transfer-types'
+import {
+  currentChatGptImportJob,
+  preflightChatGptExport,
+  readChatGptBranchMessages,
+  runChatGptExportImport,
+} from '../chatgpt-export'
+import {
+  readUiPreferences,
+  saveUiPreferences,
+  SUPPORTED_UI_LANGUAGES,
+} from '../ui-preferences'
 
 type SessionFlow =
   | 'touchid'
@@ -114,6 +129,53 @@ type PendingSetupState = {
   touchIdEnabled?: boolean
   password?: string
   totpEnrolled?: boolean
+}
+
+const OPEN_ATTACHMENT_EXTENSIONS: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'application/pdf': 'pdf',
+  'text/plain': 'txt',
+  'text/html': 'html',
+  'text/markdown': 'md',
+  'text/csv': 'csv',
+  'application/json': 'json',
+}
+
+function attachmentExtension(mediaType: string): string {
+  return OPEN_ATTACHMENT_EXTENSIONS[mediaType] || 'bin'
+}
+
+function sanitizeAttachmentFileName(value: unknown, fallback: string): string {
+  const name = typeof value === 'string' ? value.trim() : ''
+  const cleaned = name
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '_')
+    .replace(/\s+/g, ' ')
+    .slice(0, 120)
+    .trim()
+  return cleaned || fallback
+}
+
+function openPathWithSystem(filePath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const command = process.platform === 'darwin'
+      ? 'open'
+      : process.platform === 'win32'
+        ? 'cmd.exe'
+        : 'xdg-open'
+    const args = process.platform === 'win32'
+      ? ['/c', 'start', '', filePath]
+      : [filePath]
+    const child = spawn(command, args, { detached: true, stdio: 'ignore' })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
+  })
 }
 
 type SetupActivationProgress = {
@@ -811,6 +873,7 @@ async function activateVault(
     lastScanSkipReason: 'vault_activation_immediate_backfill_disabled',
   })
   scheduleReferencedAttachmentBackfillAfterUnlock('unlock-idle')
+  scheduleVaultDuplicateMaintenance('unlock-idle')
   updateHealth('daemon', {
     locked: false,
     unlockedAt: new Date().toISOString(),
@@ -1149,19 +1212,6 @@ function markTouchIdRepairNeeded(error: unknown): void {
   })
 }
 
-function touchIdNeedsPasswordRefresh(error: unknown): boolean {
-  const message = (error instanceof Error ? error.message : String(error)).toLowerCase()
-  return message.includes('secure enclave key missing')
-    || message.includes('secure enclave unwrap failed')
-    || message.includes('cryptotokenkit error -3')
-    || message.includes('unwrap_touchid did not respond')
-    || message.includes('touch id helper did not respond')
-    || message.includes('vault helper did not become ready')
-    || message.includes('vault helper failed to start')
-    || message.includes('vault helper exited')
-    || message.includes('vault helper restarted')
-}
-
 async function wrapAndVerifyTouchIdForSession(helperSessionId: string): Promise<string> {
   const blob = await wrapTouchIdForSession(helperSessionId)
   let verifiedSessionId: string | null = null
@@ -1244,9 +1294,19 @@ function scheduleTouchIdRepairAfterUnlock(
   helperSessionId: string,
   trigger: 'password_unlock' | 'password_totp_unlock' | 'mnemonic_unlock',
 ): void {
-  setTimeout(() => {
-    void repairTouchIdWrapAfterUnlock(helperSessionId, trigger)
-  }, 0)
+  const config = loadAuthConfig()
+  const needsRepair = !!config && (touchIdRepairNeeded || !!config.touchIdRefreshRequired)
+  if (!needsRepair) return
+  updateHealth('auth', {
+    touchIdRepairDeferred: true,
+    lastTouchIdRepairDeferredAt: new Date().toISOString(),
+    lastTouchIdRepairDeferredTrigger: trigger,
+  })
+  writeLog('info', 'auth', 'touchid_repair_deferred_after_unlock', {
+    trigger,
+    reason: touchIdRepairReason || 'Touch ID refresh required',
+    helperSessionPresent: !!helperSessionId,
+  })
 }
 
 async function loadTotpSecretForSession(config: LoadedAuthConfig, helperSessionId: string): Promise<string | null> {
@@ -1327,6 +1387,20 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     })
   })
 
+  app.get('/api/preferences', (_req, res) => {
+    res.json({
+      ...readUiPreferences(),
+      supportedLanguages: SUPPORTED_UI_LANGUAGES,
+    })
+  })
+
+  app.post('/api/preferences', (req, res) => {
+    res.json({
+      ...saveUiPreferences({ language: req.body?.language }),
+      supportedLanguages: SUPPORTED_UI_LANGUAGES,
+    })
+  })
+
   // ── Setup (first run only) ─────────────────────────────────────────────────
 
   app.get('/setup', (_req, res) => {
@@ -1358,6 +1432,11 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       done: false,
     })
     res.json(await setupInitPayload())
+  })
+
+  app.get('/api/setup/bootstrap-capture', (_req, res) => {
+    if (isSetupDone()) return res.json({ error: 'already setup' })
+    res.json({ bootstrapCapture: bootstrapCaptureSummary() })
   })
 
   app.get('/api/setup/progress', (_req, res) => {
@@ -1628,8 +1707,12 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     const config = loadAuthConfig()
     if (!config) return res.status(404).json({ error: 'config missing' })
     const touchIdStatus = await secureEnclaveStatus()
+    const configured = !!(config.touchIdEnabled || config.touchIdWrappedVaultKey)
+    const refreshRequired = configured && !!config.touchIdRefreshRequired && !!getVaultSessionId()
     res.json({
-      available: !(config.touchIdEnabled || config.touchIdWrappedVaultKey) && touchIdStatus.available,
+      available: (!configured || refreshRequired) && touchIdStatus.available,
+      configured,
+      refreshRequired,
       reason: touchIdStatus.reason,
     })
   })
@@ -1638,6 +1721,18 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     const config = loadAuthConfig()
     if (!config) return res.status(404).json({ error: 'config missing' })
     if (config.touchIdEnabled || config.touchIdWrappedVaultKey) {
+      if (config.touchIdRefreshRequired) {
+        const helperSessionId = getVaultSessionId()
+        if (!helperSessionId) {
+          return res.status(401).json({ error: 'Unlock with your master password first, then refresh Touch ID.' })
+        }
+        await repairTouchIdWrapAfterUnlock(helperSessionId, 'password_unlock')
+        const refreshedConfig = loadAuthConfig()
+        if (refreshedConfig?.touchIdRefreshRequired) {
+          return res.status(401).json({ error: 'Touch ID failed or was cancelled. Use your password for now.' })
+        }
+        return res.json({ ok: true, refreshed: true })
+      }
       return res.json({ ok: true, alreadyEnabled: true })
     }
     const touchIdStatus = await secureEnclaveStatus()
@@ -1649,17 +1744,27 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       return res.status(401).json({ error: 'Unlock the vault first, then try enabling Touch ID again.' })
     }
     try {
+      const touchIdWrappedVaultKey = await wrapAndVerifyTouchIdForSession(helperSessionId)
       config.touchIdEnabled = true
-      config.touchIdWrappedVaultKey = await wrapAndVerifyTouchIdForSession(helperSessionId)
+      config.touchIdWrappedVaultKey = touchIdWrappedVaultKey
+      delete config.touchIdRefreshRequired
+      delete config.touchIdRefreshRequiredAt
       saveAuthConfig(config)
       updateHealth('auth', {
         touchIdEnabled: true,
         touchIdEnabledAt: new Date().toISOString(),
+        lastTouchIdUpgradeError: null,
       })
       writeAuditEvent('auth', 'touchid_enabled_post_setup')
       return res.json({ ok: true })
-    } catch {
-      return res.status(401).json({ error: 'Touch ID failed or was cancelled' })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      writeLog('warn', 'auth', 'touchid_upgrade_failed', { error: message })
+      updateHealth('auth', {
+        touchIdUpgradeFailedAt: new Date().toISOString(),
+        lastTouchIdUpgradeError: message,
+      })
+      return res.status(401).json({ error: 'Touch ID failed or was cancelled. Use your password for now.' })
     }
   })
 
@@ -1895,7 +2000,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       return res.json(activationResponse(activation))
     } catch (error) {
       await lockVault()
-      if (touchIdNeedsPasswordRefresh(error)) {
+      if (touchIdFailureNeedsPasswordRefresh(error)) {
         markTouchIdRepairNeeded(error)
         return res.status(409).json({
           error: 'Use your master password once to refresh Touch ID on this Mac.',
@@ -1971,6 +2076,22 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     })
   })
 
+  app.get('/api/session/:id/branch/:branchId', requireAuth, async (req, res) => {
+    const sessions = await loadSessions()
+    const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
+    if (!session) return res.status(404).json({ error: 'not found' })
+    try {
+      const result = await readChatGptBranchMessages(session, req.params.branchId)
+      res.json({
+        session: normalizeSessionForUI(session, result.messages),
+        branch: result.branch,
+        messages: result.messages,
+      })
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : String(error) })
+    }
+  })
+
   app.get('/api/search', requireAuth, async (req, res) => {
     const startedAt = Date.now()
     const q = ((req.query.q as string) || '').toLowerCase().trim()
@@ -2002,13 +2123,39 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
   app.get('/api/attachment/:id', requireAuth, async (req, res) => {
     try {
-      const attachment = await readAttachment(req.params.id)
+      const attachment = attachmentMetadata(req.params.id)
       if (!attachment) return res.status(404).json({ error: 'not found' })
       res.setHeader('Content-Type', attachment.mediaType)
       res.setHeader('Cache-Control', 'no-store')
-      res.send(attachment.data)
+      const written = await writeAttachmentToWritable(req.params.id, res)
+      if (!written && !res.headersSent) return res.status(404).json({ error: 'not found' })
+      res.end()
     } catch {
-      res.status(500).json({ error: 'attachment unavailable' })
+      if (!res.headersSent) res.status(500).json({ error: 'attachment unavailable' })
+      else res.end()
+    }
+  })
+
+  app.post('/api/attachment/:id/open', requireAuth, async (req, res) => {
+    try {
+      const attachment = attachmentMetadata(req.params.id)
+      if (!attachment) return res.status(404).json({ error: 'not found' })
+      const ext = attachmentExtension(attachment.mediaType)
+      const fallbackName = `${req.params.id.slice(0, 16)}.${ext}`
+      let fileName = sanitizeAttachmentFileName(req.body?.name, fallbackName)
+      fileName = path.basename(fileName)
+      if (fileName === '.' || fileName === '..') fileName = fallbackName
+      if (!path.extname(fileName)) fileName = `${fileName}.${ext}`
+      const openDir = path.join(DATAMOAT_ROOT, 'state', 'open-attachments')
+      fs.mkdirSync(openDir, { recursive: true, mode: 0o700 })
+      const filePath = path.join(openDir, fileName)
+      const written = await writeAttachmentToFile(req.params.id, filePath)
+      if (!written) return res.status(404).json({ error: 'not found' })
+      await openPathWithSystem(filePath)
+      res.json({ ok: true })
+    } catch (error) {
+      writeLog('warn', 'attachment', 'open_failed', { error })
+      res.status(500).json({ error: 'attachment could not be opened' })
     }
   })
 
@@ -2190,6 +2337,32 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     }
   })
 
+  app.post('/api/chatgpt-export/import/preflight', requireAuth, async (req, res) => {
+    const sourcePath = String((req.body?.sourcePath || req.body?.path || '')).trim()
+    if (!sourcePath) return res.status(400).json({ error: 'ChatGPT export zip or folder path required' })
+    try {
+      res.json(await preflightChatGptExport(sourcePath))
+    } catch (error) {
+      res.status(400).json({ error: error instanceof Error ? error.message : String(error) })
+    }
+  })
+
+  app.get('/api/chatgpt-export/import/status', requireAuth, (_req, res) => {
+    res.json(currentChatGptImportJob() ?? { phase: 'idle', done: false })
+  })
+
+  app.post('/api/chatgpt-export/import/start', requireAuth, async (req, res) => {
+    const sourcePath = String((req.body?.sourcePath || req.body?.path || '')).trim()
+    if (!sourcePath) return res.status(400).json({ error: 'ChatGPT export zip or folder path required' })
+    try {
+      const job = await runChatGptExportImport(sourcePath)
+      res.json({ ok: job.phase === 'completed', job })
+    } catch (error) {
+      writeLog('error', 'chatgpt-export-import', 'start_failed', { error })
+      res.status(400).json({ error: error instanceof Error ? error.message : String(error), job: currentChatGptImportJob() })
+    }
+  })
+
   app.get('/api/update/status', requireAuth, (_req, res) => {
     res.json(loadUpdateState())
   })
@@ -2335,7 +2508,9 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
     res.setHeader('Pragma', 'no-cache')
     res.setHeader('Expires', '0')
-    res.sendFile(path.join(__dirname, 'index.html'))
+    const html = localizedIndexHTML()
+    if (html) res.send(html)
+    else res.sendFile(path.join(__dirname, 'index.html'))
   })
 
   const port = await findFreePort(UI_PORT_RANGE.min, UI_PORT_RANGE.max)
@@ -2876,9 +3051,27 @@ function findFreePort(min: number, max: number): Promise<number> {
 
 // ── Pages ──────────────────────────────────────────────────────────────────
 
+function initialUiLanguage(): string {
+  return readUiPreferences().language
+}
+
+function localizedIndexHTML(): string | null {
+  const language = initialUiLanguage()
+  try {
+    const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
+    return html
+      .replace('<html lang="en">', `<html lang="${language}">`)
+      .replace("let appLanguage = 'en'", `let appLanguage = ${JSON.stringify(language)}`)
+  } catch (error) {
+    writeLog('warn', 'ui', 'localized_index_html_failed', { error })
+    return null
+  }
+}
+
 function setupPageHTML(): string {
+  const language = initialUiLanguage()
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${language}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2910,6 +3103,38 @@ function setupPageHTML(): string {
   }
   .logo { font-family: var(--mono); font-size: 11px; letter-spacing: 4px; color: #23c6a9; text-transform: uppercase; margin-bottom: 14px; }
   .logo span { color: var(--muted); }
+  .language-row {
+    width: 100%;
+    max-width: 600px;
+    display: flex;
+    justify-content: flex-end;
+    margin: -4px 0 12px;
+  }
+  .language-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+  }
+  .language-btn {
+    min-width: 48px;
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: transparent;
+    color: #cbd6e2;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .language-btn.active {
+    background: #53d7d2;
+    color: #071112;
+  }
   .card {
     width: 100%;
     max-width: 600px;
@@ -3213,7 +3438,7 @@ function setupPageHTML(): string {
 </style>
 </head>
 <body>
-<div class="logo">data<span>moat</span> — first-run setup</div>
+<div class="logo">data<span>moat</span> — <span id="setup-logo-text">first-run setup</span></div>
 
 <div class="card">
   <div class="card-header">
@@ -3236,7 +3461,7 @@ function setupPageHTML(): string {
     <!-- Phase 1: unlock methods -->
     <div class="phase active" id="phase1">
       <div class="section" id="touchid-info-section" style="display:none">
-        <div class="info-box">
+        <div class="info-box" id="touchid-info-copy">
           If Touch ID is selected, this Mac can unlock the vault with biometric approval through <strong>Apple Secure Enclave</strong>.
         </div>
       </div>
@@ -3258,7 +3483,7 @@ function setupPageHTML(): string {
             </div>
             <div class="method-fields" id="password-fields">
               <div class="method-field">
-                <div class="section-label method-section-label">Master password</div>
+                <div class="section-label method-section-label" id="pw-label">Master password</div>
                 <div class="pw-input-wrap" id="password-input-wrap">
                   <input class="pw-input" id="pw-input" type="password" placeholder="Enter a strong password (min 8 chars)" autocomplete="new-password" />
                   <div class="pw-strength" id="pw-strength" style="width:0%"></div>
@@ -3266,7 +3491,7 @@ function setupPageHTML(): string {
                 </div>
               </div>
               <div class="method-field">
-                <div class="section-label method-section-label">Confirm password</div>
+                <div class="section-label method-section-label" id="pw-confirm-label">Confirm password</div>
                 <div class="pw-input-wrap" id="password-confirm-wrap">
                   <input class="pw-input" id="pw-confirm" type="password" placeholder="Re-enter password" autocomplete="new-password" />
                   <div class="error-msg" id="pw-error" style="display:none;"></div>
@@ -3341,13 +3566,13 @@ function setupPageHTML(): string {
     <!-- Phase 2: mnemonic -->
     <div class="phase" id="phase2">
       <div class="section">
-        <div class="section-label">24-word emergency recovery phrase</div>
+        <div class="section-label" id="recovery-label">24-word emergency recovery phrase</div>
         <div class="mnemonic-grid" id="mnemonic-grid">
           <div class="word-cell" style="grid-column: span 4; justify-content: center; color: var(--muted); font-size: 11px;">Generating…</div>
         </div>
       </div>
       <div class="section">
-        <div class="warning-box">
+        <div class="warning-box" id="recovery-warning">
           <strong>Write these down on paper.</strong> Shown <strong>exactly once</strong> — never stored.
           This phrase is randomly generated (unrelated to your password) and lets you regain access if all other methods fail.
           Store it physically (safe, safety deposit box). Never type it into a terminal or chat.
@@ -3356,7 +3581,7 @@ function setupPageHTML(): string {
       <div class="section">
         <label class="checkbox-row">
           <input type="checkbox" id="mnemonic-saved">
-          I have written down all 24 words on paper and stored them safely.
+          <span id="mnemonic-saved-copy">I have written down all 24 words on paper and stored them safely.</span>
         </label>
         <button class="btn btn-primary" id="btn-next2" data-off="1" type="button">Continue →</button>
       </div>
@@ -3365,12 +3590,12 @@ function setupPageHTML(): string {
     <!-- Phase 3: TOTP (optional) -->
     <div class="phase" id="phase3">
       <div class="section">
-        <div class="info-box">
+        <div class="info-box" id="totp-info-copy">
           If enabled, every login will require the 6-digit code after your chosen primary unlock method.
         </div>
       </div>
       <div class="section">
-        <div class="section-label">Two-factor authentication (optional)</div>
+        <div class="section-label" id="totp-label">Two-factor authentication (optional)</div>
         <div class="qr-block">
           <div class="qr-wrap">
             <img id="qr-img" src="" alt="QR Code loading…" />
@@ -3388,7 +3613,7 @@ function setupPageHTML(): string {
         </div>
       </div>
       <div class="section">
-        <div class="section-label">Confirm code from your app</div>
+        <div class="section-label" id="confirm-code-label">Confirm code from your app</div>
         <div class="totp-row">
           <input class="totp-input" id="setup-totp" type="text" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" />
           <button class="btn btn-primary" id="btn-next3" data-off="1" type="button">Verify →</button>
@@ -3403,19 +3628,19 @@ function setupPageHTML(): string {
     <!-- Phase 4: Final confirm -->
     <div class="phase" id="phase4">
       <div class="section">
-        <div class="section-label">Final recovery check</div>
-        <div class="warning-box">
+        <div class="section-label" id="final-label">Final recovery check</div>
+        <div class="warning-box" id="final-warning">
           Your 24-word recovery phrase is the emergency recovery method for this vault. Keep it somewhere private and offline.
         </div>
       </div>
       <div class="section final-check-list">
         <label class="checkbox-row">
           <input type="checkbox" class="final-check" onchange="checkFinal()">
-          I have saved the 24-word recovery phrase in a secure location.
+          <span id="final-saved-copy">I have saved the 24-word recovery phrase in a secure location.</span>
         </label>
         <label class="checkbox-row">
           <input type="checkbox" class="final-check" onchange="checkFinal()">
-          I understand: if I lose my unlock methods and the 24-word phrase, my vault cannot be recovered.
+          <span id="final-understand-copy">I understand: if I lose my unlock methods and the 24-word phrase, my vault cannot be recovered.</span>
         </label>
       </div>
       <button class="btn btn-success" id="btn-activate" data-off="1" type="button">Activate DataMoat</button>
@@ -3451,6 +3676,7 @@ let _touchIdUserTouched = false;
 let _touchIdRefreshAttempts = 0;
 let _touchIdRefreshTimer = 0;
 let _setupTransferAuthMode = 'password';
+let _bootstrapCaptureTimer = 0;
 function esc(s) {
   return String(s || '').replace(/[&<>\"']/g, ch => ({ '&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;', \"'\":'&#39;' }[ch]));
 }
@@ -3473,6 +3699,425 @@ function apiFetch(url, options) {
     }
   }
   return fetch(url, opts)
+}
+
+function renderBootstrapCaptureBanner(summary) {
+  if (!summary || !summary.enabled) return;
+  const banner = document.getElementById('bootstrap-capture-banner');
+  const copy = document.getElementById('bootstrap-capture-copy');
+  if (!banner || !copy) return;
+  const remoteNoScreen = summary.requestedBy === 'remote-no-screen';
+  const files = Number(summary.entries || 0);
+  const detail = files > 0
+    ? String(files) + setupTr('captureFiles')
+    : setupTr('captureWaiting');
+  banner.style.display = '';
+  copy.innerHTML = '<strong>' + esc(remoteNoScreen ? setupTr('noScreenTitle') : setupTr('captureTitle')) + '</strong><span>' + esc(detail) + '</span>';
+}
+
+function startBootstrapCaptureRefresh(initialSummary) {
+  renderBootstrapCaptureBanner(initialSummary);
+  if (!initialSummary || !initialSummary.enabled || _bootstrapCaptureTimer) return;
+  _bootstrapCaptureTimer = window.setInterval(async () => {
+    try {
+      const r = await apiFetch('/api/setup/bootstrap-capture');
+      const d = await r.json();
+      renderBootstrapCaptureBanner(d.bootstrapCapture);
+    } catch {}
+  }, 2000);
+}
+
+const setupText = {
+  en: {
+    logo: 'first-run setup',
+    stepBadge: 'STEP ',
+    of: ' / ',
+    tab1: 'Unlock',
+    tab2: 'Recovery',
+    tab3: 'Authenticator',
+    tab4: 'Final Step',
+    step1: 'Choose unlock methods',
+    step2: 'Save recovery phrase',
+    step3: 'Two-factor authentication',
+    step4: 'Final check',
+    methodsLabelMac: 'Choose at least one local unlock method to enable',
+    methodsLabelPassword: 'Set a local password to unlock this vault',
+    passwordTitle: 'Master password',
+    passwordCopy: 'Stored as a verifier hash and used to unwrap a password-protected copy of the vault key.',
+    passwordRequired: 'Required',
+    passwordOn: 'On',
+    passwordOff: 'Off',
+    touchTitle: 'Enable Touch ID on this Mac',
+    touchInfo: 'If Touch ID is selected, this Mac can unlock the vault with biometric approval through <strong>Apple Secure Enclave</strong>.',
+    touchReady: 'Daily unlock on this Mac using <strong>Apple Secure Enclave</strong>. The Touch ID private key stays inside Apple hardware and is used to release vault access on this Mac only.',
+    touchUnavailable: 'Touch ID with <strong>Apple Secure Enclave</strong> is not available on this Mac, so this option is disabled.',
+    touchUnavailableNow: 'Touch ID with <strong>Apple Secure Enclave</strong> is unavailable right now.',
+    pwLabel: 'Master password',
+    pwConfirmLabel: 'Confirm password',
+    pwPlaceholder: 'Enter a strong password (min 8 chars)',
+    pwConfirmPlaceholder: 'Re-enter password',
+    pwHintEmpty: 'Requires: 8+ chars, uppercase, lowercase, number',
+    pwDisabled: 'Password unlock disabled for this vault',
+    pwMissing: 'Missing: ',
+    pwStrong: 'Strong password',
+    pwOk: 'Password ok',
+    transferEntryTitle: 'Restore from an existing DataMoat folder',
+    transferEntryCopy: 'Already have a DataMoat backup or another computer\\'s DataMoat folder? Select it here instead of creating a new empty vault.',
+    chooseBackup: 'Choose backup folder',
+    transferTitle: 'Restore existing DataMoat data',
+    transferCopy: 'Choose the copied DataMoat data folder. After it checks successfully, unlock the old vault with its old password or old 24-word phrase.',
+    waiting: 'waiting',
+    noFolder: 'No folder selected.',
+    transferPathPlaceholder: '/path/to/copied/.datamoat',
+    chooseDifferent: 'Choose different folder',
+    back: 'Back',
+    oldVaultUnlock: 'Old vault unlock',
+    oldPassword: 'Old password',
+    oldPhrase: 'Old 24-word phrase',
+    oldPasswordPlaceholder: 'Old master password',
+    oldPhrasePlaceholder: 'Old 24-word recovery phrase',
+    restoreFolder: 'Restore this DataMoat folder',
+    continue: 'Continue →',
+    recoveryLabel: '24-word emergency recovery phrase',
+    generating: 'Generating…',
+    recoveryWarning: '<strong>Write these down on paper.</strong> Shown <strong>exactly once</strong> — never stored. This phrase is randomly generated (unrelated to your password) and lets you regain access if all other methods fail. Store it physically (safe, safety deposit box). Never type it into a terminal or chat.',
+    recoverySaved: 'I have written down all 24 words on paper and stored them safely.',
+    totpInfo: 'If enabled, every login will require the 6-digit code after your chosen primary unlock method.',
+    totpLabel: 'Two-factor authentication (optional)',
+    qrAlt: 'QR Code loading…',
+    totpSteps: '<ol><li>Open <strong>Google Authenticator</strong> on your phone</li><li>Tap <strong>+</strong> → <strong>Scan QR code</strong></li><li>Scan the QR code on the left</li><li>Enter the 6-digit code below to confirm</li></ol><div class="secret-label" style="margin-top:14px;">Manual entry key:</div><div class="secret-box" id="totp-secret-display">loading…</div>',
+    loading: 'loading…',
+    confirmCode: 'Confirm code from your app',
+    verify: 'Verify →',
+    skipTotp: 'Skip 2-step verification (can add later)',
+    finalLabel: 'Final recovery check',
+    finalWarning: 'Your 24-word recovery phrase is the emergency recovery method for this vault. Keep it somewhere private and offline.',
+    finalSaved: 'I have saved the 24-word recovery phrase in a secure location.',
+    finalUnderstand: 'I understand: if I lose my unlock methods and the 24-word phrase, my vault cannot be recovered.',
+    activate: 'Activate DataMoat',
+    activateStep: 'Starting setup',
+    activateLabel: 'Initialising vault…',
+    activateDetail: 'This first scan runs once and stays local.',
+    noScreenTitle: 'No-screen capture is running',
+    captureTitle: 'Capture-before-setup is running',
+    captureFiles: ' files are already protected before setup. Finish setup here to import them into the vault.',
+    captureWaiting: 'Capture is armed and waiting for supported local records before setup. Finish setup on this desktop.',
+    chooseOne: 'Choose at least one unlock method.',
+    enterPassword: 'Enter a password or turn off password unlock.',
+    passwordRules: 'Password must include 8+ chars, uppercase, lowercase, and a number.',
+    passwordMismatch: 'Passwords do not match',
+    verifying: 'Verifying…',
+  },
+  'zh-CN': {
+    logo: '首次设置',
+    stepBadge: '步骤 ',
+    of: ' / ',
+    tab1: '解锁',
+    tab2: '恢复',
+    tab3: '验证器',
+    tab4: '最后',
+    step1: '选择解锁方式',
+    step2: '保存恢复短语',
+    step3: '双重验证',
+    step4: '最终确认',
+    methodsLabelMac: '至少选择一个本机解锁方式',
+    methodsLabelPassword: '设置本机密码来解锁此保险库',
+    passwordTitle: '主密码',
+    passwordCopy: '会以验证哈希保存，用来解开受密码保护的保险库密钥。',
+    passwordRequired: '必须',
+    passwordOn: '开',
+    passwordOff: '关',
+    touchTitle: '在这台 Mac 启用 Touch ID',
+    touchInfo: '如果选择 Touch ID，这台 Mac 可以通过 <strong>Apple Secure Enclave</strong> 的生物识别批准来解锁保险库。',
+    touchReady: '这台 Mac 可通过 <strong>Apple Secure Enclave</strong> 日常解锁。Touch ID 私钥只会留在 Apple 硬件内，只在这台 Mac 释放保险库存取权。',
+    touchUnavailable: '这台 Mac 目前不能使用 <strong>Apple Secure Enclave</strong> Touch ID，所以此选项已停用。',
+    touchUnavailableNow: '<strong>Apple Secure Enclave</strong> Touch ID 暂时不可用。',
+    pwLabel: '主密码',
+    pwConfirmLabel: '确认密码',
+    pwPlaceholder: '输入高强度密码（至少 8 个字符）',
+    pwConfirmPlaceholder: '再次输入密码',
+    pwHintEmpty: '需要：8+ 字符、大写、小写、数字',
+    pwDisabled: '此保险库已停用密码解锁',
+    pwMissing: '尚缺：',
+    pwStrong: '密码强度高',
+    pwOk: '密码可以',
+    transferEntryTitle: '从现有 DataMoat 文件夹恢复',
+    transferEntryCopy: '如果你已有 DataMoat 备份或另一台电脑的 DataMoat 文件夹，可在这里选择，不需要建立空保险库。',
+    chooseBackup: '选择备份文件夹',
+    transferTitle: '恢复现有 DataMoat 数据',
+    transferCopy: '选择已复制的 DataMoat 数据文件夹。检查成功后，用旧密码或旧 24 词恢复短语解锁旧保险库。',
+    waiting: '等待中',
+    noFolder: '未选择文件夹。',
+    transferPathPlaceholder: '/path/to/copied/.datamoat',
+    chooseDifferent: '选择其他文件夹',
+    back: '返回',
+    oldVaultUnlock: '旧保险库解锁',
+    oldPassword: '旧密码',
+    oldPhrase: '旧 24 词短语',
+    oldPasswordPlaceholder: '旧主密码',
+    oldPhrasePlaceholder: '旧 24 词恢复短语',
+    restoreFolder: '恢复这个 DataMoat 文件夹',
+    continue: '继续 →',
+    recoveryLabel: '24 词紧急恢复短语',
+    generating: '生成中…',
+    recoveryWarning: '<strong>请写在纸上。</strong>只会显示 <strong>一次</strong>，不会保存。这组短语是随机生成，和密码无关；当其他方式失效时可以帮你取回访问权。请实体保存，不要输入到 terminal 或 chat。',
+    recoverySaved: '我已把 24 个词写在纸上并安全保存。',
+    totpInfo: '启用后，每次登录都需要先用主要解锁方式，再输入 6 位数验证码。',
+    totpLabel: '双重验证（可选）',
+    qrAlt: 'QR Code 加载中…',
+    totpSteps: '<ol><li>在手机打开 <strong>Google Authenticator</strong></li><li>按 <strong>+</strong> → <strong>扫描 QR code</strong></li><li>扫描左边 QR code</li><li>在下方输入 6 位数验证码确认</li></ol><div class="secret-label" style="margin-top:14px;">手动输入 key：</div><div class="secret-box" id="totp-secret-display">加载中…</div>',
+    loading: '加载中…',
+    confirmCode: '确认 app 内的验证码',
+    verify: '验证 →',
+    skipTotp: '跳过双重验证（之后可再加入）',
+    finalLabel: '最终恢复检查',
+    finalWarning: '24 词恢复短语是此保险库的紧急恢复方式。请离线、私密保存。',
+    finalSaved: '我已把 24 词恢复短语存放在安全位置。',
+    finalUnderstand: '我明白：如果失去所有解锁方式和 24 词短语，保险库将无法恢复。',
+    activate: '启用 DataMoat',
+    activateStep: '开始设置',
+    activateLabel: '初始化保险库…',
+    activateDetail: '首次扫描只会执行一次，数据留在本机。',
+    noScreenTitle: '无画面捕获正在运行',
+    captureTitle: '设置前捕获正在运行',
+    captureFiles: ' 个文件已在设置前受保护。请在这里完成设置并导入保险库。',
+    captureWaiting: '捕获已准备好，等待设置前的本机记录。请在这台电脑完成设置。',
+    chooseOne: '请至少选择一个解锁方式。',
+    enterPassword: '请输入密码，或关闭密码解锁。',
+    passwordRules: '密码必须有 8+ 字符、大写、小写和数字。',
+    passwordMismatch: '两次密码不一致',
+    verifying: '验证中…',
+  },
+  ja: {
+    logo: '初回セットアップ',
+    stepBadge: '手順 ',
+    of: ' / ',
+    tab1: '解除',
+    tab2: '復旧',
+    tab3: '認証アプリ',
+    tab4: '最終確認',
+    step1: '解除方法を選択',
+    step2: '復旧フレーズを保存',
+    step3: '2要素認証',
+    step4: '最終確認',
+    methodsLabelMac: 'ローカル解除方法を少なくとも1つ選択してください',
+    methodsLabelPassword: 'この vault を解除するローカルパスワードを設定',
+    passwordTitle: 'マスターパスワード',
+    passwordCopy: '検証用ハッシュとして保存され、パスワードで保護された vault key を解除します。',
+    passwordRequired: '必須',
+    passwordOn: 'オン',
+    passwordOff: 'オフ',
+    touchTitle: 'この Mac で Touch ID を有効化',
+    touchInfo: 'Touch ID を選択すると、この Mac は <strong>Apple Secure Enclave</strong> の生体認証で vault を解除できます。',
+    touchReady: 'この Mac では <strong>Apple Secure Enclave</strong> により Touch ID で日常的に解除できます。秘密鍵は Apple ハードウェア内に留まります。',
+    touchUnavailable: 'この Mac では <strong>Apple Secure Enclave</strong> Touch ID が使えないため、この項目は無効です。',
+    touchUnavailableNow: '<strong>Apple Secure Enclave</strong> Touch ID は現在利用できません。',
+    pwLabel: 'マスターパスワード',
+    pwConfirmLabel: 'パスワード確認',
+    pwPlaceholder: '強いパスワードを入力（8文字以上）',
+    pwConfirmPlaceholder: 'もう一度入力',
+    pwHintEmpty: '必要条件：8文字以上、大文字、小文字、数字',
+    pwDisabled: 'この vault ではパスワード解除が無効です',
+    pwMissing: '不足：',
+    pwStrong: '強いパスワード',
+    pwOk: '使用可能なパスワード',
+    transferEntryTitle: '既存の DataMoat フォルダから復元',
+    transferEntryCopy: 'DataMoat バックアップまたは別PCの DataMoat フォルダがある場合は、空の vault を作成せずここで選択できます。',
+    chooseBackup: 'バックアップフォルダを選択',
+    transferTitle: '既存の DataMoat データを復元',
+    transferCopy: 'コピー済みの DataMoat データフォルダを選択します。確認後、古いパスワードまたは24語フレーズで旧 vault を解除します。',
+    waiting: '待機中',
+    noFolder: 'フォルダ未選択。',
+    transferPathPlaceholder: '/path/to/copied/.datamoat',
+    chooseDifferent: '別のフォルダを選択',
+    back: '戻る',
+    oldVaultUnlock: '旧 vault の解除',
+    oldPassword: '旧パスワード',
+    oldPhrase: '旧24語フレーズ',
+    oldPasswordPlaceholder: '旧マスターパスワード',
+    oldPhrasePlaceholder: '旧24語復旧フレーズ',
+    restoreFolder: 'この DataMoat フォルダを復元',
+    continue: '続ける →',
+    recoveryLabel: '24語の緊急復旧フレーズ',
+    generating: '生成中…',
+    recoveryWarning: '<strong>紙に書き留めてください。</strong><strong>一度だけ</strong>表示され、保存されません。このフレーズはランダム生成で、他の方法が失われた時にアクセスを復旧できます。物理的に安全な場所へ保管してください。',
+    recoverySaved: '24語すべてを紙に書き、安全に保管しました。',
+    totpInfo: '有効にすると、毎回ログイン時に主要な解除方法の後で6桁コードが必要です。',
+    totpLabel: '2要素認証（任意）',
+    qrAlt: 'QRコード読み込み中…',
+    totpSteps: '<ol><li>スマートフォンで <strong>Google Authenticator</strong> を開く</li><li><strong>+</strong> → <strong>QRコードをスキャン</strong></li><li>左の QR コードをスキャン</li><li>下に6桁コードを入力して確認</li></ol><div class="secret-label" style="margin-top:14px;">手動入力キー：</div><div class="secret-box" id="totp-secret-display">読み込み中…</div>',
+    loading: '読み込み中…',
+    confirmCode: 'アプリのコードを確認',
+    verify: '確認 →',
+    skipTotp: '2要素認証をスキップ（後で追加可能）',
+    finalLabel: '最終復旧確認',
+    finalWarning: '24語の復旧フレーズはこの vault の緊急復旧方法です。非公開でオフライン保管してください。',
+    finalSaved: '24語の復旧フレーズを安全な場所に保存しました。',
+    finalUnderstand: '解除方法と24語フレーズを失うと vault は復旧できないことを理解しました。',
+    activate: 'DataMoat を有効化',
+    activateStep: 'セットアップ開始',
+    activateLabel: 'vault を初期化中…',
+    activateDetail: '初回スキャンは一度だけ実行され、データはローカルに残ります。',
+    noScreenTitle: '画面なしキャプチャ実行中',
+    captureTitle: 'セットアップ前キャプチャ実行中',
+    captureFiles: ' 件のファイルはセットアップ前に保護済みです。ここでセットアップを完了し vault に取り込みます。',
+    captureWaiting: 'キャプチャは準備済みです。セットアップ前のローカル記録を待っています。この端末でセットアップを完了してください。',
+    chooseOne: '解除方法を少なくとも1つ選択してください。',
+    enterPassword: 'パスワードを入力するか、パスワード解除をオフにしてください。',
+    passwordRules: 'パスワードには8文字以上、大文字、小文字、数字が必要です。',
+    passwordMismatch: 'パスワードが一致しません',
+    verifying: '確認中…',
+  },
+};
+const zhTwPhrases = [
+  ['简体中文', '繁體中文'], ['首次设置', '首次設定'], ['步骤', '步驟'], ['最后', '最後'], ['最终', '最終'],
+  ['解锁', '解鎖'], ['恢复', '恢復'], ['验证', '驗證'], ['选择', '選擇'], ['本机', '本機'],
+  ['设置', '設定'], ['主密码', '主密碼'], ['密码', '密碼'], ['验证哈希', '驗證雜湊'], ['保存', '儲存'],
+  ['保护', '保護'], ['备份', '備份'], ['电脑', '電腦'], ['这里', '這裡'], ['这个', '這個'],
+  ['这台 Mac', '這部 Mac'], ['这台电脑', '這部電腦'], ['数据', '數據'], ['复制', '複製'],
+  ['检查', '檢查'], ['成功后', '成功後'], ['旧', '舊'], ['24 词', '24 字'], ['个词', '個字'],
+  ['文件夹', '資料夾'], ['文件', '檔案'], ['导入', '匯入'], ['访问权', '存取權'], ['硬件', '硬件'], ['实体', '實體'],
+  ['登录', '登入'], ['启用', '啟用'], ['验证码', '驗證碼'], ['加载', '載入'], ['跳过', '略過'],
+  ['之后', '之後'], ['离线', '離線'], ['将', '將'], ['运行', '運行'], ['准备好', '準備好'],
+  ['请输入', '請輸入'], ['关闭', '關閉'], ['大写', '大楷'], ['小写', '小楷'], ['数字', '數字'],
+  ['保险库密钥', '保險庫密鑰'], ['保险库', '保險庫'], ['通过', '透過'], ['一个', '一個'], [' 个', ' 個'], ['权', '權'],
+  ['字符', '字元'], ['安全保存', '安全保存'], ['再次输入', '再次輸入'], ['输入', '輸入'],
+  ['打开', '打開'], ['扫描', '掃描'], ['手动', '手動'], ['确认', '確認'], ['继续', '繼續'],
+  ['无画面', '無畫面'], ['捕获', '擷取'], ['识别', '識別'], ['批准', '批准'],
+];
+function toTraditionalText(text) {
+  return zhTwPhrases.reduce((value, pair) => value.split(pair[0]).join(pair[1]), String(text || ''));
+}
+setupText['zh-TW'] = Object.fromEntries(Object.entries(setupText['zh-CN']).map(([key, value]) => [key, toTraditionalText(value)]));
+let setupLanguage = ${JSON.stringify(language)};
+let setupStep = 1;
+function normalizeSetupLanguage(value) {
+  const code = String(value || '').replace('_', '-').toLowerCase();
+  if (code.startsWith('zh') || code.startsWith('yue')) {
+    if (/(^|-)hant($|-)|(^|-)tw($|-)|(^|-)hk($|-)|(^|-)mo($|-)/.test(code)) return 'zh-TW';
+    if (/(^|-)hans($|-)|(^|-)cn($|-)|(^|-)sg($|-)/.test(code)) return 'zh-CN';
+    return 'en';
+  }
+  if (code === 'ja' || code.startsWith('ja-') || code === 'jp') return 'ja';
+  return 'en';
+}
+function detectSetupLanguage() {
+  const languages = Array.isArray(navigator.languages) && navigator.languages.length > 0
+    ? navigator.languages
+    : [navigator.language || ''];
+  for (const raw of languages) {
+    const code = String(raw || '').replace('_', '-');
+    if (/^(zh|yue)(-|$)/i.test(code) && /(^|-)hant($|-)|(^|-)tw($|-)|(^|-)hk($|-)|(^|-)mo($|-)/i.test(code)) return 'zh-TW';
+    if (/^(zh|yue)(-|$)/i.test(code) && /(^|-)hans($|-)|(^|-)cn($|-)|(^|-)sg($|-)/i.test(code)) return 'zh-CN';
+    if (/^ja/i.test(code)) return 'ja';
+    if (/^en/i.test(code)) return 'en';
+  }
+  return 'en';
+}
+function setupTr(key) {
+  return (setupText[setupLanguage] && setupText[setupLanguage][key]) || setupText.en[key] || key;
+}
+function setupSetText(id, key) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = setupTr(key);
+}
+function setupSetHTML(selector, key) {
+  const el = document.querySelector(selector);
+  if (el) el.innerHTML = setupTr(key);
+}
+function setupSetPlaceholder(id, key) {
+  const el = document.getElementById(id);
+  if (el) el.placeholder = setupTr(key);
+}
+function applySetupLanguage() {
+  document.documentElement.lang = setupLanguage === 'zh-CN' ? 'zh-CN' : setupLanguage;
+  document.querySelectorAll('#setup-language-switch [data-language]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.language === setupLanguage);
+  });
+  setupSetText('setup-logo-text', 'logo');
+  setupSetText('tab1', 'tab1');
+  setupSetText('tab2', 'tab2');
+  setupSetText('tab3', 'tab3');
+  setupSetText('tab4', 'tab4');
+  setupSetText('unlock-methods-label', _touchIdAvailable ? 'methodsLabelMac' : 'methodsLabelPassword');
+  setupSetText('btn-setup-transfer-start', 'chooseBackup');
+  setupSetText('btn-setup-transfer-select', 'chooseDifferent');
+  setupSetText('btn-setup-transfer-cancel', 'back');
+  setupSetText('setup-transfer-auth-password', 'oldPassword');
+  setupSetText('setup-transfer-auth-phrase', 'oldPhrase');
+  setupSetText('btn-setup-transfer-import', 'restoreFolder');
+  setupSetText('btn-next1', 'continue');
+  setupSetText('btn-next2', 'continue');
+  setupSetText('btn-next3', 'verify');
+  setupSetText('btn-skip-totp', 'skipTotp');
+  setupSetText('btn-activate', 'activate');
+  setupSetText('activate-step', 'activateStep');
+  setupSetText('activate-label', 'activateLabel');
+  setupSetText('activate-detail', 'activateDetail');
+  setupSetPlaceholder('pw-input', 'pwPlaceholder');
+  setupSetPlaceholder('pw-confirm', 'pwConfirmPlaceholder');
+  setupSetPlaceholder('setup-transfer-folder', 'transferPathPlaceholder');
+  setupSetPlaceholder('setup-transfer-password', 'oldPasswordPlaceholder');
+  setupSetPlaceholder('setup-transfer-mnemonic', 'oldPhrasePlaceholder');
+  setupSetHTML('#method-password .method-title', 'passwordTitle');
+  setupSetHTML('#method-password .method-copy', 'passwordCopy');
+  setupSetHTML('#method-touchid .method-title', 'touchTitle');
+  setupSetHTML('#method-touchid .method-copy', 'touchReady');
+  setupSetHTML('#touchid-info-copy', 'touchInfo');
+  setupSetText('pw-label', 'pwLabel');
+  setupSetText('pw-confirm-label', 'pwConfirmLabel');
+  setupSetHTML('#setup-transfer-entry .transfer-setup-title', 'transferEntryTitle');
+  setupSetHTML('#setup-transfer-entry .transfer-setup-copy', 'transferEntryCopy');
+  setupSetHTML('#setup-transfer-card .transfer-setup-title', 'transferTitle');
+  setupSetHTML('#setup-transfer-card .transfer-setup-copy', 'transferCopy');
+  setupSetText('recovery-label', 'recoveryLabel');
+  setupSetHTML('#recovery-warning', 'recoveryWarning');
+  setupSetText('mnemonic-saved-copy', 'recoverySaved');
+  setupSetText('totp-info-copy', 'totpInfo');
+  setupSetText('totp-label', 'totpLabel');
+  setupSetHTML('#phase3 .qr-instructions', 'totpSteps');
+  setupSetText('confirm-code-label', 'confirmCode');
+  setupSetText('final-label', 'finalLabel');
+  setupSetText('final-warning', 'finalWarning');
+  setupSetText('final-saved-copy', 'finalSaved');
+  setupSetText('final-understand-copy', 'finalUnderstand');
+  const folderLabel = document.getElementById('setup-transfer-folder-label');
+  if (folderLabel && !folderLabel.dataset.selected) folderLabel.textContent = setupTr('noFolder');
+  const transferBadge = document.getElementById('setup-transfer-badge');
+  if (transferBadge && !transferBadge.dataset.status) transferBadge.textContent = setupTr('waiting');
+  const qrImg = document.getElementById('qr-img');
+  if (qrImg) qrImg.alt = setupTr('qrAlt');
+  const secretDisplay = document.getElementById('totp-secret-display');
+  if (secretDisplay && !secretDisplay.textContent.trim()) secretDisplay.textContent = setupTr('loading');
+  setStep(setupStep);
+  renderMethodCards();
+  updatePwUI();
+}
+async function loadSetupPreferences() {
+  try {
+    const r = await apiFetch('/api/preferences');
+    const d = await r.json();
+    if (d && d.configured === true) {
+      setupLanguage = normalizeSetupLanguage(d.language);
+    } else {
+      setupLanguage = normalizeSetupLanguage(d?.language || detectSetupLanguage());
+    }
+  } catch {}
+  applySetupLanguage();
+}
+async function saveSetupLanguage(language) {
+  setupLanguage = normalizeSetupLanguage(language);
+  applySetupLanguage();
+  try {
+    const r = await apiFetch('/api/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: setupLanguage }),
+    });
+    const d = await r.json();
+    setupLanguage = normalizeSetupLanguage(d.language);
+    applySetupLanguage();
+  } catch {}
 }
 
 async function setupJsonOrThrow(response) {
@@ -3792,6 +4437,7 @@ async function syncSetupRoute(force = false) {
 }
 
 async function init() {
+  await loadSetupPreferences();
   if (await syncSetupRoute(true)) return;
   const r = await apiFetch('/api/setup/init', { method: 'POST' });
   const d = await r.json();
@@ -3810,17 +4456,7 @@ async function init() {
   document.getElementById('totp-secret-display').textContent = d.secret;
   _touchIdSupportedPlatform = d.touchIdSupportedPlatform !== false;
   if (d.bootstrapCapture && d.bootstrapCapture.enabled) {
-    const banner = document.getElementById('bootstrap-capture-banner');
-    const copy = document.getElementById('bootstrap-capture-copy');
-    const remoteNoScreen = d.bootstrapCapture.requestedBy === 'remote-no-screen';
-    const files = Number(d.bootstrapCapture.entries || 0);
-    const detail = files > 0
-      ? files + ' files are already protected before setup. Finish setup here to import them into the vault.'
-      : 'Capture is armed and waiting for supported local records before setup. Finish setup on this desktop.';
-    banner.style.display = '';
-    copy.innerHTML = remoteNoScreen
-      ? '<strong>No-screen capture is running</strong><span>' + detail + '</span>'
-      : '<strong>Capture-before-setup is running</strong><span>' + detail + '</span>';
+    startBootstrapCaptureRefresh(d.bootstrapCapture);
     document.querySelector('.card-body')?.scrollTo({ top: 0, left: 0 });
     window.scrollTo(0, 0);
   }
@@ -3829,7 +4465,9 @@ async function init() {
   updatePwUI();
   scheduleTouchIdRefresh();
 }
-init();
+document.querySelectorAll('#setup-language-switch [data-language]').forEach(btn => {
+  btn.addEventListener('click', () => { void saveSetupLanguage(btn.dataset.language); });
+});
 
 window.addEventListener('focus', () => {
   void syncSetupRoute(false);
@@ -3850,14 +4488,14 @@ function setTouchIdAvailability(available, reason, enableIfAvailable) {
     if (enableIfAvailable && !_touchIdUserTouched) {
       _touchIdEnabled = true;
     }
-    copy.innerHTML = 'Daily unlock on this Mac using <strong>Apple Secure Enclave</strong>. The Touch ID private key stays inside Apple hardware and is used to release vault access on this Mac only.';
+    copy.innerHTML = setupTr('touchReady');
   } else {
     _passwordRequired = true;
     _passwordEnabled = true;
     _touchIdEnabled = false;
     copy.innerHTML = _touchIdReason
-      ? 'Touch ID with <strong>Apple Secure Enclave</strong> is unavailable right now. <span style=\"opacity:.82\">' + esc(_touchIdReason) + '</span>'
-      : 'Touch ID with <strong>Apple Secure Enclave</strong> is not available on this Mac, so this option is disabled.';
+      ? setupTr('touchUnavailableNow') + ' <span style=\"opacity:.82\">' + esc(_touchIdReason) + '</span>'
+      : setupTr('touchUnavailable');
   }
 }
 
@@ -3915,7 +4553,7 @@ function renderMethodCards() {
     tiCard.style.display = 'none';
     touchInfo.style.display = 'none';
     pwState.style.display = 'none';
-    methodsLabel.textContent = 'Set a local password to unlock this vault';
+    methodsLabel.textContent = setupTr('methodsLabelPassword');
     pwFields.classList.toggle('hidden', !_passwordEnabled);
     pwInputWrap.classList.toggle('off', !_passwordEnabled);
     pwConfirmWrap.classList.toggle('off', !_passwordEnabled);
@@ -3926,14 +4564,14 @@ function renderMethodCards() {
   tiCard.className = 'method-card touchid' + (_touchIdEnabled ? ' selected' : '') + (_touchIdAvailable ? '' : ' disabled');
   pwState.className = 'method-switch password ' + (_passwordRequired ? 'locked enabled' : (_passwordEnabled ? 'enabled' : 'disabled'));
   tiState.className = 'method-switch touchid ' + (_touchIdAvailable ? (_touchIdEnabled ? 'enabled' : 'disabled') : 'unavailable');
-  if (pwStateLabel) pwStateLabel.textContent = _passwordRequired ? 'Required' : (_passwordEnabled ? 'On' : 'Off');
-  if (tiStateLabel) tiStateLabel.textContent = _touchIdAvailable ? (_touchIdEnabled ? 'On' : 'Off') : 'N/A';
+  if (pwStateLabel) pwStateLabel.textContent = _passwordRequired ? setupTr('passwordRequired') : (_passwordEnabled ? setupTr('passwordOn') : setupTr('passwordOff'));
+  if (tiStateLabel) tiStateLabel.textContent = _touchIdAvailable ? (_touchIdEnabled ? setupTr('passwordOn') : setupTr('passwordOff')) : 'N/A';
   tiCard.style.display = '';
   touchInfo.style.display = _touchIdAvailable ? '' : 'none';
   pwState.style.display = '';
   methodsLabel.textContent = _touchIdAvailable
-    ? 'Choose at least one local unlock method to enable'
-    : 'Set a local password to unlock this vault';
+    ? setupTr('methodsLabelMac')
+    : setupTr('methodsLabelPassword');
 
   pwFields.classList.toggle('hidden', !_passwordEnabled);
   pwInputWrap.classList.toggle('off', !_passwordEnabled);
@@ -3949,7 +4587,7 @@ function toggleMethod(kind) {
   const current = kind === 'password' ? _passwordEnabled : _touchIdEnabled;
   const other = kind === 'password' ? _touchIdEnabled : _passwordEnabled;
   if (current && !other) {
-    showMethodError('Choose at least one unlock method.');
+    showMethodError(setupTr('chooseOne'));
     return;
   }
   showMethodError('');
@@ -3988,12 +4626,12 @@ function updatePwUI() {
   if (!/[a-z]/.test(p)) reqs.push('lowercase');
   if (!/[0-9]/.test(p)) reqs.push('number');
   const hint = document.getElementById('pw-hint');
-  if (!_passwordEnabled) hint.textContent = 'Password unlock disabled for this vault';
-  else if (p.length === 0) hint.textContent = 'Requires: 8+ chars, uppercase, lowercase, number';
-  else if (reqs.length > 0) hint.textContent = 'Missing: ' + reqs.join(', ');
-  else hint.textContent = score >= 4 ? 'Strong password' : 'Password ok';
+  if (!_passwordEnabled) hint.textContent = setupTr('pwDisabled');
+  else if (p.length === 0) hint.textContent = setupTr('pwHintEmpty');
+  else if (reqs.length > 0) hint.textContent = setupTr('pwMissing') + reqs.join(', ');
+  else hint.textContent = score >= 4 ? setupTr('pwStrong') : setupTr('pwOk');
   const err = document.getElementById('pw-error');
-  if (_passwordEnabled && c.length > 0 && p !== c) { err.textContent = 'Passwords do not match'; err.style.display=''; }
+  if (_passwordEnabled && c.length > 0 && p !== c) { err.textContent = setupTr('passwordMismatch'); err.style.display=''; }
   else { err.style.display='none'; }
 }
 pwInput.addEventListener('input', updatePwUI);
@@ -4024,6 +4662,7 @@ document.getElementById('btn-setup-transfer-import').addEventListener('click', (
 
 const TOTAL = 4;
 function setStep(n) {
+  setupStep = n;
   ['phase1','phase2','phase3','phase4'].forEach((id, i) => {
     document.getElementById(id).classList.toggle('active', i === n-1);
   });
@@ -4031,9 +4670,9 @@ function setStep(n) {
     const el = document.getElementById(id);
     el.className = 'step-tab' + (i < n-1 ? ' done' : i === n-1 ? ' active' : '');
   });
-  document.getElementById('step-badge').textContent = 'STEP ' + n + ' / ' + TOTAL;
-  const titles = ['Choose unlock methods', 'Save recovery phrase', 'Two-factor authentication', 'Final check'];
-  document.getElementById('card-title').textContent = titles[n-1];
+  document.getElementById('step-badge').textContent = setupTr('stepBadge') + n + setupTr('of') + TOTAL;
+  const titles = ['step1', 'step2', 'step3', 'step4'];
+  document.getElementById('card-title').textContent = setupTr(titles[n-1]);
 }
 
 function validateStep1(showErrors) {
@@ -4042,7 +4681,7 @@ function validateStep1(showErrors) {
   err.style.display = 'none';
 
   if (!_passwordEnabled && !_touchIdEnabled) {
-    if (showErrors) showMethodError('Choose at least one unlock method.');
+    if (showErrors) showMethodError(setupTr('chooseOne'));
     return false;
   }
 
@@ -4051,21 +4690,21 @@ function validateStep1(showErrors) {
     const c = pwConfirm.value;
     if (!p) {
       if (showErrors) {
-        err.textContent = 'Enter a password or turn off password unlock.';
+        err.textContent = setupTr('enterPassword');
         err.style.display = '';
       }
       return false;
     }
     if (!pwMeetsReqs(p)) {
       if (showErrors) {
-        err.textContent = 'Password must include 8+ chars, uppercase, lowercase, and a number.';
+        err.textContent = setupTr('passwordRules');
         err.style.display = '';
       }
       return false;
     }
     if (p !== c) {
       if (showErrors) {
-        err.textContent = 'Passwords do not match';
+        err.textContent = setupTr('passwordMismatch');
         err.style.display = '';
       }
       return false;
@@ -4086,7 +4725,7 @@ async function goToStep4WithTOTP() {
   const token = document.getElementById('setup-totp').value;
   const btn = document.getElementById('btn-next3');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Verifying…';
+  btn.innerHTML = '<span class="spinner"></span>' + setupTr('verifying');
   try {
     const r = await apiFetch('/api/setup/prepare', {
       method: 'POST',
@@ -4104,7 +4743,7 @@ async function goToStep4WithTOTP() {
       document.getElementById('totp-error').textContent = d.error;
       document.getElementById('totp-error').style.display = '';
       btn.disabled = false;
-      btn.textContent = 'Verify →';
+      btn.textContent = setupTr('verify');
       return;
     }
     _enrollTotp = true;
@@ -4114,14 +4753,14 @@ async function goToStep4WithTOTP() {
     document.getElementById('totp-error').textContent = 'Could not continue setup. Try again.';
     document.getElementById('totp-error').style.display = '';
     btn.disabled = false;
-    btn.textContent = 'Verify →';
+    btn.textContent = setupTr('verify');
   }
 }
 
 async function skipTOTP() {
   const btn = document.getElementById('btn-skip-totp');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Continuing…';
+  btn.innerHTML = '<span class="spinner"></span>' + setupTr('continue');
   try {
     const r = await apiFetch('/api/setup/prepare', {
       method: 'POST',
@@ -4138,19 +4777,19 @@ async function skipTOTP() {
       document.getElementById('totp-error').textContent = d.error;
       document.getElementById('totp-error').style.display = '';
       btn.disabled = false;
-      btn.textContent = 'Skip 2-step verification (can add later)';
+      btn.textContent = setupTr('skipTotp');
       return;
     }
     _enrollTotp = false;
     document.getElementById('totp-error').style.display = 'none';
     setStep(4);
     btn.disabled = false;
-    btn.textContent = 'Skip 2-step verification (can add later)';
+    btn.textContent = setupTr('skipTotp');
   } catch {
     document.getElementById('totp-error').textContent = 'Could not continue setup. Try again.';
     document.getElementById('totp-error').style.display = '';
     btn.disabled = false;
-    btn.textContent = 'Skip 2-step verification (can add later)';
+    btn.textContent = setupTr('skipTotp');
   }
 }
 
@@ -4298,14 +4937,17 @@ async function activate() {
   await new Promise(r => setTimeout(r, 600));
   window.location.replace('/?refresh=' + Date.now());
 }
+applySetupLanguage();
+init();
 </script>
 </body>
 </html>`
 }
 
 function unlockPageHTML(): string {
+  const language = initialUiLanguage()
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${language}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4321,6 +4963,32 @@ function unlockPageHTML(): string {
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
   .logo { font-size: 11px; letter-spacing: 4px; color: #00c8a0; text-transform: uppercase; margin-bottom: 40px; }
   .logo span { color: var(--muted); }
+  .language-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 3px;
+    margin: -22px 0 22px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+  }
+  .language-btn {
+    min-width: 48px;
+    border: 0;
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: transparent;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .language-btn.active {
+    background: #53d7d2;
+    color: #071112;
+  }
   .lock-icon { font-size: 40px; margin-bottom: 20px; filter: grayscale(0.3); animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 0.7; } 50% { opacity: 1; } }
   .card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
@@ -4391,7 +5059,7 @@ function unlockPageHTML(): string {
 
 <div class="card">
   <div class="card-header">
-    <h1>Unlock vault</h1>
+    <h1 id="unlock-title">Unlock vault</h1>
     <p id="card-sub">Use a local unlock method</p>
   </div>
   <div class="card-body">
@@ -4457,7 +5125,7 @@ function unlockPageHTML(): string {
 </div>
 
 <script>
-const TOUCHID_SVG = \`<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2s2-.9 2-2V8c0-1.1-.9-2-2-2z"/><path d="M8 10c0-2.21 1.79-4 4-4s4 1.79 4 4"/><path d="M6 12c0-3.31 2.69-6 6-6s6 2.69 6 6"/><path d="M4 12c0-4.42 3.58-8 8-8s8 3.58 8 8"/></svg>Touch ID + Secure Enclave\`;
+const TOUCHID_SVG = \`<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6c-1.1 0-2 .9-2 2v4c0 1.1.9 2 2 2s2-.9 2-2V8c0-1.1-.9-2-2-2z"/><path d="M8 10c0-2.21 1.79-4 4-4s4 1.79 4 4"/><path d="M6 12c0-3.31 2.69-6 6-6s6 2.69 6 6"/><path d="M4 12c0-4.42 3.58-8 8-8s8 3.58 8 8"/></svg>\`;
 function dmCookie(name) {
   const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-/\\\\^$*+?.()|[\\]{}]/g, '\\\\$&') + '=([^;]+)'))
   return match ? decodeURIComponent(match[1]) : ''
@@ -4477,8 +5145,194 @@ function apiFetch(url, options) {
   }
   return fetch(url, opts)
 }
+const unlockText = {
+  en: {
+    title: 'Unlock vault',
+    sub: 'Use a local unlock method',
+    touchButton: 'Touch ID + Secure Enclave',
+    touchHint: 'Click the Touch ID button when you want to unlock with Touch ID. If authenticator login is enabled, you will enter the 6-digit code after Touch ID.',
+    touchAutoHint: 'Touch ID opens automatically when this screen appears. You can also click the Touch ID button again or use your password.',
+    orPassword: 'or use password',
+    passwordLabel: 'Master password',
+    passwordPlaceholder: 'Enter your password',
+    unlock: 'Unlock',
+    passwordDisabled: 'Password unlock is disabled for this vault.',
+    or: 'or',
+    recoveryLink: 'Use 24-word recovery phrase',
+    totpLabel: 'Authenticator code',
+    verify: 'Verify',
+    recoveryLabel: '24-word recovery phrase',
+    recoveryPlaceholder: 'word1 word2 … word24',
+    recover: 'Recover access',
+    backPassword: 'Back to password',
+    enterCode: 'Enter authenticator code',
+    refreshTouch: 'Use your master password once to refresh Touch ID',
+    refreshNote: 'Unlock once with your master password, then refresh Touch ID from the main screen.',
+    touchThenCode: 'Use Touch ID, then enter your authenticator code',
+    touchOnly: 'Use Touch ID to unlock',
+    waitingTouch: 'Waiting for Touch ID…',
+    touchPrompt: 'Touch ID prompt opened. Place your finger on Touch ID now.',
+    touchFailed: 'Touch ID was cancelled or is unavailable. Use your password or try Touch ID again.',
+    verifying: 'Verifying…',
+  },
+  'zh-CN': {
+    title: '解锁 vault',
+    sub: '使用本机解锁方式',
+    touchButton: 'Touch ID + Secure Enclave',
+    touchHint: '需要用 Touch ID 解锁时，请点击 Touch ID 按钮。如果已启用验证器登录，Touch ID 之后还需要输入 6 位数验证码。',
+    touchAutoHint: '打开此页面时会自动弹出 Touch ID。你也可以再次点击 Touch ID 按钮，或改用密码。',
+    orPassword: '或使用密码',
+    passwordLabel: '主密码',
+    passwordPlaceholder: '输入你的密码',
+    unlock: '解锁',
+    passwordDisabled: '此 vault 已停用密码解锁。',
+    or: '或',
+    recoveryLink: '使用 24 词恢复短语',
+    totpLabel: '验证器验证码',
+    verify: '验证',
+    recoveryLabel: '24 词恢复短语',
+    recoveryPlaceholder: 'word1 word2 … word24',
+    recover: '恢复访问权',
+    backPassword: '返回密码',
+    enterCode: '输入验证器验证码',
+    refreshTouch: '请先用主密码解锁一次以刷新 Touch ID',
+    refreshNote: '请先用主密码解锁一次，然后在主界面手动刷新 Touch ID。',
+    touchThenCode: '使用 Touch ID，然后输入验证器验证码',
+    touchOnly: '使用 Touch ID 解锁',
+    waitingTouch: '等待 Touch ID…',
+    touchPrompt: 'Touch ID 已打开。请把手指放在 Touch ID 上。',
+    touchFailed: 'Touch ID 已取消或暂时不可用。请使用密码，或再次尝试 Touch ID。',
+    verifying: '验证中…',
+  },
+  ja: {
+    title: 'vault を解除',
+    sub: 'ローカル解除方法を使用',
+    touchButton: 'Touch ID + Secure Enclave',
+    touchHint: 'Touch ID で解除する時はボタンをクリックしてください。認証アプリログインが有効な場合、Touch ID 後に6桁コードを入力します。',
+    touchAutoHint: 'この画面を開くと Touch ID が自動で表示されます。ボタンを再クリックするか、パスワードも使えます。',
+    orPassword: 'またはパスワード',
+    passwordLabel: 'マスターパスワード',
+    passwordPlaceholder: 'パスワードを入力',
+    unlock: '解除',
+    passwordDisabled: 'この vault ではパスワード解除が無効です。',
+    or: 'または',
+    recoveryLink: '24語の復旧フレーズを使用',
+    totpLabel: '認証アプリコード',
+    verify: '確認',
+    recoveryLabel: '24語の復旧フレーズ',
+    recoveryPlaceholder: 'word1 word2 … word24',
+    recover: 'アクセスを復旧',
+    backPassword: 'パスワードに戻る',
+    enterCode: '認証アプリコードを入力',
+    refreshTouch: 'Touch ID 更新のため一度マスターパスワードで解除してください',
+    refreshNote: '一度マスターパスワードで解除してから、メイン画面で Touch ID を手動更新してください。',
+    touchThenCode: 'Touch ID の後に認証コードを入力',
+    touchOnly: 'Touch ID で解除',
+    waitingTouch: 'Touch ID 待機中…',
+    touchPrompt: 'Touch ID プロンプトを開きました。指を置いてください。',
+    touchFailed: 'Touch ID がキャンセルされたか、現在利用できません。パスワードを使うか、もう一度 Touch ID を試してください。',
+    verifying: '確認中…',
+  },
+};
+const unlockZhTwPhrases = [
+  ['简体中文', '繁體中文'], ['解锁', '解鎖'], ['本机', '本機'], ['点击', '點擊'], ['启用', '啟用'],
+  ['验证器', '驗證器'], ['验证码', '驗證碼'], ['输入', '輸入'], ['密码', '密碼'], ['恢复', '恢復'],
+  ['返回', '返回'], ['访问权', '存取權'], ['打开', '打開'], ['页面', '頁面'], ['自动', '自動'],
+  ['弹出', '彈出'], ['按钮', '按鈕'], ['刷新', '刷新'], ['这次', '這次'], ['之后', '之後'],
+  ['等待', '等待'], ['已打开', '已打開'], ['请', '請'], ['手指', '手指'], ['放在', '放在'],
+  ['然后', '然後'], ['界面', '介面'], ['手动', '手動'], ['短语', '短語'],
+  ['24 词', '24 字'], ['主密码', '主密碼'], ['验证', '驗證'],
+];
+function unlockToTraditionalText(text) {
+  return unlockZhTwPhrases.reduce((value, pair) => value.split(pair[0]).join(pair[1]), String(text || ''));
+}
+unlockText['zh-TW'] = Object.fromEntries(Object.entries(unlockText['zh-CN']).map(([key, value]) => [key, unlockToTraditionalText(value)]));
+let unlockLanguage = ${JSON.stringify(language)};
+function normalizeUnlockLanguage(value) {
+  const code = String(value || '').replace('_', '-').toLowerCase();
+  if (code.startsWith('zh') || code.startsWith('yue')) {
+    if (/(^|-)hant($|-)|(^|-)tw($|-)|(^|-)hk($|-)|(^|-)mo($|-)/.test(code)) return 'zh-TW';
+    if (/(^|-)hans($|-)|(^|-)cn($|-)|(^|-)sg($|-)/.test(code)) return 'zh-CN';
+    return 'en';
+  }
+  if (code === 'ja' || code.startsWith('ja-') || code === 'jp') return 'ja';
+  return 'en';
+}
+function detectUnlockLanguage() {
+  const languages = Array.isArray(navigator.languages) && navigator.languages.length > 0
+    ? navigator.languages
+    : [navigator.language || ''];
+  for (const raw of languages) {
+    const code = String(raw || '').replace('_', '-');
+    if (/^(zh|yue)(-|$)/i.test(code) && /(^|-)hant($|-)|(^|-)tw($|-)|(^|-)hk($|-)|(^|-)mo($|-)/i.test(code)) return 'zh-TW';
+    if (/^(zh|yue)(-|$)/i.test(code) && /(^|-)hans($|-)|(^|-)cn($|-)|(^|-)sg($|-)/i.test(code)) return 'zh-CN';
+    if (/^ja/i.test(code)) return 'ja';
+    if (/^en/i.test(code)) return 'en';
+  }
+  return 'en';
+}
+function unlockTr(key) {
+  return (unlockText[unlockLanguage] && unlockText[unlockLanguage][key]) || unlockText.en[key] || key;
+}
+function setUnlockText(selector, key) {
+  const el = document.querySelector(selector);
+  if (el) el.textContent = unlockTr(key);
+}
+function applyUnlockLanguage() {
+  document.documentElement.lang = unlockLanguage === 'zh-CN' ? 'zh-CN' : unlockLanguage;
+  document.querySelectorAll('#unlock-language-switch [data-language]').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.language === unlockLanguage);
+  });
+  setUnlockText('#unlock-title', 'title');
+  setUnlockText('#card-sub', 'sub');
+  setUnlockText('#touchid-hint', 'touchHint');
+  setUnlockText('#touchid-section .divider', 'orPassword');
+  setUnlockText('#password-section .label', 'passwordLabel');
+  setUnlockText('#btn-unlock', 'unlock');
+  setUnlockText('#password-disabled-note', 'passwordDisabled');
+  setUnlockText('#password-section .divider', 'or');
+  setUnlockText('#password-section .recovery-link button', 'recoveryLink');
+  setUnlockText('#totp-section .label', 'totpLabel');
+  setUnlockText('#btn-totp', 'verify');
+  setUnlockText('#recovery-section .label', 'recoveryLabel');
+  setUnlockText('#btn-recover', 'recover');
+  setUnlockText('#recovery-section .divider', 'or');
+  setUnlockText('#recovery-section .recovery-link button', 'backPassword');
+  const pwInput = document.getElementById('pw-input');
+  if (pwInput) pwInput.placeholder = unlockTr('passwordPlaceholder');
+  const recoveryInput = document.getElementById('recovery-input');
+  if (recoveryInput) recoveryInput.placeholder = unlockTr('recoveryPlaceholder');
+  const touchButton = document.getElementById('btn-touchid');
+  if (touchButton && !touchButton.classList.contains('waiting')) touchButton.innerHTML = TOUCHID_SVG + unlockTr('touchButton');
+}
+async function loadUnlockPreferences() {
+  try {
+    const r = await apiFetch('/api/preferences');
+    const d = await r.json();
+    if (d && d.configured === true) {
+      unlockLanguage = normalizeUnlockLanguage(d.language);
+    } else {
+      unlockLanguage = normalizeUnlockLanguage(d?.language || detectUnlockLanguage());
+    }
+  } catch {}
+  applyUnlockLanguage();
+}
+async function saveUnlockLanguage(language) {
+  unlockLanguage = normalizeUnlockLanguage(language);
+  applyUnlockLanguage();
+  try {
+    const r = await apiFetch('/api/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: unlockLanguage }),
+    });
+    const d = await r.json();
+    unlockLanguage = normalizeUnlockLanguage(d.language);
+  } catch {}
+  applyUnlockLanguage();
+}
 let unlockOptions = { passwordEnabled: true, touchIdEnabled: false, totpEnrolled: false };
-const TOUCHID_HINT_DEFAULT = 'Touch ID opens automatically when this screen appears. You can also click the Touch ID button again or use your password.';
+const TOUCHID_HINT_DEFAULT = () => unlockTr('touchAutoHint');
 let touchIdUnlockInFlight = false;
 let touchIdAutoPrompted = false;
 let touchIdAutoPromptTimer = null;
@@ -4487,11 +5341,11 @@ function showTotpStep() {
   document.getElementById('password-section').style.display = 'none';
   document.getElementById('totp-section').style.display = '';
   document.getElementById('touchid-section').style.display = 'none';
-  document.getElementById('card-sub').textContent = 'Enter authenticator code';
+  document.getElementById('card-sub').textContent = unlockTr('enterCode');
   const input = document.getElementById('totp-input');
   const button = document.getElementById('btn-totp');
   button.disabled = input.value.replace(/\\D/g,'').length !== 6;
-  button.textContent = 'Verify';
+  button.textContent = unlockTr('verify');
   input.focus();
 }
 
@@ -4501,7 +5355,7 @@ function setTouchIdHint(message) {
 }
 
 function restoreTouchIdHint() {
-  setTouchIdHint(TOUCHID_HINT_DEFAULT);
+  setTouchIdHint(TOUCHID_HINT_DEFAULT());
 }
 
 function showTouchIdRefreshRequired(message) {
@@ -4514,13 +5368,13 @@ function showTouchIdRefreshRequired(message) {
   if (err) err.textContent = '';
   if (btn) {
     btn.classList.remove('waiting');
-    btn.innerHTML = TOUCHID_SVG;
+    btn.innerHTML = TOUCHID_SVG + unlockTr('touchButton');
     btn.disabled = true;
   }
   setTouchIdHint('');
-  document.getElementById('card-sub').textContent = 'Use your master password once to refresh Touch ID';
+  document.getElementById('card-sub').textContent = unlockTr('refreshTouch');
   document.getElementById('pw-error').textContent = '';
-  if (note) note.textContent = message || 'For this update, unlock once with your master password. DataMoat will refresh Touch ID automatically.';
+  if (note) note.textContent = message || unlockTr('refreshNote');
   if (unlockOptions.passwordEnabled) {
     document.getElementById('password-section').style.display = '';
     document.getElementById('password-controls').style.display = '';
@@ -4529,22 +5383,19 @@ function showTouchIdRefreshRequired(message) {
 }
 
 function maybeAutoTouchIdUnlock() {
-  if (touchIdAutoPrompted || touchIdUnlockInFlight || !unlockOptions.touchIdEnabled) return;
-  const section = document.getElementById('touchid-section');
-  if (!section || section.style.display === 'none') return;
-  touchIdAutoPrompted = true;
   if (touchIdAutoPromptTimer) window.clearTimeout(touchIdAutoPromptTimer);
-  const start = Date.now();
-  const attempt = () => {
-    if (!touchIdUnlockInFlight) {
-      void touchIDUnlock('auto');
-      return;
-    }
-    if (Date.now() - start < 2500) {
-      touchIdAutoPromptTimer = window.setTimeout(attempt, 250);
-    }
-  };
-  touchIdAutoPromptTimer = window.setTimeout(attempt, 900);
+  touchIdAutoPromptTimer = null;
+  if (touchIdAutoPrompted || touchIdUnlockInFlight) return;
+  if (!unlockOptions.touchIdEnabled || unlockOptions.touchIdRefreshRequired) return;
+  if (document.visibilityState === 'hidden') return;
+  touchIdAutoPromptTimer = window.setTimeout(() => {
+    touchIdAutoPromptTimer = null;
+    if (touchIdAutoPrompted || touchIdUnlockInFlight) return;
+    if (!unlockOptions.touchIdEnabled || unlockOptions.touchIdRefreshRequired) return;
+    if (document.visibilityState === 'hidden') return;
+    touchIdAutoPrompted = true;
+    void touchIDUnlock('auto');
+  }, 650);
 }
 
 async function loadUnlockOptions() {
@@ -4558,18 +5409,26 @@ async function loadUnlockOptions() {
     document.getElementById('password-section').style.display = d.passwordEnabled ? '' : '';
     if (!d.passwordEnabled && d.touchIdEnabled) {
       document.getElementById('card-sub').textContent = d.totpEnrolled
-        ? 'Use Touch ID, then enter your authenticator code'
-        : 'Use Touch ID to unlock';
+        ? unlockTr('touchThenCode')
+        : unlockTr('touchOnly');
     }
     restoreTouchIdHint();
     if (d.touchIdRefreshRequired) {
-      showTouchIdRefreshRequired('Use your master password once. DataMoat will refresh Touch ID automatically after unlock.');
+      showTouchIdRefreshRequired(unlockTr('refreshNote'));
       return;
     }
     maybeAutoTouchIdUnlock();
   } catch {}
 }
-loadUnlockOptions();
+async function initUnlockPage() {
+  await loadUnlockPreferences();
+  await loadUnlockOptions();
+}
+document.querySelectorAll('#unlock-language-switch [data-language]').forEach(btn => {
+  btn.addEventListener('click', () => { void saveUnlockLanguage(btn.dataset.language); });
+});
+applyUnlockLanguage();
+void initUnlockPage();
 
 document.addEventListener('visibilitychange', () => {
   maybeAutoTouchIdUnlock();
@@ -4592,12 +5451,15 @@ function rememberPostUnlockState(payload) {
 
 async function touchIDUnlock(_source = 'manual') {
   if (touchIdUnlockInFlight) return;
+  if (touchIdAutoPromptTimer) window.clearTimeout(touchIdAutoPromptTimer);
+  touchIdAutoPromptTimer = null;
+  touchIdAutoPrompted = true;
   const btn = document.getElementById('btn-touchid');
   const err = document.getElementById('touchid-error');
   touchIdUnlockInFlight = true;
   btn.classList.add('waiting');
-  btn.innerHTML = '<span class="spinner"></span>Waiting for Touch ID…';
-  setTouchIdHint('Touch ID prompt opened. Place your finger on Touch ID now.');
+  btn.innerHTML = '<span class="spinner"></span>' + unlockTr('waitingTouch');
+  setTouchIdHint(unlockTr('touchPrompt'));
   err.textContent = '';
   try {
     const r = await apiFetch('/api/auth/touchid', { method: 'POST' });
@@ -4606,23 +5468,33 @@ async function touchIDUnlock(_source = 'manual') {
     if (d.needsTotp) {
       showTotpStep();
       btn.classList.remove('waiting');
-      btn.innerHTML = TOUCHID_SVG;
+      btn.innerHTML = TOUCHID_SVG + unlockTr('touchButton');
       touchIdUnlockInFlight = false;
       return;
     }
-    if (d.touchIdRefreshRequired) {
+    if (d.touchIdRefreshRequired || r.status === 409) {
       showTouchIdRefreshRequired(d.error);
       touchIdUnlockInFlight = false;
       return;
     }
-    showTouchIdRefreshRequired('Use your master password once. DataMoat will refresh Touch ID automatically after unlock.');
-    restoreTouchIdHint();
+    if (_source === 'auto') {
+      restoreTouchIdHint();
+      err.textContent = '';
+    } else {
+      err.textContent = d.error || unlockTr('touchFailed');
+      restoreTouchIdHint();
+    }
   } catch {
-    showTouchIdRefreshRequired('Use your master password once. DataMoat will refresh Touch ID automatically after unlock.');
-    restoreTouchIdHint();
+    if (_source === 'auto') {
+      restoreTouchIdHint();
+      err.textContent = '';
+    } else {
+      err.textContent = unlockTr('touchFailed');
+      restoreTouchIdHint();
+    }
   }
   btn.classList.remove('waiting');
-  btn.innerHTML = TOUCHID_SVG;
+  btn.innerHTML = TOUCHID_SVG + unlockTr('touchButton');
   touchIdUnlockInFlight = false;
 }
 
@@ -4640,7 +5512,7 @@ btnUnlock.addEventListener('click', unlock);
 async function unlock() {
   const password = pwInput.value;
   btnUnlock.disabled = true;
-  btnUnlock.innerHTML = '<span class="spinner"></span>Verifying…';
+  btnUnlock.innerHTML = '<span class="spinner"></span>' + unlockTr('verifying');
   try {
     const r = await apiFetch('/api/auth/verify', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -4651,7 +5523,7 @@ async function unlock() {
     if (d.needsTotp) {
       // Password ok, need TOTP step
       showTotpStep();
-      btnUnlock.disabled = false; btnUnlock.textContent = 'Unlock';
+      btnUnlock.disabled = false; btnUnlock.textContent = unlockTr('unlock');
       return;
     }
     pwInput.classList.add('error');
@@ -4661,7 +5533,7 @@ async function unlock() {
   } catch {
     document.getElementById('pw-error').textContent = 'DataMoat is reconnecting. Try again in a moment.';
   }
-  btnUnlock.disabled = false; btnUnlock.textContent = 'Unlock';
+  btnUnlock.disabled = false; btnUnlock.textContent = unlockTr('unlock');
 }
 
 // TOTP step (only if needsTotp)
@@ -4680,9 +5552,9 @@ function showExpiredUnlock(message) {
   showPassword();
   document.getElementById('pw-error').textContent = message;
   btnUnlock.disabled = pwInput.value.length < 1;
-  btnUnlock.textContent = 'Unlock';
+  btnUnlock.textContent = unlockTr('unlock');
   btnTotp.disabled = true;
-  btnTotp.textContent = 'Verify';
+  btnTotp.textContent = unlockTr('verify');
   totpInput.value = '';
 }
 
@@ -4713,7 +5585,7 @@ async function verifyTOTP(options = {}) {
   const totpToken = typeof options.totpToken === 'string' ? options.totpToken : totpInput.value;
   const allowRestart = options.allowRestart !== false;
   btnTotp.disabled = true;
-  btnTotp.innerHTML = '<span class="spinner"></span>Verifying…';
+  btnTotp.innerHTML = '<span class="spinner"></span>' + unlockTr('verifying');
   const r = await apiFetch('/api/auth/verify', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ totpToken }),
@@ -4726,7 +5598,7 @@ async function verifyTOTP(options = {}) {
   }
   totpInput.classList.add('error');
   document.getElementById('totp-error').textContent = d.error || 'Invalid code';
-  btnTotp.disabled = false; btnTotp.textContent = 'Verify';
+  btnTotp.disabled = false; btnTotp.textContent = unlockTr('verify');
   totpInput.value = '';
   setTimeout(() => totpInput.classList.remove('error'), 600);
 }
@@ -4737,12 +5609,12 @@ function showRecovery() {
   document.getElementById('totp-section').style.display = 'none';
   document.getElementById('touchid-section').style.display = 'none';
   document.getElementById('recovery-section').style.display = '';
-  document.getElementById('card-sub').textContent = 'Recovery access';
+  document.getElementById('card-sub').textContent = unlockTr('recoveryLabel');
 }
 function showPassword() {
   document.getElementById('recovery-section').style.display = 'none';
   document.getElementById('password-section').style.display = '';
-  document.getElementById('card-sub').textContent = 'Use a local unlock method';
+  document.getElementById('card-sub').textContent = unlockTr('sub');
   document.getElementById('touchid-section').style.display = unlockOptions.touchIdEnabled ? '' : 'none';
   document.getElementById('password-controls').style.display = unlockOptions.passwordEnabled ? '' : 'none';
   document.getElementById('password-disabled-note').style.display = unlockOptions.passwordEnabled ? 'none' : '';
@@ -4753,7 +5625,7 @@ async function unlockWithRecovery() {
   const btn = document.getElementById('btn-recover');
   const error = document.getElementById('recovery-error');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span>Verifying…';
+  btn.innerHTML = '<span class="spinner"></span>' + unlockTr('verifying');
   error.textContent = '';
   try {
     const r = await apiFetch('/api/auth/verify', {
@@ -4769,7 +5641,7 @@ async function unlockWithRecovery() {
       : 'Recovery unlock failed';
   }
   btn.disabled = false;
-  btn.textContent = 'Recover access';
+  btn.textContent = unlockTr('recover');
 }
 </script>
 </body>

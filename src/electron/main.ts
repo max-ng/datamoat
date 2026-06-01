@@ -21,6 +21,7 @@ import {
   savePackagedUpdateSettings,
 } from './packaged-updater'
 import { ensureMacRemoteNoScreenLaunchAgent, ensurePackagedTrayLaunchAgent } from './launch-agent'
+import { saveUiPreferences, uiLanguageFromArgv } from '../ui-preferences'
 
 let mainWindow: BrowserWindow | null = null
 let mainWindowCreation: Promise<void> | null = null
@@ -43,7 +44,19 @@ function argvRequestsRemoteNoScreen(argv = process.argv): boolean {
   return argv.some(arg => REMOTE_NO_SCREEN_FLAGS.has(arg))
 }
 
+function applyUiLanguageOverrideFromArgv(argv = process.argv, reason = 'startup'): void {
+  const language = uiLanguageFromArgv(argv)
+  if (!language) return
+  try {
+    saveUiPreferences({ language })
+    writeLog('info', 'electron', 'ui_language_override_saved', { language, reason })
+  } catch (error) {
+    writeLog('warn', 'electron', 'ui_language_override_failed', { language, reason, error })
+  }
+}
+
 const remoteNoScreenLaunch = argvRequestsRemoteNoScreen()
+applyUiLanguageOverrideFromArgv(process.argv, 'startup-argv')
 let trayOnlyLaunch = process.env.DATAMOAT_TRAY_ONLY === '1'
   || process.argv.includes('--datamoat-tray-only')
   || remoteNoScreenLaunch
@@ -268,15 +281,67 @@ function ensureWindowUsable(win: BrowserWindow): boolean {
 
 function recoverableRuntimeLoadError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
-  return /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_ABORTED|ERR_EMPTY_RESPONSE|ERR_FAILED/i.test(error.message)
+  return /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_ABORTED|ERR_EMPTY_RESPONSE|ERR_FAILED|ERR_ABORTED/i.test(error.message)
+}
+
+async function waitForRuntimeHttpReady(targetUrl: string, reason: string, attempt: number): Promise<void> {
+  const startedAt = Date.now()
+  let lastError: unknown = null
+  while (Date.now() - startedAt < 3000) {
+    try {
+      const response = await fetch(targetUrl, { redirect: 'manual' })
+      if (response.status > 0 && response.status < 500) return
+      lastError = new Error(`HTTP ${response.status}`)
+    } catch (error) {
+      lastError = error
+    }
+    await sleep(150)
+  }
+  writeLog('warn', 'electron', 'runtime_http_not_ready_before_window_load', {
+    reason,
+    attempt,
+    targetUrl,
+    error: lastError,
+  })
+  updateHealth('electron', {
+    runtimeHttpNotReadyAt: new Date().toISOString(),
+    runtimeHttpNotReadyReason: reason,
+    runtimeHttpNotReadyAttempt: attempt,
+  })
+}
+
+function revealWindowDuringLoadRecovery(win: BrowserWindow): void {
+  if (!windowIsUsable(win)) return
+  try {
+    setDockVisibility(true)
+    if (win.isMinimized()) win.restore()
+    if (!win.isVisible()) win.show()
+    win.moveTop()
+    win.focus()
+    app.focus({ steal: true })
+  } catch (error) {
+    if (!destroyedObjectMessage(error)) {
+      writeLog('warn', 'electron', 'window_load_recovery_reveal_failed', { error })
+    }
+  }
 }
 
 async function loadRuntimeUrl(win: BrowserWindow, targetUrl: string, reason: string): Promise<boolean> {
   let nextUrl = targetUrl
-  for (let attempt = 1; attempt <= 4; attempt += 1) {
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
     if (!windowIsUsable(win)) return false
     try {
+      await waitForRuntimeHttpReady(nextUrl, reason, attempt)
       await win.loadURL(nextUrl)
+      updateHealth('electron', {
+        windowLoadSucceededAt: new Date().toISOString(),
+        windowLoadSucceededReason: reason,
+        windowLoadFailedAt: null,
+        windowLoadFailedReason: null,
+        windowLoadFailedAttempt: null,
+        windowLoadRecoverable: null,
+        windowLoadError: null,
+      })
       return true
     } catch (error) {
       if (destroyedObjectMessage(error)) return false
@@ -295,11 +360,12 @@ async function loadRuntimeUrl(win: BrowserWindow, targetUrl: string, reason: str
         windowLoadRecoverable: recoverable,
         windowLoadError: error instanceof Error ? error.message : String(error),
       })
-      if (!recoverable || attempt === 4) {
+      if (recoverable) revealWindowDuringLoadRecovery(win)
+      if (!recoverable || attempt === 8) {
         if (recoverable) return false
         throw error
       }
-      await sleep(350 * attempt)
+      await sleep(Math.min(1200, 350 * attempt))
       const runtime = await ensureHealthyRuntime(`${reason}:load-retry-${attempt}`)
       nextUrl = runtime.url
       applyWindowPreset(win, nextUrl)
@@ -535,13 +601,14 @@ function ensureRemoteNoScreenAutostart(): void {
 }
 
 function ensurePackagedAutostart(remoteNoScreen: boolean): void {
+  const keepRemoteNoScreen = remoteNoScreen || !isSetupDone()
   if (process.platform === 'darwin') {
-    ensurePackagedTrayLaunchAgent({ remoteNoScreen })
+    ensurePackagedTrayLaunchAgent({ remoteNoScreen: keepRemoteNoScreen })
   } else if (process.platform === 'win32') {
-    if (remoteNoScreen) ensureWindowsRemoteNoScreenAutostart()
+    if (keepRemoteNoScreen) ensureWindowsRemoteNoScreenAutostart()
     else ensureWindowsPackagedAutostart()
   } else if (process.platform === 'linux') {
-    if (remoteNoScreen) ensureLinuxRemoteNoScreenAutostart()
+    if (keepRemoteNoScreen) ensureLinuxRemoteNoScreenAutostart()
     else ensureLinuxAutostart()
   }
 }
@@ -930,8 +997,8 @@ function currentTrayStatus(): TrayStatus {
   const publicStatus = readJsonFile<any>(PUBLIC_STATUS_FILE)
   const daemon = health?.components?.daemon ?? {}
   const capture = health?.components?.capture ?? {}
-  const daemonRunning = daemon.running === true
-  const captureRunning = capture.running === true || daemon.captureRunning === true
+  const daemonRunning = daemon.running === true && daemonProcessLooksAlive(daemon.pid)
+  const captureRunning = daemonRunning && (capture.running === true || daemon.captureRunning === true)
   const locked = typeof daemon.locked === 'boolean' ? daemon.locked : null
   const sessionCount = typeof publicStatus?.totalSessions === 'number' ? publicStatus.totalSessions : null
   const port = typeof daemon.port === 'number' ? daemon.port : null
@@ -943,6 +1010,18 @@ function currentTrayStatus(): TrayStatus {
     sessionCount,
     port,
   }
+}
+
+function daemonProcessLooksAlive(pid: unknown): boolean {
+  if (typeof pid === 'number' && Number.isFinite(pid)) {
+    try {
+      process.kill(pid, 0)
+      return true
+    } catch {
+      return false
+    }
+  }
+  return findDaemonPids().length > 0
 }
 
 function setDockVisibility(visible: boolean): void {
@@ -1026,9 +1105,9 @@ async function ensureHealthyRuntime(reason: string): Promise<{ pid: number | nul
   return runtimeRecoveryInFlight
 }
 
-async function ensureExistingWindowRuntime(win: BrowserWindow, reason: string, forceReload = false): Promise<void> {
+async function ensureExistingWindowRuntime(win: BrowserWindow, reason: string, forceReload = false): Promise<boolean> {
   const currentUrl = safeWindowUrl(win)
-  if (!currentUrl && !windowIsUsable(win)) return
+  if (!currentUrl && !windowIsUsable(win)) return false
   const currentOrigin = currentUrl ? urlOrigin(currentUrl) : null
   const runtime = await ensureHealthyRuntime(reason)
   if (!windowIsUsable(win)) {
@@ -1037,13 +1116,13 @@ async function ensureExistingWindowRuntime(win: BrowserWindow, reason: string, f
       windowRuntimeSkippedReason: reason,
       windowRuntimeSkippedCause: 'window-destroyed-after-runtime',
     })
-    return
+    return false
   }
   const nextOrigin = `http://localhost:${runtime.port}`
   const needsReload = forceReload || runtime.recovered || currentOrigin !== nextOrigin || !currentUrl || currentUrl === 'about:blank'
-  if (!needsReload) return
+  if (!needsReload) return true
 
-  if (!applyWindowPreset(win, runtime.url) || !windowIsUsable(win)) return
+  if (!applyWindowPreset(win, runtime.url) || !windowIsUsable(win)) return false
   const loaded = await loadRuntimeUrl(win, runtime.url, reason)
   if (!loaded) {
     updateHealth('electron', {
@@ -1052,6 +1131,7 @@ async function ensureExistingWindowRuntime(win: BrowserWindow, reason: string, f
       windowRuntimeSkippedCause: windowIsUsable(win) ? 'runtime-load-failed' : 'window-destroyed-during-load',
     })
   }
+  return loaded
 }
 
 function ensureDaemonRecoveredInBackground(reason: string): void {
@@ -1077,6 +1157,15 @@ function ensureDaemonRecoveredInBackground(reason: string): void {
 }
 
 async function revealMainWindow(): Promise<void> {
+  if (mainWindowCreation) {
+    revealAfterWindowCreation = true
+    try {
+      await mainWindowCreation
+    } catch (error) {
+      writeLog('warn', 'electron', 'window_creation_wait_before_reveal_failed', { error })
+    }
+  }
+
   const win = usableWindow()
   if (!win) {
     trayOnlyLaunch = false
@@ -1087,7 +1176,11 @@ async function revealMainWindow(): Promise<void> {
 
   setMacActivation('regular')
   setDockVisibility(true)
-  await ensureExistingWindowRuntime(win, 'reveal-main-window')
+  let runtimeLoaded = await ensureExistingWindowRuntime(win, 'reveal-main-window')
+  if (!runtimeLoaded && windowIsUsable(win)) {
+    await sleep(700)
+    runtimeLoaded = await ensureExistingWindowRuntime(win, 'reveal-main-window-retry', true)
+  }
   if (!windowIsUsable(win)) return
   ensureWindowUsable(win)
   if (!windowIsUsable(win)) return
@@ -1161,7 +1254,11 @@ async function createMainWindow(showOnReady = true): Promise<void> {
     if (showOnReady) {
       setMacActivation('regular')
       setDockVisibility(true)
-      await ensureExistingWindowRuntime(existing, 'create-window-existing')
+      let runtimeLoaded = await ensureExistingWindowRuntime(existing, 'create-window-existing')
+      if (!runtimeLoaded && windowIsUsable(existing)) {
+        await sleep(700)
+        runtimeLoaded = await ensureExistingWindowRuntime(existing, 'create-window-existing-retry', true)
+      }
       if (!windowIsUsable(existing)) return
       ensureWindowUsable(existing)
       if (!windowIsUsable(existing)) return
@@ -1280,7 +1377,17 @@ async function createMainWindowInner(showOnReady = true): Promise<void> {
     if (mainWindow === win) mainWindow = null
   })
 
-  await loadRuntimeUrl(win, runtime.url, 'create-window')
+  const loaded = await loadRuntimeUrl(win, runtime.url, 'create-window')
+  if (!loaded && (showOnReady || revealAfterWindowCreation)) {
+    setTimeout(() => {
+      if (!windowIsUsable(win)) return
+      void ensureExistingWindowRuntime(win, 'create-window-retry', true)
+        .then(() => revealMainWindow())
+        .catch(error => {
+          writeLog('warn', 'electron', 'window_create_retry_failed', { error })
+        })
+    }, 700)
+  }
   if (electronRealUiSmokeEnabled()) {
     void runElectronRealUiSmoke(win, runtime.url)
   }
@@ -1740,9 +1847,7 @@ function createTray(): void {
   tray.on('double-click', () => void revealMainWindow())
   updateTray()
   trayRefreshTimer = setInterval(() => updateTray(), 5000)
-  if (process.env.DATAMOAT_ENABLE_DAEMON_WATCHDOG === '1') {
-    daemonWatchdogTimer = setInterval(() => ensureDaemonRecoveredInBackground('tray-watchdog'), 15000)
-  }
+  daemonWatchdogTimer = setInterval(() => ensureDaemonRecoveredInBackground('tray-watchdog'), 15000)
   let trayBounds: Electron.Rectangle | null = null
   try {
     trayBounds = usableTray()?.getBounds() ?? null
@@ -1785,6 +1890,23 @@ function installDesktopIpc(): void {
     if (result.canceled || !result.filePaths[0]) return { canceled: true }
     return { canceled: false, path: result.filePaths[0] }
   })
+  ipcMain.handle('datamoat:chatgptExport:selectSource', async () => {
+    const owner = usableWindow()
+    const options: OpenDialogOptions = {
+      title: 'Choose chatgpt-export zip or folder',
+      buttonLabel: 'Choose Export',
+      properties: ['openFile', 'openDirectory'],
+      filters: [
+        { name: 'chatgpt-export ZIP', extensions: ['zip'] },
+        { name: 'All Files', extensions: ['*'] },
+      ],
+    }
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
+    if (result.canceled || !result.filePaths[0]) return { canceled: true }
+    return { canceled: false, path: result.filePaths[0] }
+  })
 }
 
 if (rejectWindowsSystemLaunchIfNeeded()) {
@@ -1798,8 +1920,11 @@ if (rejectWindowsSystemLaunchIfNeeded()) {
 
   app.on('second-instance', (_event, argv) => {
     if (relaunchIfRunningFromReplacedBundle('second-instance')) return
+    applyUiLanguageOverrideFromArgv(argv, 'second-instance')
     if (argvRequestsRemoteNoScreen(argv)) {
-      trayOnlyLaunch = true
+      if (!usableWindow() && !mainWindowCreation) {
+        trayOnlyLaunch = true
+      }
       void (async () => {
         if (!await enableRemoteNoScreenCapture('second-instance')) return
         await ensureDaemonRunningForRemoteNoScreenWithRetry('second-instance')

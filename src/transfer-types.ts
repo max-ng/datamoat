@@ -144,6 +144,7 @@ export type TransferImportJob = {
   currentSession?: string
   backupRoot?: string
   lastError?: string
+  warnings?: string[]
   counts: TransferCounts
   imported: {
     sessions: number

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500" role="img" aria-labelledby="title desc">
-  <title id="title">Export and backup all your Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw data, skills, and attachments</title>
-  <desc id="desc">DataMoat README headline showing Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw support in brand-inspired colors.</desc>
+  <title id="title">Export and backup all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments</title>
+  <desc id="desc">DataMoat README headline showing ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen support in brand-inspired colors.</desc>
   <defs>
     <linearGradient id="codexGradient" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#c8d9ff"/>
@@ -26,19 +26,19 @@
   </text>
 
   <text y="226" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="66" font-weight="800">
-    <tspan x="64" fill="#d97757">Claude</tspan>
+    <tspan x="64" fill="#10a37f">ChatGPT</tspan>
+    <tspan fill="#f4fbfb"> / </tspan>
+    <tspan fill="#d97757">Claude</tspan>
     <tspan fill="#f4fbfb"> / </tspan>
     <tspan fill="url(#codexGradient)">Codex</tspan>
-    <tspan fill="#f4fbfb"> / </tspan>
-    <tspan fill="#7d878b">Cursor</tspan>
   </text>
 
   <text y="308" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="66" font-weight="800">
-    <tspan x="64" fill="#4f7cff">DeepSeek</tspan>
+    <tspan x="64" fill="#7d878b">Cursor</tspan>
+    <tspan fill="#f4fbfb"> / </tspan>
+    <tspan fill="#4f7cff">DeepSeek</tspan>
     <tspan fill="#f4fbfb"> / </tspan>
     <tspan fill="#6254e8">Qwen</tspan>
-    <tspan fill="#f4fbfb"> / </tspan>
-    <tspan fill="#d83a3a">OpenClaw</tspan>
   </text>
 
   <text x="64" y="386" fill="#f4fbfb" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="46" font-weight="800">
@@ -46,6 +46,6 @@
   </text>
 
   <text x="66" y="444" fill="#cfe0e0" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="25" font-weight="700">
-    Local encrypted memory archive for sessions, images, files/PDFs, and SKILL.md folders.
+    Local encrypted backup archive for sessions, images, files/PDFs, and SKILL.md folders.
   </text>
 </svg>

@@ -412,8 +412,9 @@ function cursorSourceAppVersion(session: Session, records: RawRecord[]): string 
 
 async function reparseCodexSession(session: Session, records: RawRecord[]): Promise<Session> {
   let next: Session = { ...session }
-  let sawModelFromRaw = false
   let sawCwdFromRaw = false
+  let sawModelFromRaw = false
+  let activeModel = next.model || 'unknown'
   const messages: Message[] = []
   for (const record of records) {
     const line = rawRecordLine(record)
@@ -495,6 +496,7 @@ async function reparseSessionWithExtractor(
   let next: Session = { ...session }
   let sawModelFromRaw = false
   let sawCwdFromRaw = false
+  let activeModel = next.model || 'unknown'
   const messages: Message[] = []
   for (const record of records) {
     const line = rawRecordLine(record)
@@ -504,15 +506,19 @@ async function reparseSessionWithExtractor(
     if (parsed.sessionId) next.id = parsed.sessionId
     if (parsed.appVersion) next.appVersion = parsed.appVersion
     if (parsed.sourceClient) next.sourceClient = parsed.sourceClient
-    if (parsed.model && !sawModelFromRaw) {
+    if (parsed.model) {
       next.model = parsed.model
-      sawModelFromRaw = true
+      activeModel = parsed.model
     }
     if (parsed.cwd && !sawCwdFromRaw) {
       next.cwd = parsed.cwd
       sawCwdFromRaw = true
     }
     if (!parsed.message) continue
+
+    if (!parsed.message.model && activeModel && activeModel !== 'unknown') {
+      parsed.message.model = activeModel
+    }
 
     parsed.message.rawRef = { sessionUid: session.uid, rawHash: record.rawHash }
     await attachRawImages(parsed.message, parsed.rawImages)
