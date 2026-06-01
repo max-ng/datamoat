@@ -21,7 +21,7 @@
 เว็บไซต์ทางการ: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
 > **Export และ backup ข้อมูล + skills + ไฟล์แนบทั้งหมดของ ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen.**
 > DataMoat เก็บ AI work history ของคุณไว้แบบ local และ encrypted, รักษา raw source records ให้ครบ และสร้าง normalized index สำหรับ search, export, reuse, handoff และ private AI memory.

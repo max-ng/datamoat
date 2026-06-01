@@ -21,7 +21,7 @@ Idioma: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简
 Site oficial: [https://datamoat.org](https://datamoat.org)
 Repositório GitHub: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
 > **Exporte e faça backup de todos os seus dados + skills + anexos do ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen.**
 > O DataMoat mantém seu histórico de trabalho com IA local e criptografado, preservando os registros brutos de origem intactos e criando um índice normalizado para busca, exportação, reutilização, handoff e memória privada de IA.

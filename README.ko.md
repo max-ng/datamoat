@@ -21,7 +21,7 @@
 공식 웹사이트: [https://datamoat.org](https://datamoat.org)
 GitHub 저장소: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
 > **ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 데이터 + skills + 첨부 파일을 모두 export하고 backup합니다.**
 > DataMoat는 AI 작업 기록을 local 및 encrypted 상태로 유지하고, raw source records를 온전히 보존하며, search, export, reuse, handoff, private AI memory를 위한 normalized index를 만듭니다.

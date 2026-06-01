@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="500" viewBox="0 0 1200 500" role="img" aria-labelledby="title desc">
-  <title id="title">Export and backup all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments</title>
+  <title id="title">Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments</title>
   <desc id="desc">DataMoat README headline showing ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen support in brand-inspired colors.</desc>
   <defs>
     <linearGradient id="codexGradient" x1="0" y1="0" x2="1" y2="1">
@@ -22,7 +22,7 @@
   <text x="64" y="66" fill="#5fc9c5" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="23" font-weight="800" letter-spacing="1.8">DATAMOAT</text>
 
   <text x="64" y="136" fill="#f4fbfb" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="50" font-weight="800">
-    Export and backup all your
+    Export and back up all your
   </text>
 
   <text y="226" font-family="Avenir Next, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="66" font-weight="800">

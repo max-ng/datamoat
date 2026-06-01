@@ -21,7 +21,7 @@
 官方网站: [https://datamoat.org](https://datamoat.org)
 GitHub 仓库: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
 > **导出并备份你的全部 ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 数据 + skills + 附件。**
 > DataMoat 将你的 AI 工作历史保存在本地并加密，完整保留原始来源记录，同时建立统一索引，方便搜索、导出、复用、交接和私有 AI memory。

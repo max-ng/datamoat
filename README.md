@@ -21,9 +21,9 @@ Language: [English](./README.md) | [PortuguÃªs (Brasil)](./README.pt-BR.md) | [ç
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Protect and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
 
-> **Protect and back up all your ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
+> **Export and back up all your ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
 > DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
 >
 > **Your most valuable future AI data is already disappearing.**
@@ -55,6 +55,18 @@ DataMoat now imports supported ChatGPT export ZIP files or extracted export fold
 - **Keep the raw export without wasting disk.** DataMoat preserves original source records and can store repetitive raw backup data in compressed encrypted archives; real source-record tests showed raw archive storage around 60% of original source bytes.
 - **Move work across computers.** Copy the DataMoat folder to another machine and restore it across macOS, Windows, and Linux, including Mac to Windows and Linux to Mac.
 - **Carry a second backup.** Save the encrypted DataMoat folder to USB or an external drive so your AI work history can travel separately from the source computer.
+
+### Raw records, smaller on disk
+
+DataMoat preserves raw source records while storing repetitive raw backup data in compressed encrypted archives. Real source-record tests measured raw archive storage around 60% of original source bytes.
+
+### Move between computers
+
+Copy the DataMoat folder to another machine and restore across macOS, Windows, and Linux, including Mac to Windows and Linux to Mac.
+
+### USB
+
+**Second backup on external storage.** Keep a duplicate encrypted DataMoat folder on USB or an external drive so the memory archive can travel separately from the source computer.
 
 ## Why Install DataMoat
 
