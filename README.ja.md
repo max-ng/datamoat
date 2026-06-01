@@ -33,7 +33,7 @@ GitHub リポジトリ: [https://github.com/max-ng/datamoat](https://github.com/
 
 **自分たちの AI データを所有する人と企業が、未来を勝ち取ります。**
 
-DataMoat は、ChatGPT exports、ChatGPT exports、Claude CLI、Claude Desktop、Codex CLI、Codex app、Cursor、Claude Code GUI workflow 経由の DeepSeek と Qwen、OpenClaw、その他の AI ツールを使う人とチームのための AI work history memory archive です。完全な作業記録を保存します: sessions、存在する場合はローカルに保存された thinking tokens と reasoning blocks、prompts、responses、tool output、files、attachments、metadata、skills folder contents、同じマシン上の元ソース記録です。これにより、あなたの作業は後から review 可能で、保護され、再利用でき、引き継ぎやすくなります。
+DataMoat は、ChatGPT exports、Claude CLI、Claude Desktop、Codex CLI、Codex app、Cursor、Claude Code GUI workflow 経由の DeepSeek と Qwen、OpenClaw、その他の AI ツールを使う人とチームのための AI work history memory archive です。完全な作業記録を保存します: sessions、存在する場合はローカルに保存された thinking tokens と reasoning blocks、prompts、responses、tool output、files、attachments、metadata、skills folder contents、同じマシン上の元ソース記録です。これにより、あなたの作業は後から review 可能で、保護され、再利用でき、引き継ぎやすくなります。
 
 ![DataMoat sessions、skills backup、暗号化ローカル memory archive UI](.github/assets/screenshot.png)
 
