@@ -2,7 +2,7 @@
 
 言語: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
-[![Version](https://img.shields.io/badge/version-2.0.4-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.7-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -47,7 +47,7 @@ DataMoat は 2 つの層を保持します:
 **現在対応しているソース:** ChatGPT export ZIP/フォルダーインポート、Claude CLI、Codex CLI、Codex app local sessions、macOS の Claude Desktop local-agent sessions、Claude Code GUI workflows がローカルに書き込む DeepSeek と Qwen sessions、対応するローカル OpenClaw session records、対応するローカル Cursor agent transcripts。
 **さらに多くのデータソースとプラットフォームリリースは roadmap にあります:** この repository を star / watch すると、新しい capture integrations と platform updates のリリースを追えます。
 
-## 2.0.4 新機能: ChatGPT Export メモリーインポート
+## 2.0.7 新機能: ChatGPT Export メモリーインポート
 
 DataMoat は対応する ChatGPT export ZIP ファイルまたは展開済み export フォルダーを、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw、skills、添付ファイルと同じ暗号化ローカル memory archive にインポートできるようになりました。
 
