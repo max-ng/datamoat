@@ -880,7 +880,6 @@ function writeWindowsPortableScripts(appRoot) {
     'set "APP_EXE=%APP_DIR%DataMoat.exe"',
     'if not exist "%APP_EXE%" (',
     '  echo DataMoat.exe was not found next to this script.',
-    '  pause',
     '  exit /b 1',
     ')',
     'set "STARTUP_DIR=%APPDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup"',
@@ -888,10 +887,8 @@ function writeWindowsPortableScripts(appRoot) {
     'mkdir "%STARTUP_DIR%" >nul 2>nul',
     '> "%STARTUP_VBS%" echo Set shell = CreateObject("WScript.Shell")',
     '>> "%STARTUP_VBS%" echo shell.Run """" ^& "%APP_EXE%" ^& """ --datamoat-tray-only", 0, False',
-    'start "" "%APP_EXE%"',
-    'echo DataMoat is installed for this Windows user and will start again after login.',
-    'echo Finish setup in the DataMoat window. Keep this folder together.',
-    'pause',
+    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p=$env:APP_EXE; Start-Process -FilePath $p -WorkingDirectory (Split-Path -Parent $p)"',
+    'exit /b %ERRORLEVEL%',
     '',
   ].join('\r\n')
 
@@ -901,10 +898,10 @@ function writeWindowsPortableScripts(appRoot) {
     'set "APP_EXE=%~dp0DataMoat.exe"',
     'if not exist "%APP_EXE%" (',
     '  echo DataMoat.exe was not found next to this script.',
-    '  pause',
     '  exit /b 1',
     ')',
-    'start "" "%APP_EXE%"',
+    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p=$env:APP_EXE; Start-Process -FilePath $p -WorkingDirectory (Split-Path -Parent $p)"',
+    'exit /b %ERRORLEVEL%',
     '',
   ].join('\r\n')
 
@@ -914,13 +911,10 @@ function writeWindowsPortableScripts(appRoot) {
     'set "APP_EXE=%~dp0DataMoat.exe"',
     'if not exist "%APP_EXE%" (',
     '  echo DataMoat.exe was not found next to this script.',
-    '  pause',
     '  exit /b 1',
     ')',
-    'start "" "%APP_EXE%" --datamoat-remote-no-screen',
-    'echo DataMoat remote no-screen capture was requested.',
-    'echo Finish password, authenticator, and recovery setup later on the protected desktop GUI.',
-    'pause',
+    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p=$env:APP_EXE; Start-Process -FilePath $p -ArgumentList \'--datamoat-remote-no-screen\' -WorkingDirectory (Split-Path -Parent $p) -WindowStyle Hidden"',
+    'exit /b %ERRORLEVEL%',
     '',
   ].join('\r\n')
 

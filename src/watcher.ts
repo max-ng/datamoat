@@ -516,7 +516,13 @@ function markWatcherStartupQueued(filePath: string, source: Source, mode: Watche
   if (!watcherStartupProgress.running || watcherStartupProgress.mode !== mode) return { counted: false, key: null, size: 0 }
   const key = `${source}:${filePath}`
   const existing = watcherStartupQueuedFiles.get(key)
-  if (existing) return { counted: false, key, size: existing.size }
+  // Pre-scan (countExistingWatchFiles) records every existing file here before
+  // chokidar replays its 'add' events. When that 'add' arrives and re-queues the
+  // same file, we must still let the eventual processing mark it processed so the
+  // progress bar advances — only a file already processed should be skipped.
+  // Returning counted:false for not-yet-processed files left processedSessions
+  // stuck at 0 for the whole initial scan (bar frozen at 0% until force-complete).
+  if (existing) return { counted: !existing.processed, key, size: existing.size }
   const sessionKey = watcherStartupSessionKey(filePath, source)
   const sessionLabel = watcherStartupSessionLabel(source, filePath)
   const existingSession = watcherStartupQueuedSessions.get(sessionKey)

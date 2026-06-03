@@ -213,7 +213,10 @@ function wallMerlons(
 function windowPresetForUrl(targetUrl: string): { width: number; height: number; minWidth: number; minHeight: number; resizable: boolean } {
   try {
     const pathname = new URL(targetUrl).pathname
-    if (pathname === '/setup' || pathname === '/unlock') {
+    if (pathname === '/setup') {
+      return { width: 1180, height: 860, minWidth: 980, minHeight: 760, resizable: true }
+    }
+    if (pathname === '/unlock') {
       return { width: 760, height: 900, minWidth: 720, minHeight: 680, resizable: true }
     }
   } catch {

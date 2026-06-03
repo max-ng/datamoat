@@ -55,6 +55,50 @@ function isElectronAppRunning(entry: string): boolean {
   return findMatchingProcessPids(entry).length > 0
 }
 
+function commandExists(command: string): boolean {
+  try {
+    child_process.execFileSync('command', ['-v', command], {
+      shell: true,
+      stdio: 'ignore',
+    })
+    return true
+  } catch {
+    return false
+  }
+}
+
+function launchLinuxBrowser(url: string): boolean {
+  if (process.platform !== 'linux') return false
+  if (!process.env.DISPLAY && !process.env.WAYLAND_DISPLAY) return false
+
+  const rootArgs = typeof process.getuid === 'function' && process.getuid() === 0
+    ? ['--no-sandbox', `--user-data-dir=${path.join('/tmp', `datamoat-browser-${process.getuid()}`)}`]
+    : []
+  const candidates: Array<{ command: string; args: string[] }> = [
+    { command: 'google-chrome', args: [...rootArgs, '--no-first-run', '--new-window', url] },
+    { command: 'google-chrome-stable', args: [...rootArgs, '--no-first-run', '--new-window', url] },
+    { command: 'chromium', args: [...rootArgs, '--no-first-run', '--new-window', url] },
+    { command: 'chromium-browser', args: [...rootArgs, '--no-first-run', '--new-window', url] },
+    { command: 'brave-browser', args: [...rootArgs, '--no-first-run', '--new-window', url] },
+    { command: 'firefox', args: ['--new-window', url] },
+  ]
+
+  for (const candidate of candidates) {
+    if (!commandExists(candidate.command)) continue
+    try {
+      child_process.spawn(candidate.command, candidate.args, {
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env },
+      }).unref()
+      return true
+    } catch {
+      /* try the next known browser */
+    }
+  }
+  return false
+}
+
 function stopLinuxUserServiceIfPresent(): void {
   if (process.platform !== 'linux') return
   const serviceFile = path.join(process.env.HOME || '', '.config', 'systemd', 'user', 'datamoat-daemon.service')
@@ -167,10 +211,16 @@ async function openUI() {
     return
   }
 
-  if (process.platform === 'linux' && process.env.DATAMOAT_BROWSER !== '1') {
-    console.error('DataMoat desktop UI did not start. Opening browser fallback instead.')
+  if (process.platform === 'linux') {
+    const opened = launchLinuxBrowser(url)
+    if (opened) {
+      console.log(`opened DataMoat browser UI at ${url}`)
+      return
+    }
+    console.log('DataMoat is ready, but this Linux session has no usable desktop browser command.')
+    console.log(`open this URL in a browser on the same desktop: ${url}`)
+    return
   }
-  console.log(`opening ${url}`)
 
   const { default: open } = await import('open')
   await open(url)

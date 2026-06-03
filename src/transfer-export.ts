@@ -10,6 +10,8 @@ import {
   AUTH_FILE,
   BOOTSTRAP_CAPTURE_DIR,
   DATAMOAT_ROOT,
+  INSTALL_CHOICE_FILE,
+  INSTALL_INFO_FILE,
   RAW_ARCHIVE_DIR,
   RAW_DIR,
   SESSIONS_FILE,
@@ -20,7 +22,8 @@ import {
 import { bootstrapCaptureSummary } from './bootstrap-capture'
 import type { TransferAuthSummary, TransferBootstrapSummary, TransferCounts, TransferManifest } from './transfer-types'
 import { TRANSFER_MANIFEST_FORMAT } from './transfer-types'
-import { appendMessages, getVaultSessionId, loadSessions, makeRawPath } from './store'
+import { appendMessages, getVaultSessionId, loadSessions, makeRawPath, saveSessions } from './store'
+import { writeAuditEvent, writeLog } from './logging'
 import type { RawRecord, Session } from './types'
 import { decryptLinesForSession } from './vault-helper'
 import { appendRawRecordArchiveLines, verifySourceArchive } from './source-archive'
@@ -102,6 +105,10 @@ function isTransferNoisePath(relativePath: string): boolean {
 function isTransferTransientPath(relativePath: string): boolean {
   const normalized = toPosix(relativePath)
   return normalized === 'daemon.pid'
+    || normalized === path.basename(INSTALL_CHOICE_FILE)
+    || normalized === path.basename(INSTALL_INFO_FILE)
+    || normalized === `state/${path.basename(INSTALL_CHOICE_FILE)}`
+    || normalized === `state/${path.basename(INSTALL_INFO_FILE)}`
     || normalized === 'state/port'
     || normalized === 'state/status.json'
     || normalized === 'state/health.json'
@@ -275,6 +282,29 @@ export function transferExportWarnings(root = DATAMOAT_ROOT): string[] {
 
 function sessionVaultWarnings(counts: TransferCounts): string[] {
   return counts.sessions > counts.vaultFiles ? ['session-index-missing-vault-files'] : []
+}
+
+// Prevention: drop orphaned entries (session-index rows whose
+// vault/<source>/<uid>.jsonl no longer exists) from the live session index
+// before an export so the exported folder is self-consistent and a later
+// restore does not flag it as incomplete. Only removes confirmed-missing vault
+// files; runs silently and is recorded in the audit log.
+export async function pruneOrphanedSessionIndex(): Promise<{ removed: number; kept: number }> {
+  const sessions = await loadSessions()
+  const kept: Session[] = []
+  let removed = 0
+  for (const session of sessions) {
+    const parts = String(session.vaultPath || '').split(/[\\/]/).filter(Boolean)
+    const vaultFile = parts.length > 0 ? path.join(VAULT_DIR, ...parts) : ''
+    if (vaultFile && fs.existsSync(vaultFile)) kept.push(session)
+    else removed += 1
+  }
+  if (removed > 0) {
+    await saveSessions(kept)
+    writeLog('warn', 'transfer', 'export_pruned_orphaned_sessions', { removed, kept: kept.length })
+    writeAuditEvent('transfer', 'export_pruned_orphaned_sessions', { removed, kept: kept.length })
+  }
+  return { removed, kept: kept.length }
 }
 
 export async function buildTransferManifest(options: { sessionCount?: number; root?: string } = {}): Promise<TransferManifest> {

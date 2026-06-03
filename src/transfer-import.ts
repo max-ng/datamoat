@@ -15,6 +15,8 @@ import {
   BOOTSTRAP_CAPTURE_FILE,
   BOOTSTRAP_CAPTURE_INDEX_FILE,
   DATAMOAT_ROOT,
+  INSTALL_CHOICE_FILE,
+  INSTALL_INFO_FILE,
   OFFSETS_FILE,
   SESSIONS_FILE,
   STATE_DIR,
@@ -103,6 +105,10 @@ type SourceValidationResult = {
 
 type PreservedBootstrapCapture = {
   root: string
+}
+
+type TransferredReferencedAttachmentIndex = {
+  protected?: unknown
 }
 
 function nowIso(): string {
@@ -653,30 +659,8 @@ async function readSourceSessionPayload(root: string, helperSessionId: string, s
   }
 }
 
-function manifestAllowsStaleMissingSessions(root: string, manifest: TransferManifest | null, missingCount: number): boolean {
-  if (!manifest || missingCount <= 0) return false
-  const manifestMissing = Math.max(0, Number(manifest.counts.sessions || 0) - Number(manifest.counts.vaultFiles || 0))
-  if (manifestMissing <= 0 || missingCount > manifestMissing) return false
-  const currentCounts = inspectTransferRoot(root)
-  return currentCounts.vaultFiles >= Number(manifest.counts.vaultFiles || 0)
-}
-
-function looksLikeLegacyChatGptEmptySession(session: Session): boolean {
-  if (session.source !== 'chatgpt-export') return false
-  const vaultPath = String(session.vaultPath || '').replace(/\\/g, '/')
-  if (!vaultPath.startsWith('chatgpt-export/') || !vaultPath.endsWith('.jsonl')) return false
-  return Math.max(0, Number(session.messageCount || 0)) === 0
-}
-
-function canSkipLegacyMissingParsedSessions(missingSessions: Session[]): boolean {
-  if (missingSessions.length === 0) return false
-  if (missingSessions.length > 10) return false
-  return missingSessions.every(looksLikeLegacyChatGptEmptySession)
-}
-
 async function validateUnlockedSource(root: string, helperSessionId: string): Promise<SourceValidationResult> {
   const sessions = await readSourceSessions(root, helperSessionId)
-  const manifest = loadManifest(root)
   const available: Session[] = []
   const missingSessions: Session[] = []
   for (const session of sessions) {
@@ -685,18 +669,12 @@ async function validateUnlockedSource(root: string, helperSessionId: string): Pr
   }
   const missingPaths = missingSessions.map(session => session.vaultPath)
   if (missingPaths.length > 0) {
-    if (
-      manifestAllowsStaleMissingSessions(root, manifest, missingPaths.length)
-      || canSkipLegacyMissingParsedSessions(missingSessions)
-    ) {
-      return {
-        sessions: available,
-        skippedMissingSessions: missingSessions,
-        skippedMissingVaultPaths: missingPaths,
-        totalSessions: sessions.length,
-      }
+    return {
+      sessions: available,
+      skippedMissingSessions: missingSessions,
+      skippedMissingVaultPaths: missingPaths,
+      totalSessions: sessions.length,
     }
-    throw new Error(`This transfer folder looks incomplete. Missing vault files: ${missingPaths.slice(0, 5).join(', ')}`)
   }
   return {
     sessions,
@@ -954,6 +932,10 @@ function removeTransferNoiseFiles(root: string): void {
 function isTransferTransientPath(relativePath: string): boolean {
   const normalized = toPosix(relativePath)
   return normalized === 'daemon.pid'
+    || normalized === path.basename(INSTALL_CHOICE_FILE)
+    || normalized === path.basename(INSTALL_INFO_FILE)
+    || normalized === 'state/install-choice.json'
+    || normalized === 'state/install-source.json'
     || normalized === 'state/port'
     || normalized === 'state/status.json'
     || normalized === 'state/health.json'
@@ -1091,6 +1073,8 @@ function cleanMachineBoundTransferredState(root: string): void {
 
   for (const relative of [
     'daemon.pid',
+    `state/${path.basename(INSTALL_CHOICE_FILE)}`,
+    `state/${path.basename(INSTALL_INFO_FILE)}`,
     'state/port',
     'state/status.json',
     'state/health.json',
@@ -1105,6 +1089,53 @@ function cleanMachineBoundTransferredState(root: string): void {
     try { fs.rmSync(path.join(root, ...relative.split('/')), { force: true }) } catch { /* ignore */ }
   }
   try { fs.rmSync(path.join(root, 'bootstrap-capture'), { recursive: true, force: true }) } catch { /* ignore */ }
+}
+
+async function resetTransferredReferencedAttachmentConsent(root: string, helperSessionId: string): Promise<void> {
+  const statePath = path.join(root, 'state', 'referenced-attachments.json')
+  if (!fs.existsSync(statePath)) return
+
+  let protectedRecords: Record<string, unknown> = {}
+  try {
+    const raw = fs.readFileSync(statePath, 'utf8').trim()
+    let parsed: TransferredReferencedAttachmentIndex | null = null
+    if (raw.startsWith('{')) {
+      parsed = JSON.parse(raw) as TransferredReferencedAttachmentIndex
+    } else if (raw.startsWith(STATE_PREFIX)) {
+      parsed = JSON.parse(await decryptStateForSession(helperSessionId, raw.slice(STATE_PREFIX.length))) as TransferredReferencedAttachmentIndex
+    }
+    if (parsed?.protected && typeof parsed.protected === 'object' && !Array.isArray(parsed.protected)) {
+      protectedRecords = parsed.protected as Record<string, unknown>
+    }
+  } catch (error) {
+    writePrivateJson(path.join(root, 'state', 'referenced-attachments-reset-warning.json'), {
+      resetAt: nowIso(),
+      reason: safeError(error),
+    })
+  }
+
+  const cleaned = {
+    version: 2,
+    enabled: false,
+    enabledByUserAt: null,
+    updatedAt: nowIso(),
+    lastScanAt: null,
+    previousSessionsChecked: 0,
+    protected: protectedRecords,
+    permissionIssues: {},
+    checkedSessions: {},
+  }
+
+  try {
+    const encrypted = await encryptStateForSession(helperSessionId, JSON.stringify(cleaned))
+    writePrivateText(statePath, `${STATE_PREFIX}${encrypted}`)
+  } catch (error) {
+    writePrivateJson(path.join(root, 'state', 'referenced-attachments-reset-warning.json'), {
+      resetAt: nowIso(),
+      reason: safeError(error),
+    })
+    try { fs.rmSync(statePath, { force: true }) } catch { /* ignore */ }
+  }
 }
 
 function sortSessionsForIndex(sessions: Session[]): Session[] {
@@ -1194,6 +1225,7 @@ async function switchCurrentRootToSource(
     removeTransferNoiseFiles(stagingRoot)
     nextJob = updateJob(nextJob, { phase: 'cleaning-machine-bound-auth' })
     cleanMachineBoundTransferredState(stagingRoot)
+    await resetTransferredReferencedAttachmentConsent(stagingRoot, helperSessionId)
     removeTransferNoiseFiles(stagingRoot)
     await writeTransferredSessionsIndex(stagingRoot, helperSessionId, sourceSessions)
     nextJob = updateJob(nextJob, { phase: 'finalizing-transfer-root' })
@@ -1297,7 +1329,7 @@ export async function runTransferImport(options: {
         },
         warnings: [
           ...(job.warnings ?? []),
-          `Skipped ${validation.skippedMissingSessions.length} stale session index entr${validation.skippedMissingSessions.length === 1 ? 'y' : 'ies'} whose parsed vault file was already missing from the transfer manifest.`,
+          `Skipped ${validation.skippedMissingSessions.length} stale session index entr${validation.skippedMissingSessions.length === 1 ? 'y' : 'ies'} whose parsed vault file was missing from the transfer folder.`,
         ],
         counts: {
           ...job.counts,

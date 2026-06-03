@@ -4,6 +4,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import * as http from 'http'
 import * as crypto from 'crypto'
+import * as os from 'os'
 import { spawn } from 'child_process'
 import QRCode from 'qrcode'
 import {
@@ -88,6 +89,7 @@ import {
 } from '../referenced-attachments'
 import {
   openTransferFolder,
+  pruneOrphanedSessionIndex,
   transferExportStatus,
   writeTransferManifest,
 } from '../transfer-export'
@@ -222,7 +224,14 @@ const AUTH_BACKOFF_BASE_MS = 1000
 const AUTH_BACKOFF_MAX_MS = 5 * 60 * 1000
 const AUTH_RESET_AFTER_MS = 15 * 60 * 1000
 const SESSION_DETAIL_PAGE_LIMIT = 500
-const SEARCH_MESSAGE_PAGE_LIMIT = 250
+const SEARCH_MESSAGE_PAGE_LIMIT = 1000
+const SEARCH_PROBE_MESSAGE_LIMIT = 64
+const SEARCH_PROBE_BATCH_LIMIT = 32
+const SEARCH_MAX_RESULTS = 50
+const SEARCH_MAX_CONCURRENCY = 14
+const SEARCH_MEMORY_CACHE_LIMIT = 16
+const SEARCH_MEMORY_CACHE_TTL_MS = 10 * 60 * 1000
+const SEARCH_SOURCE_FILTERS: Source[] = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw', 'cursor', 'chatgpt-export']
 const BACKGROUND_CAPTURE_RETRY_THROTTLE_MS = 30000
 const CSRF_COOKIE = 'dm_csrf'
 const CSRF_HEADER = 'x-dm-csrf'
@@ -333,16 +342,13 @@ async function setupInitPayload(): Promise<SetupInitPayload> {
     }
 
     const setup = pendingSetup
-    const [qrDataUrl, touchIdStatus] = await Promise.all([
-      setup.qrDataUrl ? Promise.resolve(setup.qrDataUrl) : QRCode.toDataURL(totpURL(setup.secret)),
-      secureEnclaveStatus(),
-    ])
+    const qrDataUrl = setup.qrDataUrl || await QRCode.toDataURL(totpURL(setup.secret))
     if (pendingSetup?.nonce === setup.nonce && !pendingSetup.qrDataUrl) {
       pendingSetup = { ...pendingSetup, qrDataUrl }
     }
     if (initialized) {
       writeAuditEvent('setup', 'setup_initialized', {
-        touchIdAvailable: touchIdStatus.available,
+        touchIdAvailable: false,
         totpProvisioned: true,
       })
     }
@@ -353,8 +359,8 @@ async function setupInitPayload(): Promise<SetupInitPayload> {
       qrDataUrl,
       platform: process.platform,
       touchIdSupportedPlatform: IS_MAC,
-      touchIdAvailable: touchIdStatus.available,
-      touchIdReason: touchIdStatus.reason,
+      touchIdAvailable: false,
+      touchIdReason: IS_MAC ? 'Checking Touch ID availability…' : 'Touch ID requires macOS.',
       bootstrapCapture: bootstrapCaptureSummary(),
     }
   })()
@@ -364,6 +370,32 @@ async function setupInitPayload(): Promise<SetupInitPayload> {
   } finally {
     pendingSetupInit = null
   }
+}
+
+async function quickSecureEnclaveStatus(context: string, timeoutMs = 2000): Promise<{ available: boolean; reason?: string }> {
+  let timedOut = false
+  const status = secureEnclaveStatus()
+    .then(result => {
+      if (timedOut) {
+        writeLog('warn', 'auth', 'secure_enclave_check_completed_after_timeout', { context, available: result.available })
+      }
+      return result
+    })
+    .catch(error => ({
+      available: false,
+      reason: error instanceof Error ? error.message : String(error),
+    }))
+  const timeout = new Promise<{ available: boolean; reason?: string }>(resolve => {
+    setTimeout(() => {
+      timedOut = true
+      writeLog('warn', 'auth', 'secure_enclave_check_timeout', { context, timeoutMs })
+      resolve({
+        available: false,
+        reason: 'Touch ID check timed out. You can continue setup and DataMoat will check again later.',
+      })
+    }, timeoutMs)
+  })
+  return await Promise.race([status, timeout])
 }
 
 function recoveryUnlockFlow(flow: SessionFlow | null | undefined): flow is 'mnemonic' {
@@ -508,7 +540,7 @@ function isSameOriginApiRequest(req: Request): boolean {
   const origin = req.get('origin')
   if (!origin) {
     const referrer = req.get('referer')
-    return sameHostRequest(req, referrer)
+    return referrer ? sameHostRequest(req, referrer) : true
   }
   return sameHostRequest(req, origin)
 }
@@ -571,6 +603,7 @@ async function lockVault(res?: Response): Promise<void> {
   const pendingHelperSessionId = pendingAuth?.helperSessionId ?? null
   pendingAuth = null
   activeSession = null
+  searchMemoryCache.clear()
   clearVaultSession()
   if (!captureHelperSessionId) await stopWatchers()
   await Promise.allSettled(
@@ -1967,7 +2000,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
   // ── Touch ID availability check (no prompt) ────────────────────────────────
   app.get('/api/auth/touchid-available', (_req, res) => {
-    void secureEnclaveStatus().then(status => res.json(status))
+    void quickSecureEnclaveStatus('touchid availability').then(status => res.json(status))
   })
 
   app.post('/api/auth/touchid', async (_req, res) => {
@@ -2094,31 +2127,196 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
   app.get('/api/search', requireAuth, async (req, res) => {
     const startedAt = Date.now()
-    const q = ((req.query.q as string) || '').toLowerCase().trim()
+    const q = ((req.query.q as string) || '').trim()
     if (!q || q.length < 2) return res.json([])
-    const sessions = await loadSessions()
-    const results: { id: string; excerpt: string }[] = []
-    for (const session of sessions) {
-      const excerpt = await findSearchExcerptForUI(session, q)
-      if (excerpt) results.push({ id: session.uid ?? session.id, excerpt })
-      if (results.length >= 50) break  // cap at 50 matches
+    const matcher = createSearchMatcher(q)
+    const sourceFilter = searchSourceQuery(req.query.source)
+    const requestedQuickMs = positiveIntQuery(req.query.quickMs)
+    const quickMs = requestedQuickMs > 0 ? Math.min(requestedQuickMs, 10_000) : 0
+    const deadlineAt = quickMs > 0 ? Date.now() + quickMs : 0
+    let requestClosed = false
+    res.on('close', () => {
+      if (!res.writableEnded) requestClosed = true
+    })
+    const allSessions = await loadSessions()
+    const sessions = filterSessionsForSearch(allSessions, sourceFilter)
+    const cacheSignature = `${sourceFilter}|${searchCacheSignature(sessions)}`
+    const cachedSearch = searchMemoryCacheGet(q, cacheSignature)
+    if (cachedSearch) {
+      res.setHeader('X-DataMoat-Search-Partial', '0')
+      updateHealth('search', {
+        lastQuery: q,
+        lastSourceFilter: sourceFilter,
+        lastCaseInsensitive: matcher.caseInsensitive,
+        lastResultCount: cachedSearch.length,
+        lastDurationMs: Date.now() - startedAt,
+        lastSessionCount: sessions.length,
+        lastAllSessionCount: allSessions.length,
+        lastConcurrency: 0,
+        lastQuickMs: quickMs,
+        lastPartial: false,
+        lastFromMemoryCache: true,
+        lastMatchedSessionIds: cachedSearch.slice(0, 10).map(result => result.id),
+        lastSearchedAt: new Date().toISOString(),
+      })
+      return res.json(cachedSearch)
     }
+    const cpuCount = searchAvailableCpuCount()
+    const loadAverage = searchLoadAverage()
+    const concurrency = searchWorkerCount(sessions.length, cpuCount, loadAverage)
+    const search = await searchSessionsForUI(sessions, matcher, concurrency, () => (
+      requestClosed || (deadlineAt > 0 && Date.now() >= deadlineAt)
+    ))
+    const results = search.results
+    res.setHeader('X-DataMoat-Search-Partial', search.stoppedEarly ? '1' : '0')
     updateHealth('search', {
       lastQuery: q,
+      lastSourceFilter: sourceFilter,
+      lastCaseInsensitive: matcher.caseInsensitive,
       lastResultCount: results.length,
       lastDurationMs: Date.now() - startedAt,
       lastSessionCount: sessions.length,
+      lastAllSessionCount: allSessions.length,
+      lastCpuCount: cpuCount,
+      lastLoadAverage: loadAverage,
+      lastConcurrency: concurrency,
+      lastQuickMs: quickMs,
+      lastPartial: search.stoppedEarly,
+      lastFromMemoryCache: false,
       lastMatchedSessionIds: results.slice(0, 10).map(result => result.id),
       lastSearchedAt: new Date().toISOString(),
     })
     writeAuditEvent('search', 'search_completed', {
       query: q,
+      sourceFilter,
       resultCount: results.length,
       durationMs: Date.now() - startedAt,
       sessionCount: sessions.length,
+      allSessionCount: allSessions.length,
+      cpuCount,
+      loadAverage,
+      concurrency,
       matchedSessionIds: results.slice(0, 10).map(result => result.id),
     })
+    if (!search.stoppedEarly) searchMemoryCacheSet(q, cacheSignature, results)
     res.json(results)
+  })
+
+  app.get('/api/search/stream', requireAuth, async (req, res) => {
+    const startedAt = Date.now()
+    const q = ((req.query.q as string) || '').trim()
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private')
+    res.setHeader('X-Accel-Buffering', 'no')
+    if (typeof (res as any).flushHeaders === 'function') (res as any).flushHeaders()
+
+    const writeEvent = (event: Record<string, unknown>): void => {
+      if (res.writableEnded || res.destroyed) return
+      res.write(`${JSON.stringify(event)}\n`)
+    }
+
+    if (!q || q.length < 2) {
+      writeEvent({ type: 'done', resultCount: 0, partial: false, durationMs: Date.now() - startedAt })
+      res.end()
+      return
+    }
+
+    const matcher = createSearchMatcher(q)
+    const sourceFilter = searchSourceQuery(req.query.source)
+    let requestClosed = false
+    res.on('close', () => {
+      if (!res.writableEnded) requestClosed = true
+    })
+
+    const allSessions = await loadSessions()
+    const sessions = filterSessionsForSearch(allSessions, sourceFilter)
+    const cacheSignature = `${sourceFilter}|${searchCacheSignature(sessions)}`
+    const cachedSearch = searchMemoryCacheGet(q, cacheSignature)
+    if (cachedSearch) {
+      for (const hit of cachedSearch) writeEvent({ type: 'hit', hit })
+      updateHealth('search', {
+        lastQuery: q,
+        lastSourceFilter: sourceFilter,
+        lastCaseInsensitive: matcher.caseInsensitive,
+        lastResultCount: cachedSearch.length,
+        lastDurationMs: Date.now() - startedAt,
+        lastSessionCount: sessions.length,
+        lastAllSessionCount: allSessions.length,
+        lastConcurrency: 0,
+        lastPartial: false,
+        lastFromMemoryCache: true,
+        lastStreamed: true,
+        lastMatchedSessionIds: cachedSearch.slice(0, 10).map(result => result.id),
+        lastSearchedAt: new Date().toISOString(),
+      })
+      writeEvent({ type: 'done', resultCount: cachedSearch.length, partial: false, durationMs: Date.now() - startedAt, fromMemoryCache: true })
+      res.end()
+      return
+    }
+
+    const cpuCount = searchAvailableCpuCount()
+    const loadAverage = searchLoadAverage()
+    const concurrency = searchWorkerCount(sessions.length, cpuCount, loadAverage)
+    writeEvent({ type: 'meta', sessionCount: sessions.length, allSessionCount: allSessions.length, sourceFilter, cpuCount, loadAverage, concurrency })
+    const search = await searchSessionsForUI(
+      sessions,
+      matcher,
+      concurrency,
+      () => requestClosed,
+      hit => writeEvent({ type: 'hit', hit }),
+    )
+    const results = search.results
+    updateHealth('search', {
+      lastQuery: q,
+      lastSourceFilter: sourceFilter,
+      lastCaseInsensitive: matcher.caseInsensitive,
+      lastResultCount: results.length,
+      lastDurationMs: Date.now() - startedAt,
+      lastSessionCount: sessions.length,
+      lastAllSessionCount: allSessions.length,
+      lastCpuCount: cpuCount,
+      lastLoadAverage: loadAverage,
+      lastConcurrency: concurrency,
+      lastPartial: search.stoppedEarly,
+      lastFromMemoryCache: false,
+      lastStreamed: true,
+      lastMatchedSessionIds: results.slice(0, 10).map(result => result.id),
+      lastSearchedAt: new Date().toISOString(),
+    })
+    writeAuditEvent('search', 'search_completed', {
+      query: q,
+      sourceFilter,
+      resultCount: results.length,
+      durationMs: Date.now() - startedAt,
+      sessionCount: sessions.length,
+      allSessionCount: allSessions.length,
+      cpuCount,
+      loadAverage,
+      concurrency,
+      streamed: true,
+      matchedSessionIds: results.slice(0, 10).map(result => result.id),
+    })
+    if (!search.stoppedEarly) searchMemoryCacheSet(q, cacheSignature, results)
+    writeEvent({ type: 'done', resultCount: results.length, partial: search.stoppedEarly, durationMs: Date.now() - startedAt })
+    res.end()
+  })
+
+  app.get('/api/search/session/:id', requireAuth, async (req, res) => {
+    const q = ((req.query.q as string) || '').trim()
+    if (!q || q.length < 2) return res.json({ id: req.params.id, query: q, matchCount: 0, hits: [] })
+    const sessions = await loadSessions()
+    const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
+    if (!session) return res.status(404).json({ error: 'not found' })
+    const matcher = createSearchMatcher(q)
+    const id = session.uid ?? session.id
+    const hits = (await findSearchHitsForUI(session, matcher)).map(hit => ({ id, ...hit }))
+    res.json({
+      id,
+      query: q,
+      caseInsensitive: matcher.caseInsensitive,
+      matchCount: hits.length,
+      hits,
+    })
   })
 
   app.get('/api/attachment/:id', requireAuth, async (req, res) => {
@@ -2232,6 +2430,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   })
 
   app.post('/api/transfer/export/check', requireAuth, async (_req, res) => {
+    await pruneOrphanedSessionIndex()
     const sessions = await loadSessions()
     const manifest = await writeTransferManifest({ sessionCount: sessions.length })
     res.json({
@@ -2543,6 +2742,35 @@ type ReadMessagesForUIOptions = {
   limit?: number
 }
 
+type SearchResultForUI = {
+  id: string
+  excerpt: string
+  messageIndex: number
+  messageId?: string
+  blockIndex: number
+  matchStart: number
+  matchEnd: number
+}
+
+type SearchSessionJob = {
+  session: Session
+  order: number
+}
+
+type SearchMemoryCacheEntry = {
+  key: string
+  signature: string
+  results: SearchResultForUI[]
+  savedAt: number
+}
+
+type SearchMatcher = {
+  query: string
+  caseInsensitive: boolean
+}
+
+const searchMemoryCache = new Map<string, SearchMemoryCacheEntry>()
+
 async function readMessagesForUI(session: Session, options: ReadMessagesForUIOptions = {}): Promise<Message[]> {
   const limit = typeof options.limit === 'number' ? Math.max(0, Math.floor(options.limit)) : 0
   const offset = typeof options.offset === 'number' ? Math.max(0, Math.floor(options.offset)) : 0
@@ -2601,22 +2829,198 @@ async function attachReferencedAttachmentsForUI(session: Session, messages: Mess
   }))
 }
 
-async function findSearchExcerptForUI(session: Session, q: string): Promise<string | null> {
-  let matched: string | null = null
-  await forEachSessionMessageLineBatch(session, SEARCH_MESSAGE_PAGE_LIMIT, lines => {
+function searchAvailableCpuCount(): number {
+  return Math.max(1, os.availableParallelism?.() ?? os.cpus().length)
+}
+
+function searchLoadAverage(): number {
+  const loadAverage = os.loadavg?.()[0]
+  return Number.isFinite(loadAverage) && loadAverage >= 0 ? Number(loadAverage) : 0
+}
+
+function searchWorkerCount(
+  sessionCount: number,
+  cpuCount = searchAvailableCpuCount(),
+  loadAverage = searchLoadAverage(),
+): number {
+  if (sessionCount <= 1) return 1
+  const reservedCpus = cpuCount >= 8 ? 2 : 1
+  const idleTarget = Math.max(1, cpuCount - reservedCpus)
+  const toleratedLoad = Math.max(1, cpuCount * 0.25)
+  const busyPenalty = Math.max(0, Math.ceil(loadAverage - toleratedLoad))
+  const targetWorkers = Math.max(1, idleTarget - busyPenalty)
+  return Math.max(1, Math.min(SEARCH_MAX_CONCURRENCY, sessionCount, targetWorkers))
+}
+
+function createSearchMatcher(query: string): SearchMatcher {
+  const caseInsensitive = /[a-z]/i.test(query)
+  return {
+    query: caseInsensitive ? query.toLowerCase() : query,
+    caseInsensitive,
+  }
+}
+
+function searchIndexOf(text: string, matcher: SearchMatcher): number {
+  return matcher.caseInsensitive
+    ? text.toLowerCase().indexOf(matcher.query)
+    : text.indexOf(matcher.query)
+}
+
+function searchCacheKey(query: string): string {
+  return query.trim().toLowerCase()
+}
+
+function searchCacheSignature(sessions: Session[]): string {
+  const first = sessions[0]
+  const last = sessions[sessions.length - 1]
+  return [
+    sessions.length,
+    first?.uid ?? first?.id ?? '',
+    first?.lastTimestamp ?? '',
+    last?.uid ?? last?.id ?? '',
+    last?.lastTimestamp ?? '',
+  ].join('|')
+}
+
+function pruneSearchMemoryCache(now = Date.now()): void {
+  for (const [key, entry] of searchMemoryCache) {
+    if (now - entry.savedAt > SEARCH_MEMORY_CACHE_TTL_MS) searchMemoryCache.delete(key)
+  }
+  while (searchMemoryCache.size > SEARCH_MEMORY_CACHE_LIMIT) {
+    const oldest = Array.from(searchMemoryCache.values()).sort((a, b) => a.savedAt - b.savedAt)[0]
+    if (!oldest) return
+    searchMemoryCache.delete(oldest.key)
+  }
+}
+
+function searchMemoryCacheGet(query: string, signature: string): SearchResultForUI[] | null {
+  const now = Date.now()
+  pruneSearchMemoryCache(now)
+  const key = searchCacheKey(query)
+  const entry = searchMemoryCache.get(key)
+  if (!entry || entry.signature !== signature || now - entry.savedAt > SEARCH_MEMORY_CACHE_TTL_MS) return null
+  entry.savedAt = now
+  return entry.results.map(result => ({ ...result }))
+}
+
+function searchMemoryCacheSet(query: string, signature: string, results: SearchResultForUI[]): void {
+  const key = searchCacheKey(query)
+  searchMemoryCache.set(key, {
+    key,
+    signature,
+    results: results.map(result => ({ ...result })),
+    savedAt: Date.now(),
+  })
+  pruneSearchMemoryCache()
+}
+
+async function searchSessionsForUI(
+  sessions: Session[],
+  matcher: SearchMatcher,
+  concurrency: number,
+  shouldStop: () => boolean = () => false,
+  onHit: (hit: SearchResultForUI) => void | Promise<void> = () => {},
+): Promise<{ results: SearchResultForUI[]; stoppedEarly: boolean }> {
+  const results: Array<SearchResultForUI & { order: number }> = []
+  const lanes = searchSessionLanes(sessions, concurrency)
+  const matchedSessionIds = new Set<string>()
+  let processedJobs = 0
+  let stopped = false
+
+  const pushHit = async (job: SearchSessionJob, hit: Omit<SearchResultForUI, 'id'>): Promise<void> => {
+    const id = job.session.uid ?? job.session.id
+    if (matchedSessionIds.has(id)) return
+    matchedSessionIds.add(id)
+    const result = { id, ...hit }
+    results.push({ ...result, order: job.order })
+    await onHit(result)
+    if (results.length >= SEARCH_MAX_RESULTS) stopped = true
+  }
+
+  const worker = async (jobs: SearchSessionJob[]): Promise<void> => {
+    for (const job of jobs) {
+      if (stopped || shouldStop()) return
+      processedJobs += 1
+      const probeHit = await findSearchHitForUI(job.session, matcher, shouldStop, {
+        maxMessages: SEARCH_PROBE_MESSAGE_LIMIT,
+        batchSize: SEARCH_PROBE_BATCH_LIMIT,
+      })
+      if (probeHit) {
+        await pushHit(job, probeHit)
+        if (stopped || shouldStop()) return
+        continue
+      }
+      if (shouldStop()) return
+      const hit = await findSearchHitForUI(job.session, matcher, shouldStop)
+      if (!hit || shouldStop()) continue
+      await pushHit(job, hit)
+    }
+  }
+
+  await Promise.all(lanes.map(lane => worker(lane)))
+  const completed = stopped || processedJobs >= sessions.length
+  return {
+    results: results
+      .sort((a, b) => a.order - b.order)
+      .slice(0, SEARCH_MAX_RESULTS)
+      .map(({ order: _order, ...result }) => result),
+    stoppedEarly: !completed && shouldStop() && results.length < SEARCH_MAX_RESULTS,
+  }
+}
+
+function searchSessionLanes(sessions: Session[], concurrency: number): SearchSessionJob[][] {
+  const workerCount = Math.max(1, Math.min(Math.floor(concurrency), sessions.length || 1))
+  if (sessions.length <= workerCount) {
+    return sessions.map((session, order) => [{ session, order }])
+  }
+  const laneSize = Math.ceil(sessions.length / workerCount)
+  return Array.from({ length: workerCount }, (_unused, lane) => {
+    const start = lane * laneSize
+    const end = Math.min(sessions.length - 1, start + laneSize - 1)
+    const jobs: SearchSessionJob[] = []
+    for (let offset = 0; start + offset <= end - offset; offset += 1) {
+      const left = start + offset
+      const right = end - offset
+      jobs.push({ session: sessions[left], order: left })
+      if (right !== left) jobs.push({ session: sessions[right], order: right })
+    }
+    return jobs
+  }).filter(lane => lane.length > 0)
+}
+
+async function findSearchHitForUI(
+  session: Session,
+  matcher: SearchMatcher,
+  shouldStop: () => boolean = () => false,
+  options: { maxMessages?: number; batchSize?: number } = {},
+): Promise<Omit<SearchResultForUI, 'id'> | null> {
+  let matched: Omit<SearchResultForUI, 'id'> | null = null
+  let messageIndex = 0
+  const maxMessages = Number(options.maxMessages || 0)
+  const batchSize = Number(options.batchSize || SEARCH_MESSAGE_PAGE_LIMIT)
+  await forEachSessionMessageLineBatch(session, batchSize, lines => {
+    if (shouldStop()) return false
     for (const line of lines) {
-      if (!line.toLowerCase().includes(q)) continue
+      if (shouldStop()) return false
+      if (maxMessages > 0 && messageIndex >= maxMessages) return false
+      const currentMessageIndex = messageIndex
+      messageIndex += 1
+      if (searchIndexOf(line, matcher) === -1) continue
       let message: Message | null = null
       try {
         message = JSON.parse(line) as Message
       } catch {
         message = null
       }
-      const excerpt = message
-        ? findSearchExcerptInMessages([message], q)
-        : findSearchExcerptInRawLine(line, q)
-      if (excerpt) {
-        matched = excerpt
+      const hit = message
+        ? findSearchHitInMessage(message, matcher)
+        : findSearchHitInRawLine(line, matcher)
+      if (hit) {
+        matched = {
+          ...hit,
+          messageIndex: currentMessageIndex,
+          ...(message?.id ? { messageId: message.id } : {}),
+        }
         return false
       }
     }
@@ -2625,26 +3029,76 @@ async function findSearchExcerptForUI(session: Session, q: string): Promise<stri
   return matched
 }
 
-function findSearchExcerptInRawLine(line: string, q: string): string | null {
-  const idx = line.toLowerCase().indexOf(q)
-  if (idx === -1) return null
-  const start = Math.max(0, idx - 40)
-  const end = Math.min(line.length, idx + q.length + 80)
-  return (start > 0 ? '…' : '') + line.slice(start, end) + (end < line.length ? '…' : '')
+async function findSearchHitsForUI(session: Session, matcher: SearchMatcher): Promise<Array<Omit<SearchResultForUI, 'id'>>> {
+  const hits: Array<Omit<SearchResultForUI, 'id'>> = []
+  let messageIndex = 0
+  await forEachSessionMessageLineBatch(session, SEARCH_MESSAGE_PAGE_LIMIT, lines => {
+    for (const line of lines) {
+      const currentMessageIndex = messageIndex
+      messageIndex += 1
+      if (searchIndexOf(line, matcher) === -1) continue
+      let message: Message | null = null
+      try {
+        message = JSON.parse(line) as Message
+      } catch {
+        message = null
+      }
+      const lineHits = message
+        ? findSearchHitsInMessage(message, matcher)
+        : findSearchHitsInRawLine(line, matcher)
+      for (const hit of lineHits) {
+        hits.push({
+          ...hit,
+          messageIndex: currentMessageIndex,
+          ...(message?.id ? { messageId: message.id } : {}),
+        })
+      }
+    }
+    return true
+  })
+  return hits
 }
 
-function findSearchExcerptInMessages(messages: Message[], q: string): string | null {
-  for (const msg of messages) {
-    for (const block of msg.content) {
-      const text = block.text || block.thinking || stringifySearchableBlock(block)
-      const idx = text.toLowerCase().indexOf(q)
-      if (idx === -1) continue
-      const start = Math.max(0, idx - 40)
-      const end = Math.min(text.length, idx + q.length + 80)
-      return (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : '')
-    }
+function searchHitsFromText(text: string, matcher: SearchMatcher, blockIndex: number): Array<Omit<SearchResultForUI, 'id' | 'messageIndex' | 'messageId'>> {
+  const haystack = matcher.caseInsensitive ? text.toLowerCase() : text
+  const hits: Array<Omit<SearchResultForUI, 'id' | 'messageIndex' | 'messageId'>> = []
+  let cursor = 0
+  while (cursor <= haystack.length) {
+    const idx = haystack.indexOf(matcher.query, cursor)
+    if (idx === -1) break
+    const start = Math.max(0, idx - 40)
+    const end = Math.min(text.length, idx + matcher.query.length + 80)
+    hits.push({
+      excerpt: (start > 0 ? '…' : '') + text.slice(start, end) + (end < text.length ? '…' : ''),
+      blockIndex,
+      matchStart: idx,
+      matchEnd: idx + matcher.query.length,
+    })
+    cursor = idx + Math.max(1, matcher.query.length)
   }
-  return null
+  return hits
+}
+
+function findSearchHitInRawLine(line: string, matcher: SearchMatcher): Omit<SearchResultForUI, 'id' | 'messageIndex' | 'messageId'> | null {
+  return findSearchHitsInRawLine(line, matcher)[0] ?? null
+}
+
+function findSearchHitsInRawLine(line: string, matcher: SearchMatcher): Array<Omit<SearchResultForUI, 'id' | 'messageIndex' | 'messageId'>> {
+  return searchHitsFromText(line, matcher, 0)
+}
+
+function findSearchHitInMessage(msg: Message, matcher: SearchMatcher): Omit<SearchResultForUI, 'id' | 'messageIndex' | 'messageId'> | null {
+  return findSearchHitsInMessage(msg, matcher)[0] ?? null
+}
+
+function findSearchHitsInMessage(msg: Message, matcher: SearchMatcher): Array<Omit<SearchResultForUI, 'id' | 'messageIndex' | 'messageId'>> {
+  const hits: Array<Omit<SearchResultForUI, 'id' | 'messageIndex' | 'messageId'>> = []
+  for (let blockIndex = 0; blockIndex < msg.content.length; blockIndex += 1) {
+    const block = msg.content[blockIndex]
+    const text = block.text || block.thinking || stringifySearchableBlock(block)
+    hits.push(...searchHitsFromText(text, matcher, blockIndex))
+  }
+  return hits
 }
 
 function positiveIntQuery(value: unknown): number {
@@ -2652,6 +3106,15 @@ function positiveIntQuery(value: unknown): number {
   if (typeof raw !== 'string') return 0
   const parsed = Number.parseInt(raw, 10)
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function searchSourceQuery(value: unknown): Source | 'all' {
+  const source = String(Array.isArray(value) ? value[0] : value || '').trim()
+  return (SEARCH_SOURCE_FILTERS as string[]).includes(source) ? source as Source : 'all'
+}
+
+function filterSessionsForSearch(sessions: Session[], source: Source | 'all'): Session[] {
+  return source === 'all' ? sessions : sessions.filter(session => session.source === source)
 }
 
 type WeeklyAnalyticsBucket = { key: string; count: number }
@@ -3148,7 +3611,7 @@ function setupPageHTML(): string {
     box-shadow: 0 24px 70px rgba(0,0,0,0.28);
   }
   .card-header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 12px; }
-  .card-header h1 { font-size: 18px; font-weight: 500; letter-spacing: -0.02em; }
+  .card-header h1 { font-size: 18px; font-weight: 500; letter-spacing: 0; }
   .step-badge { background: rgba(242,178,77,0.14); color: var(--accent); font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 5px 10px; border-radius: 999px; letter-spacing: 1px; border: 1px solid rgba(242,178,77,0.28); }
   .card-body {
     flex: 1 1 auto;
@@ -3222,23 +3685,205 @@ function setupPageHTML(): string {
   .pw-strength { height: 3px; border-radius: 2px; margin-top: 6px; transition: width 0.3s, background 0.3s; background: var(--border); }
   .pw-hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
   /* Activation overlay */
-  .activate-overlay { display: none; position: fixed; inset: 0; z-index: 999; background: var(--bg); flex-direction: column; align-items: center; justify-content: center; gap: 24px; }
+  .activate-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: #191919;
+    color: rgba(255,255,255,0.86);
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
   .activate-overlay.show { display: flex; }
-  .activate-logo { font-size: 13px; letter-spacing: 4px; color: var(--accent2); text-transform: uppercase; }
-  .activate-logo span { color: var(--accent2); }
-  .activate-label { max-width: 640px; padding: 0 24px; text-align: center; font-size: 11px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; min-height: 18px; transition: color 0.5s; }
-  .activate-label.bright { color: var(--accent2); }
-  .activate-detail { max-width: 640px; min-height: 42px; padding: 0 24px; text-align: center; font-size: 12px; line-height: 1.55; color: #aab5c3; }
-  .activate-progress-wrap { width: 480px; max-width: 90vw; display: grid; gap: 8px; }
-  .activate-progress-head { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; font-family: var(--mono); }
-  .activate-step { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; }
-  .activate-percent { flex: 0 0 auto; color: var(--accent2); font-size: 14px; letter-spacing: 1px; }
-  .progress-track { width: 480px; max-width: 90vw; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
-  .progress-fill { height: 100%; width: 0%; background: var(--accent2); border-radius: 2px; transition: width linear; box-shadow: 0 0 10px var(--accent2); }
-  .progress-track.indeterminate .progress-fill { width: 32%; animation: progress-slide 1.25s ease-in-out infinite; transition: none; }
+  .activate-panel {
+    width: min(1040px, calc(100vw - 48px));
+    min-height: 360px;
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    overflow: hidden;
+    border: 1px solid #2f2f2f;
+    border-radius: 8px;
+    background: #202020;
+    box-shadow: 0 22px 80px rgba(0,0,0,0.38);
+  }
+  .activate-side {
+    padding: 22px;
+    border-right: 1px solid #2f2f2f;
+    background: #191919;
+  }
+  .activate-logo {
+    font-family: var(--sans);
+    font-size: 20px;
+    font-weight: 750;
+    letter-spacing: 0;
+    color: #0f9d76;
+    text-transform: none;
+  }
+  .activate-subtitle {
+    margin-top: 4px;
+    color: rgba(255,255,255,0.46);
+    font-size: 13px;
+  }
+  .activate-rail {
+    display: grid;
+    gap: 10px;
+    margin-top: 28px;
+  }
+  .activate-rail-item {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    align-items: center;
+    gap: 10px;
+    color: rgba(255,255,255,0.48);
+    font-size: 13px;
+  }
+  .activate-rail-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #3a3a3a;
+  }
+  .activate-rail-item.active {
+    color: rgba(255,255,255,0.86);
+  }
+  .activate-rail-item.active .activate-rail-dot {
+    background: #0f9d76;
+    box-shadow: 0 0 0 5px rgba(15,157,118,0.14);
+  }
+  .activate-rail-item.done .activate-rail-dot {
+    background: #2ea043;
+  }
+  .activate-main {
+    min-width: 0;
+    padding: 24px;
+    display: grid;
+    align-content: center;
+    gap: 16px;
+  }
+  .activate-card {
+    border: 1px solid #2f2f2f;
+    border-radius: 8px;
+    background: #252525;
+    padding: 18px;
+  }
+  .activate-progress-wrap {
+    display: grid;
+    gap: 12px;
+  }
+  .activate-progress-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .activate-step {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: rgba(255,255,255,0.54);
+    font-size: 13px;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .activate-percent {
+    flex: 0 0 auto;
+    color: #0f9d76;
+    font-size: 22px;
+    font-weight: 650;
+    letter-spacing: 0;
+    line-height: 1.1;
+    white-space: nowrap;
+  }
+  .progress-track {
+    width: 100%;
+    height: 8px;
+    background: #333333;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: #0f9d76;
+    border-radius: 999px;
+    transition: width linear;
+    box-shadow: none;
+  }
+  .progress-track.indeterminate .progress-fill {
+    width: 32%;
+    animation: progress-slide 1.25s ease-in-out infinite;
+    transition: none;
+  }
   @keyframes progress-slide { from { transform: translateX(-120%); } to { transform: translateX(340%); } }
-  .activate-done { font-size: 22px; color: var(--accent2); opacity: 0; transition: opacity 0.6s; }
+  .activate-label {
+    font-size: 21px;
+    font-weight: 650;
+    line-height: 1.2;
+    letter-spacing: 0;
+    color: rgba(255,255,255,0.9);
+    min-height: 26px;
+    overflow-wrap: anywhere;
+    transition: color 0.5s;
+  }
+  .activate-label.bright { color: #0f9d76; }
+  .activate-detail {
+    min-height: 40px;
+    font-size: 13px;
+    line-height: 1.42;
+    color: rgba(255,255,255,0.58);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  .activate-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .activate-pill {
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    padding: 6px 9px;
+    background: #202020;
+    color: rgba(255,255,255,0.58);
+    font-size: 12px;
+  }
+  .activate-pill strong {
+    color: #0f9d76;
+  }
+  .activate-done {
+    position: absolute;
+    right: 24px;
+    bottom: 22px;
+    font-size: 18px;
+    color: #0f9d76;
+    opacity: 0;
+    transition: opacity 0.6s;
+  }
   .activate-done.show { opacity: 1; }
+  @media (max-width: 760px) {
+    .activate-overlay { padding: 14px; }
+    .activate-panel {
+      width: 100%;
+      grid-template-columns: 1fr;
+    }
+    .activate-side {
+      border-right: 0;
+      border-bottom: 1px solid #2f2f2f;
+    }
+    .activate-rail {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      margin-top: 18px;
+    }
+    .activate-main {
+      padding: 20px;
+    }
+    .activate-percent {
+      font-size: 22px;
+    }
+  }
   /* Steps nav */
   .steps { display: flex; gap: 0; margin-bottom: 16px; }
   .step-tab { flex: 1; padding: 10px 8px; text-align: center; font-family: var(--mono); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid rgba(255,255,255,0.08); cursor: default; }
@@ -3283,7 +3928,7 @@ function setupPageHTML(): string {
   }
   .transfer-setup-entry .btn { width: fit-content; }
   .transfer-setup-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-  .transfer-setup-title { font-size: 17px; font-weight: 500; letter-spacing: -0.02em; }
+  .transfer-setup-title { font-size: 17px; font-weight: 500; letter-spacing: 0; }
   .transfer-setup-badge {
     font-family: var(--mono);
     font-size: 9px;
@@ -3346,7 +3991,7 @@ function setupPageHTML(): string {
   .method-card.disabled { opacity: 0.35; cursor: not-allowed; }
   .method-card.locked { cursor: default; }
   .method-card.locked:hover { transform: none; }
-  .method-title { font-size: 18px; font-weight: 500; letter-spacing: -0.02em; margin-bottom: 7px; }
+  .method-title { font-size: 18px; font-weight: 500; letter-spacing: 0; margin-bottom: 7px; }
   .method-copy { font-size: 12px; line-height: 1.55; color: #b1bcc9; max-width: 430px; }
   .method-switch {
     display: flex;
@@ -3434,11 +4079,194 @@ function setupPageHTML(): string {
       padding: 10px 16px 0;
     }
   }
-  strong { color: #f3f7fb; font-weight: 600; }
+  /* DataMoat panel refresh */
+  html,
+  body {
+    background: #191919;
+    color: var(--text);
+    font-family: var(--sans);
+  }
+  body {
+    padding: 16px;
+  }
+  .logo,
+  .activate-logo {
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #0f9d76;
+  }
+  .logo span,
+  .activate-logo span {
+    color: rgba(255,255,255,0.48);
+  }
+  .language-switch,
+  .card,
+  .mnemonic-grid,
+  .word-cell,
+  .warning-box,
+  .info-box,
+  .secret-box,
+  .pw-input,
+  .totp-input,
+  .method-card,
+  .transfer-setup-card,
+  .transfer-setup-entry,
+  .transfer-selected-folder,
+  .phase-actions {
+    border-color: #2f2f2f;
+    border-radius: 8px;
+    background: #202020;
+    box-shadow: none;
+  }
+  .card {
+    max-height: calc(100vh - 64px);
+  }
+  .card-header,
+  .setup-banner-row,
+  .method-fields,
+  .phase-actions {
+    border-color: #2f2f2f;
+  }
+  .card-header h1,
+  .transfer-setup-title,
+  .method-title {
+    letter-spacing: 0;
+  }
+  .step-badge,
+  .transfer-setup-badge,
+  .method-switch-label,
+  .section-label,
+  .secret-label,
+  .activate-label,
+  .activate-step,
+  .activate-percent,
+  .step-tab,
+  .language-btn,
+  .transfer-auth-tab,
+  .bootstrap-capture-box strong,
+  .secret-box,
+  .totp-input {
+    font-family: var(--sans);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .step-badge,
+  .step-tab.active,
+  .doc-link,
+  .word-text,
+  .secret-box,
+  .totp-input {
+    color: #0f9d76;
+  }
+  .step-badge,
+  .step-tab.active {
+    border-color: rgba(15,157,118,0.36);
+    background: rgba(15,157,118,0.14);
+  }
+  .step-tab.done {
+    color: #2ea043;
+    border-bottom-color: #2ea043;
+  }
+  .language-switch {
+    background: #202020;
+    padding: 3px;
+  }
+  .language-btn {
+    color: rgba(255,255,255,0.64);
+  }
+  .language-btn.active {
+    background: rgba(15,157,118,0.18);
+    color: rgba(255,255,255,0.88);
+  }
+  .card-header,
+  .phase-actions {
+    background: #202020;
+  }
+  .card-body::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.16);
+  }
+  .pw-input,
+  .totp-input {
+    background: #252525;
+    border-color: #3a3a3a;
+  }
+  .pw-input:focus,
+  .totp-input:focus {
+    border-color: rgba(15,157,118,0.58);
+  }
+  .btn {
+    font-family: var(--sans);
+    letter-spacing: 0;
+    text-transform: none;
+    border-radius: 6px;
+  }
+  .btn-primary,
+  .btn-success {
+    background: rgba(15,157,118,0.18);
+    border: 1px solid rgba(15,157,118,0.38);
+    color: rgba(255,255,255,0.88);
+    box-shadow: none;
+  }
+  .btn-ghost,
+  .transfer-auth-tab {
+    background: #252525;
+    border-color: #3a3a3a;
+    color: rgba(255,255,255,0.78);
+  }
+  .transfer-auth-tab.active {
+    border-color: rgba(15,157,118,0.4);
+    background: rgba(15,157,118,0.15);
+    color: rgba(255,255,255,0.88);
+  }
+  .warning-box {
+    background: rgba(217,115,13,0.12);
+    color: #d8b88f;
+  }
+  .warning-box strong {
+    color: #d9730d;
+  }
+  .info-box,
+  .bootstrap-capture-box,
+  .transfer-setup-card {
+    background: rgba(15,157,118,0.12);
+    border-color: rgba(15,157,118,0.28);
+    color: rgba(255,255,255,0.78);
+  }
+  .method-card.selected.password,
+  .method-card.selected.touchid {
+    border-color: rgba(15,157,118,0.42);
+    background: rgba(15,157,118,0.12);
+    box-shadow: inset 0 0 0 1px rgba(15,157,118,0.08);
+  }
+  .method-switch.password.enabled .method-switch-track,
+  .method-switch.touchid.enabled .method-switch-track {
+    border-color: rgba(15,157,118,0.48);
+    background: rgba(15,157,118,0.22);
+  }
+  .method-switch.password.enabled .method-switch-label,
+  .method-switch.touchid.enabled .method-switch-label,
+  .activate-label.bright,
+  .activate-percent,
+  .activate-done {
+    color: #0f9d76;
+  }
+  .method-switch.locked .method-switch-label {
+    color: #0f9d76;
+    border-color: rgba(15,157,118,0.28);
+    background: rgba(15,157,118,0.12);
+  }
+  .progress-fill {
+    background: #0f9d76;
+    box-shadow: none;
+  }
+  strong { color: rgba(255,255,255,0.88); font-weight: 650; }
 </style>
 </head>
 <body>
-<div class="logo">data<span>moat</span> — <span id="setup-logo-text">first-run setup</span></div>
+<div class="logo">DataMoat — <span id="setup-logo-text">first-run setup</span></div>
 
 <div class="card">
   <div class="card-header">
@@ -3652,17 +4480,49 @@ function setupPageHTML(): string {
 
 <!-- Activation overlay -->
 <div class="activate-overlay" id="activate-overlay">
-  <div class="activate-logo">data<span>moat</span></div>
-  <div class="activate-progress-wrap">
-    <div class="activate-progress-head">
-      <div class="activate-step" id="activate-step">Starting setup</div>
-      <div class="activate-percent" id="activate-percent">0%</div>
+  <div class="activate-panel" id="activate-panel">
+    <div class="activate-side">
+      <div class="activate-logo">DataMoat</div>
+      <div class="activate-subtitle">local vault setup</div>
+      <div class="activate-rail" aria-hidden="true">
+        <div class="activate-rail-item active" id="activate-rail-prepare">
+          <span class="activate-rail-dot"></span>
+          <span>Prepare vault</span>
+        </div>
+        <div class="activate-rail-item" id="activate-rail-scan">
+          <span class="activate-rail-dot"></span>
+          <span>Scan records</span>
+        </div>
+        <div class="activate-rail-item" id="activate-rail-import">
+          <span class="activate-rail-dot"></span>
+          <span>Import capture</span>
+        </div>
+        <div class="activate-rail-item" id="activate-rail-open">
+          <span class="activate-rail-dot"></span>
+          <span>Open DataMoat</span>
+        </div>
+      </div>
     </div>
-    <div class="progress-track" id="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="activate-main">
+      <div class="activate-card">
+        <div class="activate-progress-wrap">
+          <div class="activate-progress-head">
+            <div class="activate-step" id="activate-step">Starting setup</div>
+            <div class="activate-percent" id="activate-percent">0%</div>
+          </div>
+          <div class="progress-track" id="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+        </div>
+      </div>
+      <div class="activate-label" id="activate-label">Initialising vault…</div>
+      <div class="activate-detail" id="activate-detail">This first scan runs once and stays local.</div>
+      <div class="activate-meta">
+        <div class="activate-pill">encrypted local vault</div>
+        <div class="activate-pill"><strong>no-screen</strong> capture</div>
+        <div class="activate-pill">private by default</div>
+      </div>
+    </div>
+    <div class="activate-done" id="activate-done">✓</div>
   </div>
-  <div class="activate-label" id="activate-label">Initialising vault…</div>
-  <div class="activate-detail" id="activate-detail">This first scan runs once and stays local.</div>
-  <div class="activate-done" id="activate-done">✓</div>
 </div>
 
 <script>
@@ -3699,6 +4559,51 @@ function apiFetch(url, options) {
     }
   }
   return fetch(url, opts)
+}
+
+async function setupApiJson(url, options, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const opts = options ? { ...options } : {};
+    opts.signal = controller.signal;
+    const response = await apiFetch(url, opts);
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error((data && data.error) || 'Request failed');
+    return data;
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      throw new Error('Setup request timed out');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function renderMnemonicLoading() {
+  const grid = document.getElementById('mnemonic-grid');
+  if (!grid) return;
+  grid.innerHTML = '<div class="word-cell" style="grid-column: span 4; justify-content: center; color: var(--muted); font-size: 11px;">' + esc(setupTr('generating')) + '</div>';
+}
+
+let _setupInitAttempt = 0;
+let _setupInitRetryTimer = null;
+let _setupInitRunning = false;
+
+function scheduleMnemonicInitRetry(error) {
+  renderMnemonicLoading();
+  _setupInitAttempt += 1;
+  const delayMs = Math.min(5000, 500 * Math.pow(2, Math.min(_setupInitAttempt - 1, 4)));
+  if (window.console && typeof window.console.warn === 'function') {
+    const detail = error && error.message ? String(error.message) : String(error || 'setup init failed');
+    window.console.warn('DataMoat setup init failed; retrying in background', { attempt: _setupInitAttempt, delayMs, detail });
+  }
+  if (_setupInitRetryTimer) clearTimeout(_setupInitRetryTimer);
+  _setupInitRetryTimer = setTimeout(() => {
+    _setupInitRetryTimer = null;
+    void init();
+  }, delayMs);
 }
 
 function renderBootstrapCaptureBanner(summary) {
@@ -4322,6 +5227,7 @@ async function setupTransferImport() {
     if (stepText) stepName.textContent = stepText;
     if (text) label.textContent = text;
     if (detailText) detail.textContent = detailText;
+    updateActivationRail(hasPct ? Math.max(0, Math.min(100, Math.round(pct))) : null, stepText || stepName.textContent, text || label.textContent);
   };
   const formatLocalBytes = value => {
     const bytes = Number(value) || 0;
@@ -4437,33 +5343,51 @@ async function syncSetupRoute(force = false) {
 }
 
 async function init() {
-  await loadSetupPreferences();
-  if (await syncSetupRoute(true)) return;
-  const r = await apiFetch('/api/setup/init', { method: 'POST' });
-  const d = await r.json();
-  if (d && d.error === 'already setup') {
-    window.location.href = '/unlock';
-    return;
+  if (_setupInitRunning) return;
+  _setupInitRunning = true;
+  renderMnemonicLoading();
+  try {
+    await loadSetupPreferences();
+    if (await syncSetupRoute(true)) return;
+    const d = await setupApiJson('/api/setup/init', { method: 'POST' }, 10000);
+    if (d && d.error === 'already setup') {
+      window.location.href = '/unlock';
+      return;
+    }
+    const words = typeof d?.mnemonic === 'string' ? d.mnemonic.trim().split(/\\s+/).filter(Boolean) : [];
+    if (!d?.setupNonce || !d?.secret || words.length !== 24) {
+      throw new Error('Setup init did not return a valid 24-word recovery phrase');
+    }
+    _setupNonce = d.setupNonce;
+    _secret = d.secret;
+    _mnemonic = words.join(' ');
+    _setupInitAttempt = 0;
+    if (_setupInitRetryTimer) {
+      clearTimeout(_setupInitRetryTimer);
+      _setupInitRetryTimer = null;
+    }
+    document.getElementById('mnemonic-grid').innerHTML = words.map((w, i) =>
+      '<div class="word-cell"><span class="word-num">' + (i+1) + '</span><span class="word-text">' + esc(w) + '</span></div>'
+    ).join('');
+    document.getElementById('qr-img').src = d.qrDataUrl || '';
+    document.getElementById('totp-secret-display').textContent = d.secret;
+    _touchIdSupportedPlatform = d.touchIdSupportedPlatform !== false;
+    if (d.bootstrapCapture && d.bootstrapCapture.enabled) {
+      startBootstrapCaptureRefresh(d.bootstrapCapture);
+      document.querySelector('.card-body')?.scrollTo({ top: 0, left: 0 });
+      window.scrollTo(0, 0);
+    }
+    setTouchIdAvailability(_touchIdSupportedPlatform && !!d.touchIdAvailable, typeof d.touchIdReason === 'string' ? d.touchIdReason : '', true);
+    renderMethodCards();
+    updatePwUI();
+    scheduleTouchIdRefresh();
+  } catch (error) {
+    scheduleMnemonicInitRetry(error);
+    setTouchIdAvailability(false, '', true);
+    renderMethodCards();
+  } finally {
+    _setupInitRunning = false;
   }
-  _setupNonce = d.setupNonce;
-  _secret = d.secret;
-  _mnemonic = d.mnemonic;
-  const words = d.mnemonic.split(' ');
-  document.getElementById('mnemonic-grid').innerHTML = words.map((w, i) =>
-    '<div class="word-cell"><span class="word-num">' + (i+1) + '</span><span class="word-text">' + w + '</span></div>'
-  ).join('');
-  document.getElementById('qr-img').src = d.qrDataUrl;
-  document.getElementById('totp-secret-display').textContent = d.secret;
-  _touchIdSupportedPlatform = d.touchIdSupportedPlatform !== false;
-  if (d.bootstrapCapture && d.bootstrapCapture.enabled) {
-    startBootstrapCaptureRefresh(d.bootstrapCapture);
-    document.querySelector('.card-body')?.scrollTo({ top: 0, left: 0 });
-    window.scrollTo(0, 0);
-  }
-  setTouchIdAvailability(_touchIdSupportedPlatform && !!d.touchIdAvailable, typeof d.touchIdReason === 'string' ? d.touchIdReason : '', true);
-  renderMethodCards();
-  updatePwUI();
-  scheduleTouchIdRefresh();
 }
 document.querySelectorAll('#setup-language-switch [data-language]').forEach(btn => {
   btn.addEventListener('click', () => { void saveSetupLanguage(btn.dataset.language); });
@@ -4798,6 +5722,28 @@ function checkFinal() {
   setOff('btn-activate', !all);
 }
 
+function updateActivationRail(pct, stepText, labelText) {
+  const items = [
+    document.getElementById('activate-rail-prepare'),
+    document.getElementById('activate-rail-scan'),
+    document.getElementById('activate-rail-import'),
+    document.getElementById('activate-rail-open'),
+  ];
+  if (items.some(item => !item)) return;
+  const text = String((stepText || '') + ' ' + (labelText || '')).toLowerCase();
+  const safePct = typeof pct === 'number' && Number.isFinite(pct)
+    ? Math.max(0, Math.min(100, pct))
+    : null;
+  let activeIndex = 0;
+  if (/scan|index|record/.test(text) || (safePct !== null && safePct >= 22)) activeIndex = 1;
+  if (/import|copy|restore|protected|transfer|finaliz/.test(text) || (safePct !== null && safePct >= 52)) activeIndex = 2;
+  if (/open|complete|done|starting datamoat|activate/.test(text) || (safePct !== null && safePct >= 88)) activeIndex = 3;
+  items.forEach((item, index) => {
+    item.classList.toggle('active', index === activeIndex);
+    item.classList.toggle('done', index < activeIndex);
+  });
+}
+
 async function activate() {
   const overlay = document.getElementById('activate-overlay');
   const track = document.getElementById('progress-track');
@@ -4826,6 +5772,7 @@ async function activate() {
     if (stepText) stepName.textContent = stepText;
     if (text) label.textContent = text;
     if (detailText) detail.textContent = detailText;
+    updateActivationRail(hasPct ? clampPct(pct) : null, stepText || stepName.textContent, text || label.textContent);
   };
   err.style.display = 'none';
   done.classList.remove('show');
@@ -5051,11 +5998,147 @@ function unlockPageHTML(): string {
   .skip-link { text-align: center; margin-top: 8px; }
   .skip-link button { background: none; border: none; font-family: var(--mono); font-size: 10px; color: var(--muted); cursor: pointer; letter-spacing: 1px; }
   .skip-link button:hover { color: var(--text); }
+  /* DataMoat panel refresh */
+  html,
+  body {
+    background: #191919;
+    color: rgba(255,255,255,0.82);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+  }
+  body {
+    padding: 24px;
+  }
+  .logo {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: none;
+    color: #0f9d76;
+    margin-bottom: 22px;
+  }
+  .logo span {
+    color: rgba(255,255,255,0.48);
+  }
+  .language-switch,
+  .card {
+    border: 1px solid #2f2f2f;
+    border-radius: 8px;
+    background: #202020;
+    box-shadow: none;
+  }
+  .language-switch {
+    margin: -8px 0 18px;
+    padding: 3px;
+  }
+  .language-btn,
+  .card-header h1,
+  .label,
+  .btn,
+  .recovery-link button,
+  .skip-link button,
+  .btn-touchid,
+  .divider,
+  .totp-big,
+  .recovery-input {
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .language-btn {
+    color: rgba(255,255,255,0.64);
+  }
+  .language-btn.active {
+    background: rgba(15,157,118,0.18);
+    color: rgba(255,255,255,0.88);
+  }
+  .lock-icon {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    margin-bottom: 18px;
+    border: 1px solid rgba(15,157,118,0.3);
+    border-radius: 8px;
+    background: rgba(15,157,118,0.12);
+    color: #0f9d76;
+    font-size: 0;
+    filter: none;
+    animation: none;
+  }
+  .lock-icon svg {
+    width: 22px;
+    height: 22px;
+    display: block;
+  }
+  .card {
+    max-width: 420px;
+  }
+  .card-header,
+  .card-body {
+    background: #202020;
+  }
+  .card-header {
+    border-bottom-color: #2f2f2f;
+  }
+  .card-header h1 {
+    font-size: 17px;
+    font-weight: 650;
+  }
+  .card-header p,
+  .method-note,
+  .divider,
+  .recovery-link button,
+  .skip-link button {
+    color: rgba(255,255,255,0.54);
+  }
+  .label {
+    font-size: 12px;
+    font-weight: 650;
+    color: rgba(255,255,255,0.64);
+  }
+  .pw-input,
+  .totp-big,
+  .recovery-input {
+    background: #252525;
+    border-color: #3a3a3a;
+    border-radius: 6px;
+    color: rgba(255,255,255,0.86);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+  }
+  .pw-input:focus,
+  .totp-big:focus,
+  .recovery-input:focus {
+    border-color: rgba(15,157,118,0.58);
+  }
+  .btn {
+    border-radius: 6px;
+  }
+  .btn-primary,
+  .btn-touchid {
+    background: rgba(15,157,118,0.18);
+    border: 1px solid rgba(15,157,118,0.38);
+    color: rgba(255,255,255,0.88);
+  }
+  .btn-primary:hover:not(:disabled),
+  .btn-touchid:hover {
+    opacity: 1;
+    background: rgba(15,157,118,0.23);
+    box-shadow: none;
+  }
+  .error-msg {
+    color: #f28b82;
+  }
 </style>
 </head>
 <body>
-<div class="logo">data<span>moat</span></div>
-<div class="lock-icon">🔐</div>
+<div class="logo">DataMoat</div>
+<div class="lock-icon" aria-hidden="true">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="4" y="10" width="16" height="10" rx="2"></rect>
+    <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+  </svg>
+</div>
 
 <div class="card">
   <div class="card-header">
@@ -5766,39 +6849,38 @@ function markdownPageHTML(title: string, markdown: string, version: string): str
 <title>DataMoat — ${title}</title>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  :root{--bg:#080b0f;--surface:#0e1318;--border:#1c2430;--accent:#00c8a0;--accent2:#0088ff;--warn:#ffaa00;--text:#c8d8e8;--muted:#4a6070;--mono:ui-monospace,'SF Mono','SFMono-Regular',Menlo,Monaco,Consolas,'Liberation Mono',monospace;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif}
+  :root{--bg:#191919;--surface:#202020;--surface2:#252525;--border:#2f2f2f;--accent:#0f9d76;--accent2:#0f9d76;--warn:#d9730d;--text:rgba(255,255,255,0.82);--muted:rgba(255,255,255,0.48);--mono:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif;--sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif}
   html,body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.7}
-  .topbar{position:sticky;top:0;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 32px;display:flex;align-items:center;gap:24px;z-index:10}
-  .topbar a{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--muted);text-decoration:none}
+  .topbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:14px;z-index:10}
+  .topbar a{font-family:var(--sans);font-size:13px;letter-spacing:0;color:var(--muted);text-decoration:none}
   .topbar a:hover{color:var(--accent)}
-  .logo{font-family:var(--mono);font-size:15px;font-weight:600;color:var(--accent);letter-spacing:0.05em}
-  .logo span{color:var(--muted);font-weight:300}
-  .version-badge{margin-left:auto;font-family:var(--mono);font-size:11px;letter-spacing:1px;color:var(--text);border:1px solid var(--border);border-radius:999px;padding:6px 10px;background:rgba(255,255,255,0.03)}
+  .logo{font-family:var(--sans);font-size:14px;font-weight:650;color:var(--accent);letter-spacing:0}
+  .version-badge{margin-left:auto;font-family:var(--sans);font-size:12px;letter-spacing:0;color:var(--text);border:1px solid var(--border);border-radius:6px;padding:5px 9px;background:var(--surface)}
   .content{max-width:800px;margin:0 auto;padding:48px 32px 96px}
-  h1{font-family:var(--mono);font-size:22px;color:var(--warn);margin:32px 0 16px;letter-spacing:1px}
-  h2{font-family:var(--mono);font-size:16px;color:var(--accent2);margin:28px 0 12px;letter-spacing:1px;border-bottom:1px solid var(--border);padding-bottom:8px}
-  h3{font-family:var(--mono);font-size:13px;color:var(--text);margin:20px 0 8px}
+  h1{font-family:var(--sans);font-size:24px;color:var(--text);margin:32px 0 16px;letter-spacing:0}
+  h2{font-family:var(--sans);font-size:18px;color:var(--text);margin:28px 0 12px;letter-spacing:0;border-bottom:1px solid var(--border);padding-bottom:8px}
+  h3{font-family:var(--sans);font-size:15px;color:var(--text);margin:20px 0 8px;letter-spacing:0}
   p{font-size:14px;color:var(--text);margin:6px 0}
-  pre{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:14px 18px;overflow-x:auto;margin:12px 0}
+  pre{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 18px;overflow-x:auto;margin:12px 0}
   code{font-family:var(--mono);font-size:12px;color:var(--accent2)}
   pre code{color:var(--text)}
   ul{padding-left:20px;margin:8px 0}
   li{font-size:14px;margin:4px 0}
-  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;background:var(--surface);border-radius:8px;overflow:hidden}
   td{padding:8px 12px;border:1px solid var(--border)}
-  tr:nth-child(even) td{background:rgba(255,255,255,0.02)}
+  tr:nth-child(even) td{background:var(--surface2)}
   strong{color:var(--accent);font-weight:500}
   hr{border:none;border-top:1px solid var(--border);margin:24px 0}
   .lnk{color:var(--accent2);text-decoration:none}
   .lnk:hover{text-decoration:underline}
-  blockquote{margin:14px 0;padding:12px 16px;border-left:3px solid var(--accent);background:rgba(255,255,255,0.03);font-size:15px}
+  blockquote{margin:14px 0;padding:12px 16px;border-left:3px solid var(--accent);background:var(--surface);font-size:15px}
   .badge-row{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 14px}
-  .md-badge{display:inline-flex;align-items:center;padding:4px 10px;border:1px solid var(--border);border-radius:999px;background:rgba(255,255,255,0.04);font-family:var(--mono);font-size:11px;letter-spacing:.5px;color:var(--text)}
+  .md-badge{display:inline-flex;align-items:center;padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-family:var(--sans);font-size:11px;letter-spacing:0;color:var(--text)}
   .md-badge-link{text-decoration:none}
   .md-badge-link:hover .md-badge{border-color:var(--accent2);color:var(--accent2)}
   .md-shield-link{text-decoration:none}
-  .md-shield{display:inline-flex;align-items:center;border-radius:4px;overflow:hidden;border:1px solid rgba(255,255,255,0.08);font-family:var(--mono);font-size:11px;line-height:1;box-shadow:0 1px 0 rgba(0,0,0,0.14)}
-  .md-shield-label{padding:5px 8px;background:#1f2937;color:#e5e7eb}
+  .md-shield{display:inline-flex;align-items:center;border-radius:4px;overflow:hidden;border:1px solid var(--border);font-family:var(--sans);font-size:11px;line-height:1;box-shadow:none}
+  .md-shield-label{padding:5px 8px;background:var(--surface2);color:var(--text)}
   .md-shield-value{padding:5px 8px;color:#ffffff}
   .md-shield-link:hover .md-shield{box-shadow:0 0 0 1px rgba(43,196,109,0.35)}
   .gap{height:8px}
@@ -5806,7 +6888,7 @@ function markdownPageHTML(title: string, markdown: string, version: string): str
 </head>
 <body>
 <div class="topbar">
-  <div class="logo">data<span>moat</span></div>
+  <div class="logo">DataMoat</div>
   <a href="/">← Back to vault</a>
   <a href="/about">About</a>
 <div class="version-badge">v${escape(version)}</div>

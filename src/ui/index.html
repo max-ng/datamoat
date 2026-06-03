@@ -6,35 +6,42 @@
 <title>DataMoat</title>
 <style>
   :root {
-    --bg:        #080b0f;
-    --surface:   #0e1318;
-    --border:    #1c2430;
-    --border2:   #243040;
-    --text:      #c8d8e8;
-    --muted:     #4a6070;
-    --accent:    #00c8a0;
-    --accent2:   #0088ff;
-    --warn:      #ffaa00;
-    --claude:    #cc7830;
-    --codex:     #3888e0;
-    --openclaw:  #a060d0;
-    --cursor:    #d8b640;
-    --chatgpt:   #00c8a0;
-    --app:       #20a840;
-    --think-bg:  #0a1208;
-    --think-border: #1a3020;
-    --think-text:   #5a9060;
-    --font-mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
-    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --bg:        #191919;
+    --surface:   #202020;
+    --surface2:  #252525;
+    --border:    #2f2f2f;
+    --border2:   #3a3a3a;
+    --text:      rgba(255,255,255,0.82);
+    --muted:     rgba(255,255,255,0.44);
+    --muted2:    rgba(255,255,255,0.62);
+    --accent:    #0f9d76;
+    --accent2:   #2ea043;
+    --warn:      #d9730d;
+    --claude:    #d9730d;
+    --codex:     #2383e2;
+    --openclaw:  #9b6bdf;
+    --cursor:    #cb912f;
+    --chatgpt:   #0f9d76;
+    --app:       #0f9d76;
+    --think-bg:  rgba(15, 157, 118, 0.1);
+    --think-border: rgba(15, 157, 118, 0.28);
+    --think-text:   #4fb99f;
+    --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
+
+  @keyframes dmDotBlink {
+    0%, 100% { opacity: 0.22; }
+    45% { opacity: 1; }
+  }
 
   body {
     background: var(--bg);
     color: var(--text);
     font-family: var(--font-sans);
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.6;
     height: 100vh;
     display: flex;
@@ -42,31 +49,54 @@
     overflow: hidden;
   }
 
+  button {
+    touch-action: manipulation;
+  }
+  button:not(:disabled) {
+    transition:
+      transform 0.14s ease,
+      box-shadow 0.14s ease,
+      border-color 0.14s ease,
+      background 0.14s ease,
+      color 0.14s ease;
+  }
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+  button:focus-visible {
+    outline: 2px solid rgba(15, 157, 118, 0.72);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(15, 157, 118, 0.16);
+  }
+
   /* ── Header ── */
   header {
     display: flex;
     align-items: center;
-    gap: 20px;
-    padding: 14px 24px;
+    gap: 8px;
+    padding: 8px 12px;
     border-bottom: 1px solid var(--border);
-    background: var(--surface);
+    background: var(--bg);
     position: sticky;
     top: 0;
     z-index: 100;
     flex: 0 0 auto;
   }
   .logo {
+    display: inline-flex;
+    align-items: baseline;
     font-family: var(--font-mono);
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 600;
     color: var(--accent);
-    letter-spacing: 0.05em;
+    letter-spacing: 0;
     white-space: nowrap;
+    padding: 0 6px 0 2px;
   }
   .logo span { color: var(--muted); font-weight: 300; }
   .search-wrap {
-    flex: 1;
-    max-width: 480px;
+    flex: 0 1 420px;
+    max-width: 420px;
     position: relative;
   }
   .search-wrap svg {
@@ -79,47 +109,60 @@
   }
   #search {
     width: 100%;
-    background: var(--bg);
-    border: 1px solid var(--border2);
+    height: 32px;
+    background: var(--surface);
+    border: 1px solid transparent;
     border-radius: 6px;
     color: var(--text);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 13px;
-    padding: 7px 12px 7px 34px;
+    padding: 6px 12px 6px 34px;
     outline: none;
-    transition: border-color 0.15s;
+    transition: background 0.12s, border-color 0.12s;
   }
-  #search:focus { border-color: var(--accent); }
+  #search:focus { border-color: var(--border2); background: #242424; }
   #search::placeholder { color: var(--muted); }
 
   .filters {
     display: flex;
-    gap: 6px;
-    margin-left: auto;
+    gap: 2px;
+    margin-left: 4px;
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
   }
+  .filters::-webkit-scrollbar { display: none; }
   .filter-btn {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    padding: 4px 10px;
-    border-radius: 4px;
-    border: 1px solid var(--border2);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    padding: 5px 9px;
+    border-radius: 5px;
+    border: 1px solid transparent;
     background: transparent;
-    color: var(--muted);
+    color: var(--muted2);
     cursor: pointer;
-    transition: all 0.12s;
-    letter-spacing: 0.04em;
+    transition: background 0.12s ease, color 0.12s ease;
+    letter-spacing: 0;
+    white-space: nowrap;
   }
-  .filter-btn:hover { border-color: var(--border2); color: var(--text); }
-  .filter-btn.active { color: #fff; border-color: transparent; }
-  .filter-btn[data-src="all"].active    { background: #1a2530; color: var(--text); border-color: var(--border2); }
-  .filter-btn[data-src="claude-cli"].active  { background: #2a1a08; color: var(--claude); border-color: var(--claude); }
-  .filter-btn[data-src="codex-cli"].active   { background: #081828; color: var(--codex); border-color: var(--codex); }
-  .filter-btn[data-src="claude-app"].active  { background: #081808; color: var(--app); border-color: var(--app); }
-  .filter-btn[data-src="openclaw"].active    { background: #180828; color: var(--openclaw); border-color: var(--openclaw); }
-  .filter-btn[data-src="cursor"].active      { background: #282408; color: var(--cursor); border-color: var(--cursor); }
-  .filter-btn[data-src="chatgpt-export"].active { background: #06241e; color: var(--chatgpt); border-color: var(--chatgpt); }
+  .filter-btn:hover {
+    color: var(--text);
+    background: var(--surface2);
+    transform: none;
+    box-shadow: none;
+  }
+  .filter-btn:active {
+    transform: none;
+  }
+  .filter-btn.active,
+  .filter-btn[data-src].active {
+    color: var(--text);
+    background: var(--surface2);
+    border-color: transparent;
+  }
 
   .stat {
+    display: none;
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--muted);
@@ -129,35 +172,41 @@
   .header-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 4px;
+    margin-left: auto;
   }
   .header-link,
   .header-icon-btn {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 1px;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    letter-spacing: 0;
     color: var(--muted);
     text-decoration: none;
-    padding: 4px 8px;
-    border: 1px solid var(--border);
-    border-radius: 4px;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 5px;
     white-space: nowrap;
     background: transparent;
-    transition: color 0.15s, border-color 0.15s, background 0.15s;
+    transition: transform 0.14s ease, color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  }
+  .header-link {
+    display: none;
   }
   .header-icon-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 30px;
+    width: 28px;
     height: 28px;
     cursor: pointer;
   }
   .header-link:hover,
   .header-icon-btn:hover {
-    color: var(--accent);
-    border-color: var(--border2);
-    background: #10161d;
+    color: var(--text);
+    border-color: transparent;
+    background: var(--surface2);
+    transform: none;
+    box-shadow: none;
   }
   .notice-banner {
     display: none;
@@ -224,7 +273,7 @@
   .weekly-strip {
     flex: 0 0 auto;
     border-bottom: 1px solid var(--border);
-    background: #090d12;
+    background: var(--bg);
     padding: 10px 24px 12px;
   }
   .weekly-strip-inner {
@@ -313,7 +362,7 @@
     padding: 4px 8px;
     border: 1px solid var(--border);
     border-radius: 5px;
-    background: #0b1015;
+    background: var(--surface);
     font-family: var(--font-mono);
     font-size: 10px;
     color: var(--muted);
@@ -332,6 +381,89 @@
   }
   .weekly-pill.warning strong {
     color: var(--warn);
+  }
+  .overview-shell {
+    display: grid;
+    gap: 20px;
+    width: 100%;
+  }
+  .overview-hero {
+    display: grid;
+    gap: 7px;
+    padding-bottom: 4px;
+  }
+  .overview-mark {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 600;
+  }
+  .overview-mark strong {
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .overview-title {
+    color: var(--text);
+    font-size: 30px;
+    line-height: 1.12;
+    font-weight: 700;
+  }
+  .overview-sub {
+    color: var(--muted2);
+    font-size: 14px;
+  }
+  .overview-section-label {
+    margin: 2px 0 -6px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+  .no-session-overview .weekly-strip {
+    width: min(1060px, 100%);
+    border: 0;
+    background: transparent;
+    padding: 0;
+  }
+  .no-session-overview .weekly-strip-inner {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .no-session-overview .weekly-detail-row {
+    grid-column: auto;
+  }
+  .no-session-overview .weekly-metrics {
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 12px;
+  }
+  .no-session-overview .weekly-metric {
+    min-height: 112px;
+    padding: 16px;
+    border: 1px solid var(--border);
+    border-left: 0;
+    border-radius: 8px;
+    background: var(--surface);
+  }
+  .no-session-overview .weekly-metric:hover {
+    background: #242424;
+  }
+  .no-session-overview .weekly-value {
+    font-size: 26px;
+    font-weight: 700;
+  }
+  .no-session-overview .weekly-sub {
+    font-size: 12px;
+    color: var(--muted2);
+  }
+  .overview-total .weekly-metric.primary {
+    background: rgba(15, 157, 118, 0.13);
+    border-color: rgba(15, 157, 118, 0.28);
+  }
+  .no-session-overview .weekly-period {
+    padding-top: 0;
   }
   .recovery-reset-backdrop {
     position: fixed;
@@ -454,12 +586,85 @@
     height: auto;
     min-height: 0;
   }
+  .workspace-main {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+  .session-tabs {
+    flex: 0 0 auto;
+    min-height: 34px;
+    display: flex;
+    align-items: end;
+    gap: 1px;
+    padding: 4px 8px 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .session-tabs::-webkit-scrollbar { display: none; }
+  .session-tab {
+    max-width: 260px;
+    min-width: 120px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid transparent;
+    border-radius: 6px 6px 0 0;
+    background: transparent;
+    color: var(--muted2);
+    padding: 0 6px 0 10px;
+    cursor: pointer;
+  }
+  .session-tab:hover {
+    background: var(--surface2);
+  }
+  .session-tab.active {
+    background: var(--bg);
+    color: var(--text);
+    border-color: var(--border);
+    border-bottom-color: var(--bg);
+  }
+  .session-tab-title {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: left;
+    font-size: 12px;
+  }
+  .session-tab-close {
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    padding: 0;
+  }
+  .session-tab-close:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+  }
 
   /* ── Session list ── */
   .session-list {
-    width: 340px;
+    width: 300px;
     min-width: 240px;
     border-right: 1px solid var(--border);
+    background: var(--surface);
     overflow-y: auto;
     flex-shrink: 0;
     height: 100%;
@@ -471,20 +676,33 @@
   .session-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
   .session-item {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
+    margin: 2px 8px;
+    padding: 8px 10px;
+    border: 1px solid transparent;
+    border-radius: 5px;
     cursor: pointer;
-    transition: background 0.1s;
+    transition: background 0.12s ease, color 0.12s ease;
     position: relative;
   }
-  .session-item:hover { background: var(--surface); }
-  .session-item.active { background: var(--surface); }
+  .session-item:hover {
+    background: var(--surface2);
+    transform: none;
+    box-shadow: none;
+  }
+  .session-item:active {
+    transform: none;
+  }
+  .session-item.active {
+    background: #303030;
+    box-shadow: none;
+  }
   .session-item.active::before {
     content: '';
     position: absolute;
     left: 0; top: 0; bottom: 0;
-    width: 2px;
+    width: 0;
     background: var(--accent);
+    box-shadow: none;
   }
 
   .session-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
@@ -501,8 +719,8 @@
   .source-dot.chatgpt-export { background: var(--chatgpt); }
 
   .session-model {
-    font-family: var(--font-mono);
-    font-size: 11px;
+    font-family: var(--font-sans);
+    font-size: 12px;
     color: var(--muted);
     flex: 1;
     overflow: hidden;
@@ -510,8 +728,8 @@
     white-space: nowrap;
   }
   .thinking-badge {
-    font-family: var(--font-mono);
-    font-size: 9px;
+    font-family: var(--font-sans);
+    font-size: 11px;
     color: var(--think-text);
     border: 1px solid var(--think-border);
     padding: 1px 5px;
@@ -520,8 +738,8 @@
     flex-shrink: 0;
   }
   .session-cwd {
-    font-family: var(--font-mono);
-    font-size: 11px;
+    font-family: var(--font-sans);
+    font-size: 13px;
     color: var(--text);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -536,9 +754,9 @@
     padding: 2px 8px;
     border-radius: 999px;
     border: 1px solid var(--border);
-    background: #0b1117;
-    font-family: var(--font-mono);
-    font-size: 10px;
+    background: rgba(255,255,255,0.04);
+    font-family: var(--font-sans);
+    font-size: 11px;
     color: var(--accent);
     max-width: 100%;
   }
@@ -566,8 +784,8 @@
   .session-meta {
     display: flex;
     justify-content: space-between;
-    font-family: var(--font-mono);
-    font-size: 10px;
+    font-family: var(--font-sans);
+    font-size: 11px;
     color: var(--muted);
   }
 
@@ -575,7 +793,7 @@
   .conversation {
     flex: 1;
     overflow-y: auto;
-    padding: 24px 32px;
+    padding: 0 32px 24px;
     height: 100%;
     min-height: 0;
     overscroll-behavior: contain;
@@ -589,11 +807,125 @@
     border-radius: 999px;
     border: 3px solid var(--bg);
   }
+  .search-target-message {
+    outline: 1px solid rgba(255, 196, 0, 0.42);
+    background: rgba(255, 196, 0, 0.045);
+    scroll-margin-top: 180px;
+  }
+  .search-hit-mark {
+    background: rgba(255, 213, 74, 0.72);
+    color: #111;
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+  .search-hit-mark.current {
+    background: #ffd447;
+    box-shadow: 0 0 0 1px rgba(17,17,17,0.55);
+    scroll-margin-top: 180px;
+  }
+  .session-search-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .session-search-tools {
+    margin: 12px 0 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .session-search-input {
+    width: min(360px, 100%);
+    height: 28px;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    background: #080e14;
+    color: var(--text);
+    padding: 0 9px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    outline: none;
+  }
+  .session-search-input:focus {
+    border-color: var(--accent);
+  }
+  .search-nav-btn {
+    width: 26px;
+    height: 24px;
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    background: #0d141c;
+    color: var(--text);
+    cursor: pointer;
+    transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+  }
+  .search-nav-btn:not(:disabled):hover {
+    border-color: var(--accent2);
+    background: #101923;
+    transform: translateY(-1px);
+    box-shadow: 0 0 16px rgba(0, 136, 255, 0.18);
+  }
+  .search-nav-btn:not(:disabled):active {
+    transform: translateY(1px) scale(0.96);
+  }
+  .search-nav-btn:disabled {
+    cursor: default;
+    opacity: 0.42;
+  }
+  .search-nav-count {
+    color: var(--text);
+  }
 
   .conv-header {
-    margin-bottom: 24px;
-    padding-bottom: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    margin: 0 -32px 24px;
+    padding: 24px 32px 16px;
+    background: var(--bg);
     border-bottom: 1px solid var(--border);
+    box-shadow: 0 10px 18px rgba(0,0,0,0.22);
+  }
+  .conv-header-toggle-zone {
+    appearance: none;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 12px;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+    box-shadow: none;
+    cursor: ns-resize;
+    z-index: 2;
+  }
+  .conv-header-toggle-zone:hover {
+    background: rgba(0, 200, 160, 0.05);
+  }
+  .conv-header-toggle-zone:focus-visible {
+    outline: none;
+    box-shadow: inset 0 1px 0 rgba(0, 200, 160, 0.5);
+  }
+  .conv-header.is-hidden {
+    min-height: 10px;
+    margin-bottom: 10px;
+    padding: 10px 32px 0;
+    box-shadow: none;
+    border-bottom-color: rgba(33, 48, 64, 0.65);
+  }
+  .conv-header.is-hidden .conv-header-toggle-zone {
+    height: 100%;
+  }
+  .conv-header.is-hidden .conv-title,
+  .conv-header.is-hidden .conv-badges,
+  .conv-header.is-hidden .session-search-tools {
+    display: none;
   }
   .conv-title {
     font-family: var(--font-mono);
@@ -607,17 +939,17 @@
     font-family: var(--font-mono);
     font-size: 10px;
     padding: 3px 8px;
-    border-radius: 3px;
+    border-radius: 5px;
     border: 1px solid var(--border2);
     color: var(--muted);
   }
   .badge.source { }
-  .badge.claude-cli  { color: var(--claude); border-color: var(--claude); background: #2a1a0820; }
-  .badge.codex-cli   { color: var(--codex); border-color: var(--codex); background: #08182820; }
-  .badge.claude-app  { color: var(--app); border-color: var(--app); background: #08180820; }
-  .badge.openclaw    { color: var(--openclaw); border-color: var(--openclaw); background: #18082820; }
-  .badge.cursor      { color: var(--cursor); border-color: var(--cursor); background: #28240820; }
-  .badge.chatgpt-export { color: var(--chatgpt); border-color: var(--chatgpt); background: #06241e40; }
+  .badge.claude-cli  { color: var(--claude); border-color: rgba(217,115,13,0.3); background: rgba(217,115,13,0.12); }
+  .badge.codex-cli   { color: var(--codex); border-color: rgba(35,131,226,0.3); background: rgba(35,131,226,0.12); }
+  .badge.claude-app  { color: var(--app); border-color: rgba(15,157,118,0.3); background: rgba(15,157,118,0.12); }
+  .badge.openclaw    { color: var(--openclaw); border-color: rgba(155,107,223,0.3); background: rgba(155,107,223,0.12); }
+  .badge.cursor      { color: var(--cursor); border-color: rgba(203,145,47,0.3); background: rgba(203,145,47,0.12); }
+  .badge.chatgpt-export { color: var(--chatgpt); border-color: rgba(15,157,118,0.3); background: rgba(15,157,118,0.12); }
   .conversation-map {
     margin: 0 0 18px;
     border: 1px solid rgba(0, 200, 160, 0.28);
@@ -1179,6 +1511,27 @@
   .empty-icon { font-size: 32px; opacity: 0.3; }
   .empty-title { font-family: var(--font-mono); font-size: 14px; }
   .empty-sub { font-size: 12px; max-width: 280px; line-height: 1.6; }
+  .searching-empty {
+    gap: 8px;
+  }
+  .scan-title {
+    color: var(--muted);
+  }
+  .scan-dots span {
+    display: inline-block;
+    animation: dmDotBlink 1.05s infinite;
+  }
+  .scan-dots span:nth-child(2) { animation-delay: 0.14s; }
+  .scan-dots span:nth-child(3) { animation-delay: 0.28s; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.001ms !important;
+    }
+  }
 
   .no-session {
     display: flex;
@@ -1191,6 +1544,12 @@
   }
   .no-session-icon { font-size: 28px; opacity: 0.2; }
   .no-session-text { font-family: var(--font-mono); font-size: 12px; }
+  .no-session-overview {
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 56px;
+    text-align: left;
+  }
 
   .settings-backdrop {
     position: fixed;
@@ -1850,6 +2209,280 @@
     line-height: 1.6;
   }
 
+  /* Shared panel refresh for secondary surfaces */
+  .recovery-reset-backdrop,
+  .settings-backdrop {
+    background: rgba(25, 25, 25, 0.72);
+    backdrop-filter: blur(10px);
+  }
+  .recovery-reset-panel,
+  .settings-panel {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+    box-shadow: 0 20px 56px rgba(0, 0, 0, 0.32);
+  }
+  .settings-panel {
+    width: min(1040px, calc(100vw - 32px));
+    overflow: hidden;
+  }
+  .recovery-reset-head,
+  .settings-head {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .recovery-reset-title,
+  .settings-title {
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 650;
+    letter-spacing: 0;
+    color: var(--text);
+  }
+  .settings-close {
+    border-color: transparent;
+    background: transparent;
+  }
+  .settings-close:hover {
+    color: var(--text);
+    border-color: transparent;
+    background: var(--surface2);
+  }
+  .recovery-reset-body,
+  .settings-body {
+    gap: 12px;
+    padding: 0;
+  }
+  .recovery-reset-body {
+    padding: 14px 16px 16px;
+  }
+  .settings-shell {
+    display: grid;
+    grid-template-columns: 184px minmax(0, 1fr);
+    min-height: min(660px, calc(100vh - 100px));
+  }
+  .settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px;
+    border-right: 1px solid var(--border);
+    background: #191919;
+  }
+  .settings-nav-btn {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted2);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+    padding: 8px 10px;
+    text-align: left;
+  }
+  .settings-nav-btn:hover {
+    background: #252525;
+    color: var(--text);
+    transform: none;
+    box-shadow: none;
+  }
+  .settings-nav-btn.active {
+    background: #2a2a2a;
+    color: var(--text);
+  }
+  .settings-panel-content {
+    min-width: 0;
+    max-height: min(660px, calc(100vh - 100px));
+    overflow: auto;
+    padding: 16px;
+  }
+  .settings-section {
+    display: grid;
+    gap: 12px;
+  }
+  .settings-section[hidden] {
+    display: none;
+  }
+  .settings-card,
+  .switch-row,
+  .manual-update-row,
+  .backup-path-group,
+  .transfer-setup-entry,
+  .transfer-setup-card {
+    border-color: var(--border);
+    border-radius: 8px;
+    background: var(--surface2);
+  }
+  .settings-card:hover,
+  .switch-row:hover:not(.disabled),
+  .manual-update-row:hover {
+    background: #2a2a2a;
+  }
+  .settings-grid {
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  }
+  .settings-label,
+  .source-label,
+  .switch-title,
+  .backup-path-head,
+  .skill-folder-name,
+  .skill-file-name,
+  .referenced-progress-row,
+  .referenced-backup-badge,
+  .referenced-toggle-copy strong,
+  .recovery-reset-label {
+    font-family: var(--font-sans);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .settings-label,
+  .recovery-reset-label {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--muted2);
+  }
+  .settings-value,
+  .switch-subtitle,
+  .recovery-reset-copy,
+  .source-help,
+  .referenced-toggle-copy span {
+    color: var(--muted2);
+  }
+  .language-current,
+  .language-btn,
+  .settings-btn,
+  .skill-mini-btn,
+  .referenced-backup-toggle,
+  .transfer-import-auth-tab,
+  .recovery-reset-btn {
+    font-family: var(--font-sans);
+    letter-spacing: 0;
+    text-transform: none;
+  }
+  .language-current,
+  .source-input,
+  .recovery-reset-input {
+    background: #2a2a2a;
+    border-color: var(--border);
+    border-radius: 6px;
+  }
+  .language-current:hover,
+  .source-input:focus,
+  .recovery-reset-input:focus {
+    border-color: rgba(15, 157, 118, 0.58);
+  }
+  .language-menu {
+    border-color: var(--border);
+    border-radius: 8px;
+    background: #202020;
+    box-shadow: 0 16px 42px rgba(0, 0, 0, 0.36);
+  }
+  .language-btn.active {
+    color: var(--text);
+    border-color: rgba(15, 157, 118, 0.32);
+    background: rgba(15, 157, 118, 0.16);
+  }
+  .settings-btn,
+  .skill-mini-btn,
+  .recovery-reset-btn {
+    border-radius: 6px;
+    background: #2a2a2a;
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .settings-btn:hover:not(:disabled),
+  .skill-mini-btn:hover:not(:disabled),
+  .recovery-reset-btn:hover:not(:disabled) {
+    border-color: var(--border2);
+    background: #303030;
+    color: var(--text);
+  }
+  .settings-btn.primary,
+  .recovery-reset-btn.primary,
+  .transfer-import-auth-tab.active,
+  .referenced-backup-toggle.is-on {
+    color: var(--text);
+    border-color: rgba(15, 157, 118, 0.36);
+    background: rgba(15, 157, 118, 0.16);
+  }
+  .settings-btn.warn {
+    border-color: rgba(217, 115, 13, 0.34);
+    background: rgba(217, 115, 13, 0.12);
+  }
+  .switch-track,
+  .referenced-toggle-track {
+    background: #303030;
+    border-color: var(--border2);
+  }
+  .switch-knob,
+  .referenced-toggle-knob {
+    background: rgba(255, 255, 255, 0.58);
+  }
+  .switch-row.enabled .switch-track,
+  .referenced-backup-toggle.is-on .referenced-toggle-track {
+    background: rgba(15, 157, 118, 0.18);
+    border-color: rgba(15, 157, 118, 0.42);
+  }
+  .switch-row.enabled .switch-knob,
+  .referenced-backup-toggle.is-on .referenced-toggle-knob {
+    background: var(--accent);
+  }
+  .manual-update-icon {
+    border-color: rgba(15, 157, 118, 0.32);
+    background: rgba(15, 157, 118, 0.13);
+  }
+  .referenced-backup-badge {
+    border-color: rgba(15, 157, 118, 0.28);
+  }
+  .referenced-progress-bar {
+    background: #303030;
+  }
+  .referenced-progress-fill {
+    background: var(--accent);
+  }
+  .referenced-folder-chip,
+  .backup-path-item,
+  .skill-file-row {
+    border-color: var(--border);
+    background: #202020;
+  }
+  .skill-file-content pre {
+    border-color: var(--border);
+    border-radius: 8px;
+    background: #191919;
+  }
+  @media (max-width: 820px) {
+    .settings-shell {
+      grid-template-columns: 1fr;
+      min-height: auto;
+    }
+    .settings-nav {
+      flex-direction: row;
+      overflow-x: auto;
+      border-right: 0;
+      border-bottom: 1px solid var(--border);
+      scrollbar-width: none;
+    }
+    .settings-nav::-webkit-scrollbar {
+      display: none;
+    }
+    .settings-nav-btn {
+      flex: 0 0 auto;
+      width: auto;
+      white-space: nowrap;
+    }
+    .settings-panel-content {
+      max-height: min(620px, calc(100vh - 154px));
+    }
+  }
+
   @media (max-width: 1120px) {
     header {
       flex-wrap: wrap;
@@ -1891,7 +2524,7 @@
 <body>
 
 <header>
-  <div class="logo">data<span>moat</span></div>
+  <div class="logo">DataMoat</div>
   <div class="search-wrap">
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
@@ -1918,26 +2551,6 @@
     <a href="/about" class="header-link">about</a>
   </div>
 </header>
-
-<div id="weekly-strip" class="weekly-strip" aria-label="Weekly work summary">
-  <div class="weekly-strip-inner">
-    <div class="weekly-period">your work, last 7 days</div>
-    <div class="weekly-metrics">
-      <div class="weekly-metric primary loading">
-        <div class="weekly-value">calculating…</div>
-        <div class="weekly-label">conversations</div>
-      </div>
-      <div class="weekly-metric loading">
-        <div class="weekly-value">calculating…</div>
-        <div class="weekly-label">messages</div>
-      </div>
-      <div class="weekly-metric loading">
-        <div class="weekly-value">calculating…</div>
-        <div class="weekly-label">est. tokens</div>
-      </div>
-    </div>
-  </div>
-</div>
 
 <div id="notice-banner" class="notice-banner" role="status" aria-live="polite">
   <div id="notice-banner-text" class="notice-copy"></div>
@@ -2008,10 +2621,12 @@
       <div class="empty-title">loading sessions</div>
     </div>
   </div>
-  <div class="conversation" id="conversation">
-    <div class="no-session">
-      <div class="no-session-icon">←</div>
-      <div class="no-session-text">select a session</div>
+  <div class="workspace-main">
+    <div class="session-tabs" id="session-tabs" role="tablist" hidden></div>
+    <div class="conversation" id="conversation">
+      <div class="no-session no-session-overview">
+        <div id="weekly-strip" class="weekly-strip" aria-label="Weekly work summary"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -2023,224 +2638,236 @@
       <button id="close-settings-btn" class="settings-close" type="button" aria-label="Close settings">×</button>
     </div>
     <div class="settings-body">
-      <div class="settings-card wide" id="language-settings-card">
-        <div class="language-card-head">
-          <div>
-            <div class="settings-label" id="language-settings-title">Language</div>
-            <div class="settings-value" id="language-settings-subtitle">Choose the app language for setup, unlock, and settings.</div>
-          </div>
-          <div class="language-picker" id="app-language-picker">
-            <button class="language-current" id="app-language-current" type="button" aria-haspopup="listbox" aria-expanded="false">EN</button>
-            <div class="language-menu" id="app-language-switch" role="listbox" aria-label="Language" hidden>
-              <button class="language-btn" type="button" role="option" data-language="en">EN</button>
-              <button class="language-btn" type="button" role="option" data-language="zh-CN">简体中文</button>
-              <button class="language-btn" type="button" role="option" data-language="zh-TW">繁體中文</button>
-              <button class="language-btn" type="button" role="option" data-language="ja">日本語</button>
+      <div class="settings-shell">
+        <nav class="settings-nav" role="tablist" aria-label="Settings sections">
+          <button class="settings-nav-btn active" id="settings-nav-general" type="button" role="tab" data-settings-target="general" aria-selected="true" aria-controls="settings-section-general">General</button>
+          <button class="settings-nav-btn" id="settings-nav-updates" type="button" role="tab" data-settings-target="updates" aria-selected="false" aria-controls="settings-section-updates">Updates</button>
+          <button class="settings-nav-btn" id="settings-nav-files" type="button" role="tab" data-settings-target="files" aria-selected="false" aria-controls="settings-section-files">File backup</button>
+          <button class="settings-nav-btn" id="settings-nav-transfer" type="button" role="tab" data-settings-target="transfer" aria-selected="false" aria-controls="settings-section-transfer">Transfer</button>
+          <button class="settings-nav-btn" id="settings-nav-imports" type="button" role="tab" data-settings-target="imports" aria-selected="false" aria-controls="settings-section-imports">Imports</button>
+        </nav>
+        <div class="settings-panel-content">
+          <section class="settings-section active" id="settings-section-general" data-settings-section="general" role="tabpanel" aria-labelledby="settings-nav-general">
+            <div class="settings-card wide" id="language-settings-card">
+              <div class="language-card-head">
+                <div>
+                  <div class="settings-label" id="language-settings-title">Language</div>
+                  <div class="settings-value" id="language-settings-subtitle">Choose the app language for setup, unlock, and settings.</div>
+                </div>
+                <div class="language-picker" id="app-language-picker">
+                  <button class="language-current" id="app-language-current" type="button" aria-haspopup="listbox" aria-expanded="false">EN</button>
+                  <div class="language-menu" id="app-language-switch" role="listbox" aria-label="Language" hidden>
+                    <button class="language-btn" type="button" role="option" data-language="en">EN</button>
+                    <button class="language-btn" type="button" role="option" data-language="zh-CN">简体中文</button>
+                    <button class="language-btn" type="button" role="option" data-language="zh-TW">繁體中文</button>
+                    <button class="language-btn" type="button" role="option" data-language="ja">日本語</button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+            <div class="settings-card wide referenced-backup-card" id="referenced-attachments-card">
+              <div class="referenced-backup-head">
+                <div>
+                  <div class="settings-label">Referenced File Backup</div>
+                  <div class="settings-value" id="referenced-attachments-state">checking…</div>
+                </div>
+                <div class="referenced-backup-badge" id="referenced-attachments-badge">optional</div>
+              </div>
+              <div class="settings-message referenced-backup-copy" id="referenced-attachments-message"></div>
+              <div class="referenced-backup-progress" id="referenced-attachments-progress" hidden>
+                <div class="referenced-progress-row">
+                  <span id="referenced-attachments-progress-label">Checking previous conversations</span>
+                  <span id="referenced-attachments-progress-count"></span>
+                </div>
+                <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="referenced-attachments-progress-fill"></div></div>
+              </div>
+              <div class="referenced-backup-permission" id="referenced-attachments-permission" hidden></div>
+              <div class="referenced-attachment-stats" id="referenced-attachments-stats"></div>
+              <div class="referenced-folder-list" id="referenced-attachments-folders" hidden></div>
+              <div class="settings-actions">
+                <button id="referenced-attachments-enable-btn" class="referenced-backup-toggle" type="button" aria-pressed="false">
+                  <span class="referenced-toggle-track" aria-hidden="true"><span class="referenced-toggle-knob"></span></span>
+                  <span class="referenced-toggle-copy">
+                    <strong>Enable referenced file backup</strong>
+                    <span>Copy path-only files into the encrypted vault</span>
+                  </span>
+                </button>
+              </div>
+            </div>
+          </section>
+          <section class="settings-section" id="settings-section-updates" data-settings-section="updates" role="tabpanel" aria-labelledby="settings-nav-updates" hidden>
+            <button id="update-toggle" class="switch-row" type="button" role="switch" aria-checked="true">
+              <span class="switch-track"><span class="switch-knob"></span></span>
+              <span class="switch-copy">
+                <span class="switch-title">Auto-update</span>
+                <span class="switch-subtitle">Only live git source installs can update in place. Other installs stay on manual download for safety for now and will not auto-update directly.</span>
+              </span>
+            </button>
+            <div id="manual-update-row" class="manual-update-row" hidden>
+              <span class="manual-update-icon">↓</span>
+              <span class="switch-copy">
+                <span id="manual-update-title" class="switch-title">Manual Updates</span>
+                <span id="manual-update-subtitle" class="switch-subtitle">Download the latest Windows version and run it to upgrade.</span>
+              </span>
+            </div>
+            <div class="settings-actions">
+              <button id="update-check-btn" class="settings-btn" type="button">Check Now</button>
+              <button id="update-apply-btn" class="settings-btn primary" type="button">Update Now</button>
+              <button id="update-install-latest-btn" class="settings-btn primary" type="button" hidden>Download Latest Version</button>
+              <button id="update-reinstall-btn" class="settings-btn warn" type="button" hidden>Reinstall From Source</button>
+            </div>
+            <div class="settings-grid">
+              <div class="settings-card">
+                <div class="settings-label">Current Install</div>
+                <div class="settings-value" id="update-install-type">detecting…</div>
+              </div>
+              <div class="settings-card">
+                <div class="settings-label">App Version</div>
+                <div class="settings-value" id="update-app-version">detecting…</div>
+              </div>
+              <div class="settings-card">
+                <div class="settings-label">Update Method</div>
+                <div class="settings-value" id="update-path">detecting…</div>
+              </div>
+              <div class="settings-card">
+                <div class="settings-label">Update Status</div>
+                <div class="settings-value" id="update-state">not checked</div>
+              </div>
+              <div class="settings-card">
+                <div class="settings-label">Last Checked</div>
+                <div class="settings-value" id="update-last-checked">never</div>
+              </div>
+              <div class="settings-card">
+                <div class="settings-label">Last Applied</div>
+                <div class="settings-value" id="update-last-applied">never</div>
+              </div>
+              <div class="settings-card" id="update-source-check-card" hidden>
+                <div class="settings-label">Source Check</div>
+                <div class="settings-value" id="update-git-status">not checked</div>
+              </div>
+            </div>
+            <div class="settings-message" id="update-message">This app is working normally. Only live git source installs update in place; other installs open the latest download page instead.</div>
+            <div class="source-field" id="reinstall-source-field" hidden>
+              <label class="source-label" id="reinstall-source-label" for="reinstall-source-path">DataMoat source install folder</label>
+              <input id="reinstall-source-path" class="source-input" type="text" placeholder="/path/to/live/git/checkout">
+              <div class="source-help" id="reinstall-source-help">This is for DataMoat app updates, not chatgpt-export import. If it is a live git checkout, future automatic updates can be enabled.</div>
+            </div>
+          </section>
+          <section class="settings-section" id="settings-section-files" data-settings-section="files" role="tabpanel" aria-labelledby="settings-nav-files" hidden>
+            <div class="settings-card" id="backup-paths-card" hidden>
+              <div class="settings-label" id="backup-paths-title">Current Backup Paths</div>
+              <div class="settings-value" id="backup-paths-subtitle" style="margin-bottom:10px;">Only sources with captured conversations appear here.</div>
+              <div id="backup-paths-list" class="backup-paths"></div>
+            </div>
+          </section>
+          <section class="settings-section" id="settings-section-transfer" data-settings-section="transfer" role="tabpanel" aria-labelledby="settings-nav-transfer" hidden>
+            <div class="settings-card wide referenced-backup-card" id="transfer-export-card">
+              <div class="referenced-backup-head">
+                <div>
+                  <div class="settings-label" id="transfer-export-title">Transfer to another computer</div>
+                  <div class="settings-value" id="transfer-export-state">checking…</div>
+                </div>
+                <div class="referenced-backup-badge" id="transfer-export-badge">checking</div>
+              </div>
+              <div class="settings-message referenced-backup-copy" id="transfer-export-message"></div>
+              <div class="referenced-backup-progress" id="transfer-export-progress" hidden>
+                <div class="referenced-progress-row">
+                  <span id="transfer-export-progress-label">Checking files</span>
+                  <span id="transfer-export-progress-count"></span>
+                </div>
+                <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="transfer-export-progress-fill"></div></div>
+              </div>
+              <div class="referenced-backup-permission" id="transfer-export-warning" hidden></div>
+              <div class="referenced-attachment-stats" id="transfer-export-stats"></div>
+              <div class="referenced-folder-list" id="transfer-export-folder-list" hidden></div>
+              <div class="settings-actions">
+                <button id="transfer-export-check-btn" class="settings-btn" type="button">Check again</button>
+                <button id="transfer-export-open-btn" class="settings-btn primary" type="button">Open DataMoat folder</button>
+              </div>
+            </div>
+            <div class="settings-card wide referenced-backup-card" id="transfer-import-card">
+              <div class="referenced-backup-head">
+                <div>
+                  <div class="settings-label" id="transfer-import-title">Transfer from another computer</div>
+                  <div class="settings-value" id="transfer-import-state">waiting for folder</div>
+                </div>
+                <div class="referenced-backup-badge off" id="transfer-import-badge">waiting</div>
+              </div>
+              <div class="settings-message referenced-backup-copy" id="transfer-import-message">Choose the copied whole .datamoat folder, unlock the old vault, then add backup data or delete current data and use the backup.</div>
+              <div class="source-field">
+                <label class="source-label" id="transfer-import-folder-label" for="transfer-import-path">Transfer folder</label>
+                <div class="source-row">
+                  <input id="transfer-import-path" class="source-input" type="text" placeholder="/path/to/copied/.datamoat">
+                  <button id="transfer-import-select-btn" class="settings-btn" type="button">Choose folder</button>
+                </div>
+                <div class="source-help" id="transfer-import-folder-help">The selected folder is checked automatically before import.</div>
+              </div>
+              <div class="source-field" style="margin-top:10px;">
+                <label class="source-label" id="transfer-import-auth-label">Old vault unlock</label>
+                <div class="source-help" id="transfer-import-auth-help">Use the old password or the old 24-word phrase that belongs to this copied folder.</div>
+                <div class="transfer-import-auth-tabs">
+                  <button id="transfer-import-auth-password" class="settings-btn transfer-import-auth-tab active" type="button">Old password</button>
+                  <button id="transfer-import-auth-phrase" class="settings-btn transfer-import-auth-tab" type="button">Old 24-word phrase</button>
+                </div>
+                <div class="transfer-import-auth-pane" id="transfer-import-password-pane">
+                  <input id="transfer-import-password" class="source-input" type="password" placeholder="Old master password">
+                </div>
+                <div class="transfer-import-auth-pane" id="transfer-import-phrase-pane" hidden>
+                  <textarea id="transfer-import-mnemonic" class="source-input" placeholder="Old 24-word recovery phrase"></textarea>
+                </div>
+              </div>
+              <div class="referenced-backup-progress" id="transfer-import-progress" hidden>
+                <div class="referenced-progress-row">
+                  <span id="transfer-import-progress-label">Checking transfer</span>
+                  <span id="transfer-import-progress-count"></span>
+                </div>
+                <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="transfer-import-progress-fill"></div></div>
+              </div>
+              <div class="referenced-backup-permission" id="transfer-import-warning" hidden></div>
+              <div class="referenced-attachment-stats" id="transfer-import-stats"></div>
+              <div class="settings-actions">
+                <button id="transfer-import-merge-btn" class="settings-btn primary" type="button">Add backup data to this vault</button>
+                <button id="transfer-import-replace-btn" class="settings-btn warn" type="button">Delete current data and use backup</button>
+              </div>
+            </div>
+          </section>
+          <section class="settings-section" id="settings-section-imports" data-settings-section="imports" role="tabpanel" aria-labelledby="settings-nav-imports" hidden>
+            <div class="settings-card wide referenced-backup-card" id="chatgpt-import-card">
+              <div class="referenced-backup-head">
+                <div>
+                  <div class="settings-label" id="chatgpt-import-title">Import chatgpt-export</div>
+                  <div class="settings-value" id="chatgpt-import-state">waiting for export</div>
+                </div>
+                <div class="referenced-backup-badge off" id="chatgpt-import-badge">waiting</div>
+              </div>
+              <div class="settings-message referenced-backup-copy" id="chatgpt-import-message">Step 1 checks the chatgpt-export without changing your vault. Step 2 imports sessions, raw data, attachments, and branch indexes.</div>
+              <div class="source-field">
+                <label class="source-label">chatgpt-export</label>
+                <div class="settings-actions">
+                  <button id="chatgpt-import-select-btn" class="settings-btn primary" type="button">1. Choose &amp; Check Export</button>
+                  <button id="chatgpt-import-check-btn" class="settings-btn" type="button" hidden>Check Again (No Import)</button>
+                </div>
+                <div class="source-help" id="chatgpt-import-path-summary">No export selected yet. The picker accepts chatgpt-export zip files and extracted export folders.</div>
+                <div class="source-row" id="chatgpt-import-manual-row" hidden>
+                  <input id="chatgpt-import-path" class="source-input" type="text" placeholder="/path/to/chatgpt-export.zip or folder">
+                </div>
+                <div class="source-help" id="chatgpt-import-manual-help" hidden>File picker is unavailable in this browser view, so paste the export path here.</div>
+              </div>
+              <div class="referenced-backup-progress" id="chatgpt-import-progress" hidden>
+                <div class="referenced-progress-row">
+                  <span id="chatgpt-import-progress-label">Checking export</span>
+                  <span id="chatgpt-import-progress-count"></span>
+                </div>
+                <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="chatgpt-import-progress-fill"></div></div>
+              </div>
+              <div class="referenced-backup-permission" id="chatgpt-import-warning" hidden></div>
+              <div class="referenced-attachment-stats" id="chatgpt-import-stats"></div>
+              <div class="settings-actions">
+                <button id="chatgpt-import-start-btn" class="settings-btn primary" type="button">2. Import into Vault</button>
+              </div>
+            </div>
+          </section>
         </div>
-      </div>
-      <button id="update-toggle" class="switch-row" type="button" role="switch" aria-checked="true">
-        <span class="switch-track"><span class="switch-knob"></span></span>
-        <span class="switch-copy">
-          <span class="switch-title">Auto-update</span>
-          <span class="switch-subtitle">Only live git source installs can update in place. Other installs stay on manual download for safety for now and will not auto-update directly.</span>
-        </span>
-      </button>
-      <div id="manual-update-row" class="manual-update-row" hidden>
-        <span class="manual-update-icon">↓</span>
-        <span class="switch-copy">
-          <span id="manual-update-title" class="switch-title">Manual Updates</span>
-          <span id="manual-update-subtitle" class="switch-subtitle">Download the latest Windows version and run it to upgrade.</span>
-        </span>
-      </div>
-
-      <div class="settings-actions">
-        <button id="update-check-btn" class="settings-btn" type="button">Check Now</button>
-        <button id="update-apply-btn" class="settings-btn primary" type="button">Update Now</button>
-        <button id="update-install-latest-btn" class="settings-btn primary" type="button" hidden>Download Latest Version</button>
-        <button id="update-reinstall-btn" class="settings-btn warn" type="button" hidden>Reinstall From Source</button>
-      </div>
-
-      <div class="settings-grid">
-        <div class="settings-card">
-          <div class="settings-label">Current Install</div>
-          <div class="settings-value" id="update-install-type">detecting…</div>
-        </div>
-        <div class="settings-card">
-          <div class="settings-label">App Version</div>
-          <div class="settings-value" id="update-app-version">detecting…</div>
-        </div>
-        <div class="settings-card">
-          <div class="settings-label">Update Method</div>
-          <div class="settings-value" id="update-path">detecting…</div>
-        </div>
-        <div class="settings-card">
-          <div class="settings-label">Update Status</div>
-          <div class="settings-value" id="update-state">not checked</div>
-        </div>
-        <div class="settings-card">
-          <div class="settings-label">Last Checked</div>
-          <div class="settings-value" id="update-last-checked">never</div>
-        </div>
-        <div class="settings-card">
-          <div class="settings-label">Last Applied</div>
-          <div class="settings-value" id="update-last-applied">never</div>
-        </div>
-        <div class="settings-card" id="update-source-check-card" hidden>
-          <div class="settings-label">Source Check</div>
-          <div class="settings-value" id="update-git-status">not checked</div>
-        </div>
-      </div>
-
-      <div class="settings-message" id="update-message">This app is working normally. Only live git source installs update in place; other installs open the latest download page instead.</div>
-
-      <div class="settings-card wide referenced-backup-card" id="referenced-attachments-card">
-        <div class="referenced-backup-head">
-          <div>
-            <div class="settings-label">Referenced File Backup</div>
-            <div class="settings-value" id="referenced-attachments-state">checking…</div>
-          </div>
-          <div class="referenced-backup-badge" id="referenced-attachments-badge">optional</div>
-        </div>
-        <div class="settings-message referenced-backup-copy" id="referenced-attachments-message"></div>
-        <div class="referenced-backup-progress" id="referenced-attachments-progress" hidden>
-          <div class="referenced-progress-row">
-            <span id="referenced-attachments-progress-label">Checking previous conversations</span>
-            <span id="referenced-attachments-progress-count"></span>
-          </div>
-          <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="referenced-attachments-progress-fill"></div></div>
-        </div>
-        <div class="referenced-backup-permission" id="referenced-attachments-permission" hidden></div>
-        <div class="referenced-attachment-stats" id="referenced-attachments-stats"></div>
-        <div class="referenced-folder-list" id="referenced-attachments-folders" hidden></div>
-        <div class="settings-actions">
-          <button id="referenced-attachments-enable-btn" class="referenced-backup-toggle" type="button" aria-pressed="false">
-            <span class="referenced-toggle-track" aria-hidden="true"><span class="referenced-toggle-knob"></span></span>
-            <span class="referenced-toggle-copy">
-              <strong>Enable referenced file backup</strong>
-              <span>Copy path-only files into the encrypted vault</span>
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <div class="settings-card wide referenced-backup-card" id="transfer-export-card">
-        <div class="referenced-backup-head">
-          <div>
-            <div class="settings-label" id="transfer-export-title">Transfer to another computer</div>
-            <div class="settings-value" id="transfer-export-state">checking…</div>
-          </div>
-          <div class="referenced-backup-badge" id="transfer-export-badge">checking</div>
-        </div>
-        <div class="settings-message referenced-backup-copy" id="transfer-export-message"></div>
-        <div class="referenced-backup-progress" id="transfer-export-progress" hidden>
-          <div class="referenced-progress-row">
-            <span id="transfer-export-progress-label">Checking files</span>
-            <span id="transfer-export-progress-count"></span>
-          </div>
-          <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="transfer-export-progress-fill"></div></div>
-        </div>
-        <div class="referenced-backup-permission" id="transfer-export-warning" hidden></div>
-        <div class="referenced-attachment-stats" id="transfer-export-stats"></div>
-        <div class="referenced-folder-list" id="transfer-export-folder-list" hidden></div>
-        <div class="settings-actions">
-          <button id="transfer-export-check-btn" class="settings-btn" type="button">Check again</button>
-          <button id="transfer-export-open-btn" class="settings-btn primary" type="button">Open DataMoat folder</button>
-        </div>
-      </div>
-
-      <div class="settings-card wide referenced-backup-card" id="transfer-import-card">
-        <div class="referenced-backup-head">
-          <div>
-            <div class="settings-label" id="transfer-import-title">Transfer from another computer</div>
-            <div class="settings-value" id="transfer-import-state">waiting for folder</div>
-          </div>
-          <div class="referenced-backup-badge off" id="transfer-import-badge">waiting</div>
-        </div>
-        <div class="settings-message referenced-backup-copy" id="transfer-import-message">Choose the copied whole .datamoat folder, unlock the old vault, then add backup data or delete current data and use the backup.</div>
-        <div class="source-field">
-          <label class="source-label" id="transfer-import-folder-label" for="transfer-import-path">Transfer folder</label>
-          <div class="source-row">
-            <input id="transfer-import-path" class="source-input" type="text" placeholder="/path/to/copied/.datamoat">
-            <button id="transfer-import-select-btn" class="settings-btn" type="button">Choose folder</button>
-          </div>
-          <div class="source-help" id="transfer-import-folder-help">The selected folder is checked automatically before import.</div>
-        </div>
-        <div class="source-field" style="margin-top:10px;">
-          <label class="source-label" id="transfer-import-auth-label">Old vault unlock</label>
-          <div class="source-help" id="transfer-import-auth-help">Use the old password or the old 24-word phrase that belongs to this copied folder.</div>
-          <div class="transfer-import-auth-tabs">
-            <button id="transfer-import-auth-password" class="settings-btn transfer-import-auth-tab active" type="button">Old password</button>
-            <button id="transfer-import-auth-phrase" class="settings-btn transfer-import-auth-tab" type="button">Old 24-word phrase</button>
-          </div>
-          <div class="transfer-import-auth-pane" id="transfer-import-password-pane">
-            <input id="transfer-import-password" class="source-input" type="password" placeholder="Old master password">
-          </div>
-          <div class="transfer-import-auth-pane" id="transfer-import-phrase-pane" hidden>
-            <textarea id="transfer-import-mnemonic" class="source-input" placeholder="Old 24-word recovery phrase"></textarea>
-          </div>
-        </div>
-        <div class="referenced-backup-progress" id="transfer-import-progress" hidden>
-          <div class="referenced-progress-row">
-            <span id="transfer-import-progress-label">Checking transfer</span>
-            <span id="transfer-import-progress-count"></span>
-          </div>
-          <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="transfer-import-progress-fill"></div></div>
-        </div>
-        <div class="referenced-backup-permission" id="transfer-import-warning" hidden></div>
-        <div class="referenced-attachment-stats" id="transfer-import-stats"></div>
-        <div class="settings-actions">
-          <button id="transfer-import-merge-btn" class="settings-btn primary" type="button">Add backup data to this vault</button>
-          <button id="transfer-import-replace-btn" class="settings-btn warn" type="button">Delete current data and use backup</button>
-        </div>
-      </div>
-
-      <div class="settings-card wide referenced-backup-card" id="chatgpt-import-card">
-        <div class="referenced-backup-head">
-          <div>
-            <div class="settings-label" id="chatgpt-import-title">Import chatgpt-export</div>
-            <div class="settings-value" id="chatgpt-import-state">waiting for export</div>
-          </div>
-          <div class="referenced-backup-badge off" id="chatgpt-import-badge">waiting</div>
-        </div>
-        <div class="settings-message referenced-backup-copy" id="chatgpt-import-message">Step 1 checks the chatgpt-export without changing your vault. Step 2 imports sessions, raw data, attachments, and branch indexes.</div>
-        <div class="source-field">
-          <label class="source-label">chatgpt-export</label>
-          <div class="settings-actions">
-            <button id="chatgpt-import-select-btn" class="settings-btn primary" type="button">1. Choose &amp; Check Export</button>
-            <button id="chatgpt-import-check-btn" class="settings-btn" type="button" hidden>Check Again (No Import)</button>
-          </div>
-          <div class="source-help" id="chatgpt-import-path-summary">No export selected yet. The picker accepts chatgpt-export zip files and extracted export folders.</div>
-          <div class="source-row" id="chatgpt-import-manual-row" hidden>
-            <input id="chatgpt-import-path" class="source-input" type="text" placeholder="/path/to/chatgpt-export.zip or folder">
-          </div>
-          <div class="source-help" id="chatgpt-import-manual-help" hidden>File picker is unavailable in this browser view, so paste the export path here.</div>
-        </div>
-        <div class="referenced-backup-progress" id="chatgpt-import-progress" hidden>
-          <div class="referenced-progress-row">
-            <span id="chatgpt-import-progress-label">Checking export</span>
-            <span id="chatgpt-import-progress-count"></span>
-          </div>
-          <div class="referenced-progress-bar"><div class="referenced-progress-fill" id="chatgpt-import-progress-fill"></div></div>
-        </div>
-        <div class="referenced-backup-permission" id="chatgpt-import-warning" hidden></div>
-        <div class="referenced-attachment-stats" id="chatgpt-import-stats"></div>
-        <div class="settings-actions">
-          <button id="chatgpt-import-start-btn" class="settings-btn primary" type="button">2. Import into Vault</button>
-        </div>
-      </div>
-
-      <div class="source-field" id="reinstall-source-field" hidden>
-        <label class="source-label" id="reinstall-source-label" for="reinstall-source-path">DataMoat source install folder</label>
-        <input id="reinstall-source-path" class="source-input" type="text" placeholder="/path/to/live/git/checkout">
-        <div class="source-help" id="reinstall-source-help">This is for DataMoat app updates, not chatgpt-export import. If it is a live git checkout, future automatic updates can be enabled.</div>
-      </div>
-
-      <div class="settings-card" id="backup-paths-card" hidden>
-        <div class="settings-label" id="backup-paths-title">Current Backup Paths</div>
-        <div class="settings-value" id="backup-paths-subtitle" style="margin-bottom:10px;">Only sources with captured conversations appear here.</div>
-        <div id="backup-paths-list" class="backup-paths"></div>
       </div>
 
     </div>
@@ -2250,19 +2877,28 @@
 <script>
 let sessions = []
 let activeId = null
+let openSessionTabs = []
 let activeMeta = null
 let activeLoadSeq = 0
 let filterSrc = 'all'
 let searchQ = ''
-let contentMatches = {}  // sessionId -> excerpt from full-text search
+let contentMatches = {}  // sessionId -> full-text search hit
+let activeSearchTarget = null
+let activeSearchNav = null
+let sessionSearchQ = ''
+let sessionSearchTimer = null
+let sessionSearchSeq = 0
 let searchTimer = null
+let contentSearchAbort = null
 let contentSearchPending = false
 let contentSearchSeq = 0
 let lastExecutedSearchQ = ''
+let lastExecutedSearchSource = 'all'
 let recoveryPasswordResetPrompt = null
 let lastActivityPingAt = 0
 let pingInFlight = false
 let settingsOpen = false
+let activeSettingsPanel = 'general'
 let updateSettings = null
 let updateState = null
 let updatePanelBusy = false
@@ -2297,6 +2933,9 @@ const UPDATE_APPLIED_FEATURE_NOTICE_KEY = 'dm_update_applied_feature_notice_vers
 let chatGptExportFeatureNoticeCheckStarted = false
 const LARGE_SESSION_MESSAGE_THRESHOLD = 1000
 const SESSION_PAGE_SIZE = 500
+const SEARCH_CONTEXT_BEFORE = 80
+const CONVERSATION_HEADER_HIDDEN_KEY = 'dm_conversation_header_hidden'
+let conversationHeaderHidden = localStorage.getItem(CONVERSATION_HEADER_HIDDEN_KEY) === '1'
 let activeSessionData = null
 let activeMessages = []
 let activePageInfo = null
@@ -2308,6 +2947,9 @@ let weeklyAnalyticsError = ''
 let weeklyAnalyticsLoadedAt = 0
 let weeklyAnalyticsTimer = null
 let weeklyAnalyticsSessionSignature = ''
+let overviewAnimatedNumberKeys = new Set()
+let overviewForceNumberReplay = false
+let overviewLanguageReplayTimer = null
 const WEEKLY_ANALYTICS_REFRESH_MS = 5 * 60 * 1000
 const WEEKLY_ANALYTICS_CACHE_KEY = 'dm_weekly_analytics_v1'
 const WEEKLY_ANALYTICS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
@@ -2369,6 +3011,11 @@ const appText = {
     noticeDismiss: 'dismiss',
     languageTitle: 'Language',
     languageSubtitle: 'Choose the app language for setup, unlock, and settings.',
+    settingsPanelGeneral: 'General',
+    settingsPanelUpdates: 'Updates',
+    settingsPanelFiles: 'File backup',
+    settingsPanelTransfer: 'Transfer',
+    settingsPanelImports: 'Imports',
     autoUpdate: 'Auto-update',
     autoUpdateUnavailable: 'Auto-update unavailable',
     autoUpdateCopy: 'Only live git source installs can update in place. Other installs stay on manual download for safety for now and will not auto-update directly.',
@@ -2474,6 +3121,11 @@ const appText = {
     noticeDismiss: '关闭',
     languageTitle: '语言',
     languageSubtitle: '选择首次设置、解锁和设置页面使用的界面语言。',
+    settingsPanelGeneral: '通用',
+    settingsPanelUpdates: '更新',
+    settingsPanelFiles: '文件备份',
+    settingsPanelTransfer: '转移',
+    settingsPanelImports: '导入',
     autoUpdate: '自动更新',
     autoUpdateUnavailable: '自动更新不可用',
     autoUpdateCopy: '只有 live git source 安装可以原地更新。其他安装方式目前为了安全会保留手动下载，不会直接自动更新。',
@@ -2579,6 +3231,11 @@ const appText = {
     noticeDismiss: '閉じる',
     languageTitle: '言語',
     languageSubtitle: '初回設定、ロック解除、設定画面で使う表示言語を選択します。',
+    settingsPanelGeneral: '一般',
+    settingsPanelUpdates: '更新',
+    settingsPanelFiles: 'ファイルバックアップ',
+    settingsPanelTransfer: '転送',
+    settingsPanelImports: 'インポート',
     autoUpdate: '自動アップデート',
     autoUpdateUnavailable: '自動アップデートは利用できません',
     autoUpdateCopy: 'live git source インストールのみその場で更新できます。それ以外は安全のため当面手動ダウンロードです。',
@@ -3060,6 +3717,137 @@ const appTextSettingsExtra = {
 for (const [language, values] of Object.entries(appTextSettingsExtra)) {
   Object.assign(appText[language], values)
 }
+const appTextOverviewExtra = {
+  en: {
+    overviewAllTimeVault: 'all-time vault',
+    overviewConversationsSaved: '{count} conversations saved',
+    overviewSubtitle: '{messages} messages · {projects} projects · latest {latest}',
+    overviewAllTime: 'All time',
+    overviewLast7Days: 'Last 7 days',
+    overviewTotalConversations: 'Total conversations',
+    overviewTotalMessages: 'Total messages',
+    overviewAppsSources: 'Apps / sources',
+    overviewLargestWorkstream: 'Largest workstream',
+    overviewFromSessionIndex: 'from session index',
+    overviewFromSessionMetadata: 'from session metadata',
+    overviewTopSource: 'top: {source}',
+    overviewNoSources: 'no sources',
+    overviewNoSessions: 'no sessions',
+    overviewNoRecentData: 'no recent data',
+    overviewLatest: 'latest',
+    overviewConversations: 'Conversations',
+    overviewMessagesExchanged: 'Messages exchanged',
+    overviewExactInRange: 'exact in range',
+    overviewExactRefreshing: 'exact in range · refreshing',
+    overviewFromIndex: 'from session index',
+    overviewActiveScanning: 'active workstreams · scanning range',
+    overviewToolOutputs: 'Tool outputs',
+    overviewCapturedWork: 'captured from work',
+    overviewCapturedRefreshing: 'captured from work · refreshing',
+    overviewScanningTool: 'scanning tool activity',
+    overviewVisibleWork: 'Visible work',
+    overviewCharsArchived: 'chars archived',
+    overviewCharsRefreshing: 'chars archived · refreshing',
+    overviewScanningVisible: 'scanning visible text',
+    overviewMessagesUnit: 'messages',
+    overviewNewContinued: '{newCount} new · {continuedCount} continued',
+    overviewTopProject: 'Top project',
+    overviewModel: 'Model',
+    overviewRoleMix: 'Role mix',
+    overviewSkillsBackup: 'Skills backup',
+    overviewFoldersFiles: '{folders} folders · {files} files',
+    overviewUnavailable: 'unavailable',
+    overviewNotScannedYet: 'not scanned yet',
+    overviewCalculating: 'calculating…',
+  },
+  'zh-CN': {
+    overviewAllTimeVault: '全部工作记忆库',
+    overviewConversationsSaved: '已保存 {count} 个对话',
+    overviewSubtitle: '{messages} 条消息 · {projects} 个项目 · 最近 {latest}',
+    overviewAllTime: '总计',
+    overviewLast7Days: '过去 7 天',
+    overviewTotalConversations: '总对话',
+    overviewTotalMessages: '总消息',
+    overviewAppsSources: '应用 / 来源',
+    overviewLargestWorkstream: '最大工作流',
+    overviewFromSessionIndex: '来自会话索引',
+    overviewFromSessionMetadata: '来自会话元数据',
+    overviewTopSource: '最多：{source}',
+    overviewNoSources: '暂无来源',
+    overviewNoSessions: '暂无会话',
+    overviewNoRecentData: '暂无近期数据',
+    overviewLatest: '最近',
+    overviewConversations: '对话',
+    overviewMessagesExchanged: '消息交换',
+    overviewExactInRange: '范围内精确值',
+    overviewExactRefreshing: '范围内精确值 · 刷新中',
+    overviewFromIndex: '来自会话索引',
+    overviewActiveScanning: '活跃工作流 · 扫描范围中',
+    overviewToolOutputs: '工具输出',
+    overviewCapturedWork: '从工作中捕捉',
+    overviewCapturedRefreshing: '从工作中捕捉 · 刷新中',
+    overviewScanningTool: '扫描工具活动中',
+    overviewVisibleWork: '可见工作',
+    overviewCharsArchived: '已归档字符',
+    overviewCharsRefreshing: '已归档字符 · 刷新中',
+    overviewScanningVisible: '扫描可见文本中',
+    overviewMessagesUnit: '条消息',
+    overviewNewContinued: '{newCount} 新 · {continuedCount} 继续',
+    overviewTopProject: '最多项目',
+    overviewModel: '模型',
+    overviewRoleMix: '角色分布',
+    overviewSkillsBackup: 'Skills 备份',
+    overviewFoldersFiles: '{folders} 个文件夹 · {files} 个文件',
+    overviewUnavailable: '不可用',
+    overviewNotScannedYet: '尚未扫描',
+    overviewCalculating: '计算中…',
+  },
+  ja: {
+    overviewAllTimeVault: '全期間の作業メモリ',
+    overviewConversationsSaved: '{count} 件の会話を保存',
+    overviewSubtitle: '{messages} 件のメッセージ · {projects} 件のプロジェクト · 最新 {latest}',
+    overviewAllTime: '全期間',
+    overviewLast7Days: '過去 7 日',
+    overviewTotalConversations: '総会話数',
+    overviewTotalMessages: '総メッセージ数',
+    overviewAppsSources: 'アプリ / ソース',
+    overviewLargestWorkstream: '最大ワークストリーム',
+    overviewFromSessionIndex: 'セッション索引から',
+    overviewFromSessionMetadata: 'セッションメタデータから',
+    overviewTopSource: '最多: {source}',
+    overviewNoSources: 'ソースなし',
+    overviewNoSessions: 'セッションなし',
+    overviewNoRecentData: '最近のデータなし',
+    overviewLatest: '最新',
+    overviewConversations: '会話',
+    overviewMessagesExchanged: 'メッセージ交換',
+    overviewExactInRange: '範囲内の正確値',
+    overviewExactRefreshing: '範囲内の正確値 · 更新中',
+    overviewFromIndex: 'セッション索引から',
+    overviewActiveScanning: 'アクティブ作業 · 範囲をスキャン中',
+    overviewToolOutputs: 'ツール出力',
+    overviewCapturedWork: '作業から取得',
+    overviewCapturedRefreshing: '作業から取得 · 更新中',
+    overviewScanningTool: 'ツール活動をスキャン中',
+    overviewVisibleWork: '可視作業',
+    overviewCharsArchived: 'アーカイブ済み文字',
+    overviewCharsRefreshing: 'アーカイブ済み文字 · 更新中',
+    overviewScanningVisible: '可視テキストをスキャン中',
+    overviewMessagesUnit: 'メッセージ',
+    overviewNewContinued: '{newCount} 新規 · {continuedCount} 継続',
+    overviewTopProject: 'トッププロジェクト',
+    overviewModel: 'モデル',
+    overviewRoleMix: 'ロール構成',
+    overviewSkillsBackup: 'Skills バックアップ',
+    overviewFoldersFiles: '{folders} フォルダ · {files} ファイル',
+    overviewUnavailable: '利用不可',
+    overviewNotScannedYet: '未スキャン',
+    overviewCalculating: '計算中…',
+  },
+}
+for (const [language, values] of Object.entries(appTextOverviewExtra)) {
+  Object.assign(appText[language], values)
+}
 const appZhTwPhrases = [
   ['简体中文', '繁體中文'], ['搜索', '搜尋'], ['对话', '對話'], ['设置', '設定'], ['关闭', '關閉'],
   ['选择', '選擇'], ['语言', '語言'], ['界面', '介面'], ['自动', '自動'], ['更新', '更新'],
@@ -3099,6 +3887,48 @@ function appToTraditionalText(text) {
   return appZhTwPhrases.reduce((value, pair) => value.split(pair[0]).join(pair[1]), String(text || ''));
 }
 appText['zh-TW'] = Object.fromEntries(Object.entries(appText['zh-CN']).map(([key, value]) => [key, appToTraditionalText(value)]))
+Object.assign(appText['zh-TW'], {
+  overviewAllTimeVault: '全部工作記憶庫',
+  overviewConversationsSaved: '已保存 {count} 個對話',
+  overviewSubtitle: '{messages} 條訊息 · {projects} 個項目 · 最近 {latest}',
+  overviewAllTime: '總計',
+  overviewLast7Days: '過去 7 日',
+  overviewTotalConversations: '總對話',
+  overviewTotalMessages: '總訊息',
+  overviewAppsSources: '應用 / 來源',
+  overviewLargestWorkstream: '最大工作流',
+  overviewFromSessionIndex: '來自對話索引',
+  overviewFromSessionMetadata: '來自對話元資料',
+  overviewTopSource: '最多：{source}',
+  overviewNoSources: '暫無來源',
+  overviewNoSessions: '暫無對話',
+  overviewNoRecentData: '暫無近期資料',
+  overviewLatest: '最近',
+  overviewConversations: '對話',
+  overviewMessagesExchanged: '訊息交換',
+  overviewExactInRange: '範圍內精確值',
+  overviewExactRefreshing: '範圍內精確值 · 更新中',
+  overviewFromIndex: '來自對話索引',
+  overviewActiveScanning: '活躍工作流 · 掃描範圍中',
+  overviewToolOutputs: '工具輸出',
+  overviewCapturedWork: '從工作中捕捉',
+  overviewCapturedRefreshing: '從工作中捕捉 · 更新中',
+  overviewScanningTool: '掃描工具活動中',
+  overviewVisibleWork: '可見工作',
+  overviewCharsArchived: '已歸檔字元',
+  overviewCharsRefreshing: '已歸檔字元 · 更新中',
+  overviewScanningVisible: '掃描可見文本中',
+  overviewMessagesUnit: '條訊息',
+  overviewNewContinued: '{newCount} 新 · {continuedCount} 繼續',
+  overviewTopProject: '最多項目',
+  overviewModel: '模型',
+  overviewRoleMix: '角色分佈',
+  overviewSkillsBackup: 'Skills 備份',
+  overviewFoldersFiles: '{folders} 個資料夾 · {files} 個檔案',
+  overviewUnavailable: '不可用',
+  overviewNotScannedYet: '尚未掃描',
+  overviewCalculating: '計算中…',
+})
 let appLanguage = 'en'
 function normalizeAppLanguage(value) {
   const code = String(value || '').replace('_', '-').toLowerCase()
@@ -3125,6 +3955,9 @@ function detectAppLanguage() {
 }
 function appTr(key) {
   return (appText[appLanguage] && appText[appLanguage][key]) || appText.en[key] || key
+}
+function appFmt(key, values = {}) {
+  return appTr(key).replace(/\{(\w+)\}/g, (_match, name) => String(values[name] ?? ''))
 }
 const APP_STATUS_TEXT_KEYS = {
   'checking': 'checking',
@@ -3194,7 +4027,23 @@ function toggleLanguageMenu() {
   menu.hidden = !menu.hidden
   current.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true')
 }
-function applyAppLanguage() {
+function setSettingsPanel(panel) {
+  const nextPanel = document.getElementById(`settings-section-${panel}`) ? panel : 'general'
+  activeSettingsPanel = nextPanel
+  document.querySelectorAll('[data-settings-target]').forEach(btn => {
+    const active = btn.dataset.settingsTarget === nextPanel
+    btn.classList.toggle('active', active)
+    btn.setAttribute('aria-selected', active ? 'true' : 'false')
+  })
+  document.querySelectorAll('[data-settings-section]').forEach(section => {
+    const active = section.dataset.settingsSection === nextPanel
+    section.hidden = !active
+    section.classList.toggle('active', active)
+  })
+  const content = document.querySelector('.settings-panel-content')
+  if (content) content.scrollTop = 0
+}
+function applyAppLanguage(options = {}) {
   document.documentElement.lang = appLanguage === 'zh-CN' ? 'zh-CN' : appLanguage
   const currentLanguageButton = document.getElementById('app-language-current')
   if (currentLanguageButton) {
@@ -3217,6 +4066,11 @@ function applyAppLanguage() {
   setAppText('settings-title', 'settings')
   setAppText('language-settings-title', 'languageTitle')
   setAppText('language-settings-subtitle', 'languageSubtitle')
+  setAppText('settings-nav-general', 'settingsPanelGeneral')
+  setAppText('settings-nav-updates', 'settingsPanelUpdates')
+  setAppText('settings-nav-files', 'settingsPanelFiles')
+  setAppText('settings-nav-transfer', 'settingsPanelTransfer')
+  setAppText('settings-nav-imports', 'settingsPanelImports')
   setAppText('transfer-export-title', 'transferTo')
   setAppText('transfer-import-title', 'transferFrom')
   setAppText('transfer-import-folder-label', 'transferFolder')
@@ -3272,6 +4126,11 @@ function applyAppLanguage() {
   setAppText('chatgpt-import-select-btn', 'chooseCheckExport')
   setAppText('chatgpt-import-check-btn', 'checkAgain')
   setAppText('chatgpt-import-start-btn', 'importVault')
+  if (options.replayOverviewNumbers) {
+    overviewAnimatedNumberKeys = new Set()
+    overviewForceNumberReplay = true
+  }
+  renderOverview()
 }
 function rerenderLocalizedSettingsPanels() {
   if (!settingsOpen) return
@@ -3293,17 +4152,23 @@ async function loadAppPreferences() {
   rerenderLocalizedSettingsPanels()
 }
 async function saveAppLanguage(language) {
-  appLanguage = normalizeAppLanguage(language)
-  applyAppLanguage()
+  const nextLanguage = normalizeAppLanguage(language)
+  appLanguage = nextLanguage
+  applyAppLanguage({ replayOverviewNumbers: true })
+  replayOverviewNumbersFromZero()
   try {
     const data = await jsonOrThrow(await apiFetch('/api/preferences', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ language: appLanguage }),
     }))
-    appLanguage = normalizeAppLanguage(data.language)
+    const savedLanguage = normalizeAppLanguage(data.language)
+    if (savedLanguage !== appLanguage) {
+      appLanguage = savedLanguage
+      applyAppLanguage({ replayOverviewNumbers: true })
+      replayOverviewNumbersFromZero()
+    }
   } catch {}
-  applyAppLanguage()
   rerenderLocalizedSettingsPanels()
 }
 
@@ -3656,6 +4521,7 @@ async function loadSessions() {
   const weeklyChanged = invalidateWeeklyAnalyticsIfSessionsChanged(nextSessions)
   sessions = nextSessions
   renderList()
+  renderSessionTabs()
   renderOverview()
   renderBackupPathsPanel()
   renderSkillsBackupPanel()
@@ -3892,15 +4758,20 @@ function renderList() {
     const emptySub = searchQ && !contentSearchPending
       ? `No conversations matched "${esc(searchQ)}".`
       : ''
-    list.innerHTML = `<div class="empty">
-      <div class="empty-icon">∅</div>
-      <div class="empty-title">${emptyTitle}</div>
-      ${emptySub ? `<div class="empty-sub">${emptySub}</div>` : ''}
-    </div>`
+    list.innerHTML = contentSearchPending
+      ? `<div class="empty searching-empty">
+        <div class="empty-title scan-title">searching content<span class="scan-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></div>
+      </div>`
+      : `<div class="empty">
+        <div class="empty-icon">∅</div>
+        <div class="empty-title">${emptyTitle}</div>
+        ${emptySub ? `<div class="empty-sub">${emptySub}</div>` : ''}
+      </div>`
   } else {
     list.innerHTML = filtered.map(s => {
       const sessionKey = s.uid || s.id
-      const excerpt = contentMatches[sessionKey]
+      const hit = contentMatches[sessionKey]
+      const excerpt = typeof hit === 'string' ? hit : hit?.excerpt
       const safeSessionId = escAttr(sessionKey)
       const safeModel = esc(s.model)
       const safeCwd = esc(s.cwd ? shortPath(s.cwd) : s.id.slice(0,16)+'…')
@@ -3931,11 +4802,89 @@ function renderList() {
   list.scrollTop = preservedScrollTop
 }
 
+function tabTitleForSession(sessionId) {
+  const session = sessions.find(s => (s.uid || s.id) === sessionId)
+  if (!session) return sessionId
+  return shortPath(session.cwd || session.model || session.id || sessionId)
+}
+
+function ensureSessionTab(sessionId) {
+  if (!sessionId || openSessionTabs.includes(sessionId)) return
+  openSessionTabs.push(sessionId)
+}
+
+function renderSessionTabs() {
+  const tabs = document.getElementById('session-tabs')
+  if (!tabs) return
+  const knownIds = new Set(sessions.map(s => s.uid || s.id))
+  openSessionTabs = openSessionTabs.filter(id => knownIds.size === 0 || knownIds.has(id))
+  tabs.hidden = openSessionTabs.length === 0
+  tabs.innerHTML = openSessionTabs.map(id => {
+    const safeId = escAttr(id)
+    return `<button class="session-tab ${id === activeId ? 'active' : ''}" type="button" role="tab" aria-selected="${id === activeId ? 'true' : 'false'}" data-tab-id="${safeId}">
+      <span class="session-tab-title">${esc(tabTitleForSession(id))}</span>
+      <span class="session-tab-close" role="button" tabindex="-1" aria-label="Close tab" data-tab-close="${safeId}">×</span>
+    </button>`
+  }).join('')
+}
+
+function renderNoSession() {
+  const conv = document.getElementById('conversation')
+  conv.innerHTML = `<div class="no-session no-session-overview">
+    <div id="weekly-strip" class="weekly-strip" aria-label="Weekly work summary"></div>
+  </div>`
+  renderOverview()
+}
+
+function clearActiveSession() {
+  activeLoadSeq += 1
+  activeId = null
+  activeMeta = null
+  activeSessionData = null
+  activeMessages = []
+  activePageInfo = null
+  activeBranchData = null
+  activeSearchTarget = null
+  activeSearchNav = null
+  sessionSearchQ = ''
+  clearTimeout(sessionSearchTimer)
+  sessionSearchSeq += 1
+  renderList()
+  renderSessionTabs()
+  renderNoSession()
+}
+
+function closeSessionTab(sessionId) {
+  const index = openSessionTabs.indexOf(sessionId)
+  if (index === -1) return
+  openSessionTabs.splice(index, 1)
+  if (activeId !== sessionId) {
+    renderSessionTabs()
+    return
+  }
+  const nextId = openSessionTabs[Math.min(index, openSessionTabs.length - 1)] || openSessionTabs[index - 1]
+  if (nextId) {
+    void selectSession(nextId)
+    return
+  }
+  clearActiveSession()
+}
+
 function setSourceFilter(source) {
+  const previousSource = filterSrc
   filterSrc = source || 'all'
   document.querySelectorAll('.filter-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.src === filterSrc)
   })
+  if (previousSource !== filterSrc && searchQ.length >= 2) {
+    lastExecutedSearchQ = ''
+    lastExecutedSearchSource = 'all'
+    contentMatches = {}
+    contentSearchPending = true
+    abortContentSearch()
+    clearTimeout(searchTimer)
+    searchTimer = setTimeout(() => doContentSearch(searchQ), 80)
+  }
   renderList()
 }
 
@@ -3947,84 +4896,215 @@ function sessionMatchesSearchMetadata(session, query) {
          String(session.id || session.uid || '').toLowerCase().includes(q)
 }
 
+function buildAllTimeOverview() {
+  const sourceCounts = {}
+  const projects = new Set()
+  let totalMessages = 0
+  let largestSession = null
+  let latestSession = null
+  for (const session of sessions) {
+    const messages = Number(session.messageCount || 0)
+    totalMessages += messages
+    const source = session.source || 'unknown'
+    sourceCounts[source] = (sourceCounts[source] || 0) + 1
+    if (session.cwd) projects.add(session.cwd)
+    if (!largestSession || messages > Number(largestSession.messageCount || 0)) largestSession = session
+    if (!latestSession || timeValue(session.lastTimestamp) > timeValue(latestSession.lastTimestamp)) latestSession = session
+  }
+  const topSource = Object.entries(sourceCounts).sort((a, b) => Number(b[1]) - Number(a[1]))[0] || null
+  return {
+    conversations: sessions.length,
+    messages: totalMessages,
+    sources: Object.keys(sourceCounts).length,
+    projects: projects.size,
+    largestSession,
+    latestSession,
+    topSource,
+  }
+}
+
+function formatCountValue(value, format = 'number') {
+  return format === 'compact' ? fmtCompact(value) : fmtNumber(value)
+}
+
+function overviewNumberHtml(key, countTo, format = 'number') {
+  const target = Math.max(0, Number(countTo) || 0)
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+  const canAnimate = target > 0
+    && (overviewForceNumberReplay || !overviewAnimatedNumberKeys.has(key))
+    && (overviewForceNumberReplay || !reduced)
+  const initial = canAnimate ? 0 : target
+  return `<span data-count-key="${escAttr(key)}" data-count-to="${escAttr(String(target))}" data-count-format="${escAttr(format)}">${esc(formatCountValue(initial, format))}</span>`
+}
+
+function animateOverviewNumbers(root) {
+  const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+  const forceReplay = overviewForceNumberReplay
+  for (const el of root.querySelectorAll('[data-count-to]')) {
+    const key = el.dataset.countKey || ''
+    const target = Math.max(0, Number(el.dataset.countTo || 0) || 0)
+    const format = el.dataset.countFormat || 'number'
+    if (!key || target <= 0 || (!forceReplay && (overviewAnimatedNumberKeys.has(key) || reduced))) {
+      el.textContent = formatCountValue(target, format)
+      continue
+    }
+    overviewAnimatedNumberKeys.add(key)
+    const startedAt = performance.now()
+    const duration = 1440
+    const tick = now => {
+      const progress = Math.min(1, (now - startedAt) / duration)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      el.textContent = formatCountValue(target * eased, format)
+      if (progress < 1) {
+        requestAnimationFrame(tick)
+      } else {
+        el.textContent = formatCountValue(target, format)
+      }
+    }
+    requestAnimationFrame(tick)
+  }
+}
+
+function replayOverviewNumbersFromZero() {
+  const root = document.getElementById('weekly-strip')
+  if (!root) return
+  const run = () => {
+    const startedAt = performance.now()
+    const duration = 1440
+    overviewAnimatedNumberKeys = new Set()
+    for (const el of root.querySelectorAll('[data-count-to]')) {
+      const key = el.dataset.countKey || ''
+      const target = Math.max(0, Number(el.dataset.countTo || 0) || 0)
+      const format = el.dataset.countFormat || 'number'
+      if (!key || target <= 0) {
+        el.textContent = formatCountValue(target, format)
+        continue
+      }
+      overviewAnimatedNumberKeys.add(key)
+      el.textContent = formatCountValue(0, format)
+      const tick = now => {
+        const progress = Math.min(1, (now - startedAt) / duration)
+        const eased = 1 - Math.pow(1 - progress, 3)
+        el.textContent = formatCountValue(target * eased, format)
+        if (progress < 1) {
+          requestAnimationFrame(tick)
+        } else {
+          el.textContent = formatCountValue(target, format)
+        }
+      }
+      requestAnimationFrame(tick)
+    }
+  }
+  run()
+  if (overviewLanguageReplayTimer) window.clearTimeout(overviewLanguageReplayTimer)
+  overviewLanguageReplayTimer = window.setTimeout(() => {
+    overviewLanguageReplayTimer = null
+    run()
+  }, 80)
+}
+
 function renderOverview() {
   const strip = document.getElementById('weekly-strip')
   if (!strip) return
   const data = weeklyAnalytics || buildWeeklyFallback()
   const summary = data.summary
+  const totals = buildAllTimeOverview()
   const exactReady = !!weeklyAnalytics && weeklyAnalytics.computedFrom !== 'index-fallback'
   const exactRefreshing = exactReady && weeklyAnalyticsLoading
   const analyticsFailed = !!weeklyAnalyticsError && !exactReady
   const latestSession = latestSessionForOverview()
   const useLatestPills = summary.conversations === 0 && !!latestSession
-  const tokenNote = exactReady && summary.estimatedTranscriptTokens > 0
-    ? `visible text estimate${exactRefreshing ? ' · refreshing' : ''}`
-    : analyticsFailed
-      ? 'exact scan temporarily unavailable'
-      : 'calculating visible transcript estimate…'
-  const scanningValue = analyticsFailed ? 'unavailable' : 'calculating…'
+  const scanningValue = analyticsFailed ? appTr('overviewUnavailable') : appTr('overviewCalculating')
   const scanningClass = exactReady || analyticsFailed ? '' : 'loading'
   const messagesValue = exactReady
     ? fmtNumber(summary.messages)
     : (summary.activeConversationMessages > 0 ? fmtNumber(summary.activeConversationMessages) : scanningValue)
   const messagesNote = exactReady
-    ? (exactRefreshing ? 'exact in range · refreshing' : 'exact in range')
+    ? (exactRefreshing ? appTr('overviewExactRefreshing') : appTr('overviewExactInRange'))
     : analyticsFailed
-      ? 'from session index'
-      : 'active workstreams · scanning range'
-  const transcriptValue = exactReady ? fmtCompact(summary.estimatedTranscriptTokens) : scanningValue
+      ? appTr('overviewFromIndex')
+      : appTr('overviewActiveScanning')
   const toolOutputsValue = exactReady ? fmtNumber(summary.toolOutputs) : scanningValue
   const visibleWorkValue = exactReady ? fmtCompact(summary.visibleTextChars) : scanningValue
   const topProject = data.topProjects?.[0]
   const topModel = data.topModels?.[0]
   const topRole = exactReady ? bucketsFromRecord(data.roles)?.[0] : null
+  const largestMessages = Number(totals.largestSession?.messageCount || 0)
+  const largestProject = totals.largestSession ? shortPath(totals.largestSession.cwd || totals.largestSession.id || appTr('overviewLargestWorkstream')) : appTr('overviewNoSessions')
+  const topSourceLabel = totals.topSource ? (SOURCE_LABELS[totals.topSource[0]] || totals.topSource[0]) : appTr('overviewNoSources')
+  const latestLabel = totals.latestSession ? reltime(totals.latestSession.lastTimestamp) : appTr('overviewNoSessions')
   const emptyPill = exactReady
-    ? (sessions.length > 0 ? 'no recent data' : 'no sessions')
+    ? (sessions.length > 0 ? appTr('overviewNoRecentData') : appTr('overviewNoSessions'))
     : analyticsFailed
-      ? (sessions.length > 0 ? 'no recent data' : 'no sessions')
-      : (sessions.length > 0 ? 'no recent data' : scanningValue)
+      ? (sessions.length > 0 ? appTr('overviewNoRecentData') : appTr('overviewNoSessions'))
+      : (sessions.length > 0 ? appTr('overviewNoRecentData') : scanningValue)
   const topProjectValue = topProject
     ? `${shortPath(topProject.key)} · ${fmtNumber(topProject.count)}`
     : useLatestPills
-      ? `${shortPath(latestSession.cwd || latestSession.id || 'latest session')} · latest`
+      ? `${shortPath(latestSession.cwd || latestSession.id || appTr('overviewLatest'))} · ${appTr('overviewLatest')}`
       : emptyPill
   const topModelValue = topModel
     ? `${topModel.key} · ${fmtNumber(topModel.count)}`
     : useLatestPills
-      ? `${latestSession.model || 'unknown'} · latest`
+      ? `${latestSession.model || appTr('unknown')} · ${appTr('overviewLatest')}`
       : emptyPill
   strip.innerHTML = `
-    <div class="weekly-strip-inner">
-      <div class="weekly-period">your work, last 7 days</div>
-      <div class="weekly-metrics">
-        ${weeklyMetric('Conversations', fmtNumber(summary.conversations), `${fmtNumber(summary.newConversations)} new · ${fmtNumber(summary.continuedConversations)} continued`, true)}
-        ${weeklyMetric('Messages exchanged', messagesValue, messagesNote)}
-        ${weeklyMetric('Est. transcript tokens', transcriptValue, tokenNote, false, scanningClass)}
-        ${weeklyMetric('Tool outputs', toolOutputsValue, exactReady ? (exactRefreshing ? 'captured from work · refreshing' : 'captured from work') : 'scanning tool activity', false, scanningClass)}
-        ${weeklyMetric('Visible work', visibleWorkValue, exactReady ? (exactRefreshing ? 'chars archived · refreshing' : 'chars archived') : 'scanning visible text', false, scanningClass)}
-        ${weeklyMetric('Largest workstream', fmtNumber(summary.largestWorkstreamMessages), 'messages')}
+    <div class="overview-shell">
+      <div class="overview-hero">
+        <div class="overview-mark"><strong>DataMoat</strong><span>${esc(appTr('overviewAllTimeVault'))}</span></div>
+        <div class="overview-title">${appFmt('overviewConversationsSaved', { count: overviewNumberHtml('hero-conversations', totals.conversations) })}</div>
+        <div class="overview-sub">${appFmt('overviewSubtitle', {
+          messages: esc(fmtNumber(totals.messages)),
+          projects: esc(fmtNumber(totals.projects)),
+          latest: esc(latestLabel),
+        })}</div>
       </div>
-      <div class="weekly-detail-row">
-        ${weeklyPill('Top project', topProjectValue)}
-        ${weeklyPill('Model', topModelValue)}
-        ${weeklyPill('Role mix', topRole ? `${topRole.key} · ${fmtNumber(topRole.count)}` : (exactReady ? 'no recent role data' : emptyPill))}
-        ${weeklyPill('Skills backup', skillsBackupSummaryText())}
+      <div class="overview-section-label">${esc(appTr('overviewAllTime'))}</div>
+      <div class="weekly-metrics overview-total">
+        ${weeklyMetric(appTr('overviewTotalConversations'), fmtNumber(totals.conversations), appTr('overviewFromSessionIndex'), true, '', { key: 'total-conversations', countTo: totals.conversations })}
+        ${weeklyMetric(appTr('overviewTotalMessages'), fmtNumber(totals.messages), appTr('overviewFromSessionMetadata'), false, '', { key: 'total-messages', countTo: totals.messages })}
+        ${weeklyMetric(appTr('overviewAppsSources'), fmtNumber(totals.sources), appFmt('overviewTopSource', { source: topSourceLabel }), false, '', { key: 'total-sources', countTo: totals.sources })}
+        ${weeklyMetric(appTr('overviewLargestWorkstream'), fmtNumber(largestMessages), largestProject, false, '', { key: 'largest-workstream', countTo: largestMessages })}
+      </div>
+      <div class="overview-section-label">${esc(appTr('overviewLast7Days'))}</div>
+      <div class="weekly-strip-inner">
+        <div class="weekly-metrics">
+          ${weeklyMetric(appTr('overviewConversations'), fmtNumber(summary.conversations), appFmt('overviewNewContinued', { newCount: fmtNumber(summary.newConversations), continuedCount: fmtNumber(summary.continuedConversations) }), true, '', { key: 'week-conversations', countTo: summary.conversations })}
+          ${weeklyMetric(appTr('overviewMessagesExchanged'), messagesValue, messagesNote, false, scanningClass, exactReady ? { key: 'week-messages', countTo: summary.messages } : null)}
+          ${weeklyMetric(appTr('overviewToolOutputs'), toolOutputsValue, exactReady ? (exactRefreshing ? appTr('overviewCapturedRefreshing') : appTr('overviewCapturedWork')) : appTr('overviewScanningTool'), false, scanningClass, exactReady ? { key: 'week-tool-outputs', countTo: summary.toolOutputs } : null)}
+          ${weeklyMetric(appTr('overviewVisibleWork'), visibleWorkValue, exactReady ? (exactRefreshing ? appTr('overviewCharsRefreshing') : appTr('overviewCharsArchived')) : appTr('overviewScanningVisible'), false, scanningClass, exactReady ? { key: 'week-visible-work', countTo: summary.visibleTextChars, format: 'compact' } : null)}
+          ${weeklyMetric(appTr('overviewLargestWorkstream'), fmtNumber(summary.largestWorkstreamMessages), appTr('overviewMessagesUnit'), false, '', { key: 'week-largest-workstream', countTo: summary.largestWorkstreamMessages })}
+        </div>
+        <div class="weekly-detail-row">
+          ${weeklyPill(appTr('overviewTopProject'), topProjectValue)}
+          ${weeklyPill(appTr('overviewModel'), topModelValue)}
+          ${weeklyPill(appTr('overviewRoleMix'), topRole ? `${topRole.key} · ${fmtNumber(topRole.count)}` : (exactReady ? appTr('overviewNoRecentData') : emptyPill))}
+          ${weeklyPill(appTr('overviewSkillsBackup'), skillsBackupSummaryText())}
+        </div>
       </div>
     </div>
   `
+  animateOverviewNumbers(strip)
+  overviewForceNumberReplay = false
 }
 
 function skillsBackupSummaryText() {
   if (skillsBackupStatus?.skillsBackedUp) {
-    return `${fmtNumber(skillsBackupStatus.skillsBackedUp)} folders · ${fmtNumber(skillsBackupStatus.filesBackedUp)} files`
+    return appFmt('overviewFoldersFiles', {
+      folders: fmtNumber(skillsBackupStatus.skillsBackedUp),
+      files: fmtNumber(skillsBackupStatus.filesBackedUp),
+    })
   }
-  if (skillsBackupError) return 'unavailable'
-  return 'not scanned yet'
+  if (skillsBackupError) return appTr('overviewUnavailable')
+  return appTr('overviewNotScannedYet')
 }
 
-function weeklyMetric(label, value, note, primary = false, state = '') {
+function weeklyMetric(label, value, note, primary = false, state = '', options = null) {
+  const valueHtml = options?.key
+    ? overviewNumberHtml(options.key, options.countTo, options.format || 'number')
+    : esc(value)
   return `<div class="weekly-metric ${primary ? 'primary' : ''} ${state}">
-    <div class="weekly-value">${esc(value)}</div>
+    <div class="weekly-value">${valueHtml}</div>
     <div class="weekly-label">${esc(label)}</div>
     <div class="weekly-sub">${esc(note)}</div>
   </div>`
@@ -4123,40 +5203,161 @@ function fmtCompact(value) {
 }
 
 async function doContentSearch(q) {
+  abortContentSearch()
   if (q.length < 2) {
     contentSearchPending = false
     contentMatches = {}
     lastExecutedSearchQ = ''
+    lastExecutedSearchSource = 'all'
     renderList()
     return
   }
-  if (q === lastExecutedSearchQ && !contentSearchPending) {
+  const sourceScope = filterSrc || 'all'
+  if (q === lastExecutedSearchQ && sourceScope === lastExecutedSearchSource && !contentSearchPending) {
     renderList()
     return
   }
   const seq = ++contentSearchSeq
+  const controller = new AbortController()
+  contentSearchAbort = controller
   contentSearchPending = true
   renderList()
-  const res = await apiFetch('/api/search?q=' + encodeURIComponent(q))
-  const hits = await res.json()
-  if (seq !== contentSearchSeq || q !== searchQ) return
+  try {
+    const streamed = await doContentSearchStream(q, seq, controller)
+    if (streamed) return
+    await doContentSearchJsonFallback(q, seq, controller)
+  } catch (error) {
+    if (error?.name === 'AbortError') return
+    if (seq !== contentSearchSeq || q !== searchQ || sourceScope !== filterSrc) return
+    contentSearchPending = false
+    renderList()
+  } finally {
+    if (contentSearchAbort === controller) contentSearchAbort = null
+  }
+}
+
+function contentSearchUrl(path, q, extra = '') {
+  const sourceParam = filterSrc && filterSrc !== 'all' ? '&source=' + encodeURIComponent(filterSrc) : ''
+  return `${path}?q=${encodeURIComponent(q)}${extra}${sourceParam}`
+}
+
+async function doContentSearchStream(q, seq, controller) {
+  const sourceScope = filterSrc || 'all'
+  const res = await apiFetch(contentSearchUrl('/api/search/stream', q), { signal: controller.signal })
+  if (!res.body || !res.body.getReader) return false
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let needsSessionRefresh = false
+  let knownSessionIds = new Set(sessions.map(s => s.uid || s.id))
+
+  const handleLine = async line => {
+    if (!line.trim()) return
+    const event = JSON.parse(line)
+    if (seq !== contentSearchSeq || q !== searchQ || sourceScope !== filterSrc) return
+    if (event.type === 'hit' && event.hit) {
+      const hit = event.hit
+      if (!knownSessionIds.has(hit.id)) needsSessionRefresh = true
+      contentMatches[hit.id] = hit
+      contentSearchPending = true
+      renderList()
+      return
+    }
+    if (event.type === 'done') {
+      if (needsSessionRefresh) {
+        sessions = await fetchSessionsSnapshot()
+        knownSessionIds = new Set(sessions.map(s => s.uid || s.id))
+      }
+      if (seq !== contentSearchSeq || q !== searchQ || sourceScope !== filterSrc) return
+      contentSearchPending = !!event.partial
+      if (!event.partial) {
+        lastExecutedSearchQ = q
+        lastExecutedSearchSource = sourceScope
+      }
+      renderList()
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() || ''
+    for (const line of lines) await handleLine(line)
+  }
+  buffer += decoder.decode()
+  if (buffer.trim()) await handleLine(buffer)
+  return true
+}
+
+async function doContentSearchJsonFallback(q, seq, controller) {
+  const sourceScope = filterSrc || 'all'
+  const quickRes = await apiFetch(contentSearchUrl('/api/search', q, '&quickMs=3500'), { signal: controller.signal })
+  const hits = await quickRes.json()
+  if (seq !== contentSearchSeq || q !== searchQ || sourceScope !== filterSrc) return
   const knownSessionIds = new Set(sessions.map(s => s.uid || s.id))
   if (hits.some(h => !knownSessionIds.has(h.id))) {
     sessions = await fetchSessionsSnapshot()
-    if (seq !== contentSearchSeq || q !== searchQ) return
+    if (seq !== contentSearchSeq || q !== searchQ || sourceScope !== filterSrc) return
+  }
+  contentMatches = {}
+  for (const h of hits) contentMatches[h.id] = h
+  const partial = quickRes.headers.get('X-DataMoat-Search-Partial') === '1'
+  contentSearchPending = partial
+  if (!partial) {
+    lastExecutedSearchQ = q
+    lastExecutedSearchSource = sourceScope
+  }
+  renderList()
+  if (!partial) return
+
+  const fullRes = await apiFetch(contentSearchUrl('/api/search', q), { signal: controller.signal })
+  const fullHits = await fullRes.json()
+  if (seq !== contentSearchSeq || q !== searchQ || sourceScope !== filterSrc) return
+  if (fullHits.some(h => !knownSessionIds.has(h.id))) {
+    sessions = await fetchSessionsSnapshot()
+    if (seq !== contentSearchSeq || q !== searchQ || sourceScope !== filterSrc) return
   }
   contentSearchPending = false
   lastExecutedSearchQ = q
+  lastExecutedSearchSource = sourceScope
   contentMatches = {}
-  for (const h of hits) contentMatches[h.id] = h.excerpt
+  for (const h of fullHits) contentMatches[h.id] = h
   renderList()
 }
 
-async function selectSession(id) {
+function abortContentSearch() {
+  if (!contentSearchAbort) return
+  contentSearchAbort.abort()
+  contentSearchAbort = null
+}
+
+async function selectSession(id, options = {}) {
   activeId = id
+  ensureSessionTab(id)
   activeMeta = null
   activeBranchData = null
+  clearTimeout(sessionSearchTimer)
+  sessionSearchSeq += 1
+  const searchHit = options.searchHit || null
+  const searchQuery = String(options.query || searchQ || '').trim()
+  sessionSearchQ = searchHit ? searchQuery : ''
+  activeSearchTarget = searchHit
+    ? {
+        sessionId: id,
+        query: searchQuery,
+        messageIndex: Number(searchHit.messageIndex),
+        blockIndex: Number(searchHit.blockIndex),
+        matchStart: Number(searchHit.matchStart),
+        matchEnd: Number(searchHit.matchEnd),
+      }
+    : null
+  activeSearchNav = searchHit
+    ? { sessionId: id, query: searchQuery, hits: [searchHit], currentIndex: 0, matchCount: null, loading: true }
+    : null
   renderList()
+  renderSessionTabs()
 
   const conv = document.getElementById('conversation')
   conv.scrollTop = 0
@@ -4165,11 +5366,16 @@ async function selectSession(id) {
   const seq = ++activeLoadSeq
   const summary = sessions.find(s => (s.uid || s.id) === id)
   const shouldPage = (summary?.messageCount || 0) > LARGE_SESSION_MESSAGE_THRESHOLD
-  const url = shouldPage
-    ? `/api/session/${id}?offset=0&limit=${SESSION_PAGE_SIZE}`
+  const searchMessageIndex = Number(searchHit?.messageIndex)
+  const offset = shouldPage && Number.isFinite(searchMessageIndex)
+    ? Math.max(0, Math.floor(searchMessageIndex) - SEARCH_CONTEXT_BEFORE)
+    : 0
+  const limit = shouldPage ? SESSION_PAGE_SIZE : 0
+  const url = limit > 0
+    ? `/api/session/${id}?offset=${offset}&limit=${limit}`
     : `/api/session/${id}`
   const res = await apiFetch(url)
-  const { session, messages, hasMore, totalMessages, nextOffset, limit } = await res.json()
+  const { session, messages, hasMore, totalMessages, nextOffset, limit: responseLimit } = await res.json()
   if (seq !== activeLoadSeq || activeId !== id) return
   activeSessionData = session
   activeMessages = messages
@@ -4178,7 +5384,8 @@ async function selectSession(id) {
     hasMore: !!hasMore,
     totalMessages: totalMessages || session.messageCount || messages.length,
     nextOffset: nextOffset || messages.length,
-    limit: limit || 0,
+    limit: responseLimit || 0,
+    offset,
   }
   activeMeta = {
     id: session.uid || session.id,
@@ -4189,6 +5396,10 @@ async function selectSession(id) {
   }
 
   renderConversation(session, messages, { resetScroll: true, pageInfo: activePageInfo })
+  if (activeSearchTarget) {
+    requestAnimationFrame(scrollToSearchTarget)
+    void loadSessionSearchMatches(id, activeSearchTarget.query, searchHit, seq)
+  }
 }
 
 function renderConversationMap(session) {
@@ -4237,6 +5448,44 @@ function renderBranchBanner() {
   `
 }
 
+function renderSearchNav() {
+  if (!activeSearchTarget && !activeSearchNav) return ''
+  const nav = activeSearchNav
+  const query = nav?.query || activeSearchTarget?.query || sessionSearchQ || searchQ || ''
+  const loading = !!nav?.loading
+  const total = Number(nav?.matchCount)
+  const hits = Array.isArray(nav?.hits) ? nav.hits : []
+  const current = hits.length && Number.isFinite(Number(nav?.currentIndex)) ? Number(nav.currentIndex) + 1 : 0
+  const countLabel = loading
+    ? 'searching this conversation...'
+    : `${current} / ${Number.isFinite(total) ? total : hits.length}`
+  const disabled = loading || hits.length <= 1 ? ' disabled' : ''
+  return `<div class="session-search-nav">
+    <button class="search-nav-btn" type="button" data-search-nav="prev"${disabled} aria-label="Previous match">&lt;</button>
+    <span><span class="search-nav-count">${esc(countLabel)}</span> matches for "${esc(query)}"</span>
+    <button class="search-nav-btn" type="button" data-search-nav="next"${disabled} aria-label="Next match">&gt;</button>
+  </div>`
+}
+
+function renderSessionSearchControls() {
+  return `<div class="session-search-tools">
+    <input class="session-search-input" data-session-search type="text" placeholder="search this conversation..." autocomplete="off" value="${escAttr(sessionSearchQ)}">
+    ${renderSearchNav()}
+  </div>`
+}
+
+function applyConversationHeaderHiddenState() {
+  const header = document.querySelector('.conv-header')
+  if (!header) return
+  header.classList.toggle('is-hidden', conversationHeaderHidden)
+}
+
+function toggleConversationHeaderHidden() {
+  conversationHeaderHidden = !conversationHeaderHidden
+  localStorage.setItem(CONVERSATION_HEADER_HIDDEN_KEY, conversationHeaderHidden ? '1' : '0')
+  applyConversationHeaderHiddenState()
+}
+
 function renderConversation(session, messages, opts = {}) {
   const conv = document.getElementById('conversation')
   const resetScroll = !!opts.resetScroll
@@ -4257,7 +5506,8 @@ function renderConversation(session, messages, opts = {}) {
   const safeModel = esc(session.model)
   const safeVersion = esc(session.appVersion)
   conv.innerHTML = `
-    <div class="conv-header">
+    <div class="conv-header${conversationHeaderHidden ? ' is-hidden' : ''}">
+      <button class="conv-header-toggle-zone" type="button" data-conv-header-toggle aria-label="Toggle conversation details"></button>
       <div class="conv-title">${safeTitle}</div>
       <div class="conv-badges">
         <span class="badge ${srcClass}">${safeSource}</span>
@@ -4267,11 +5517,12 @@ function renderConversation(session, messages, opts = {}) {
         <span class="badge">${session.messageCount} messages</span>
         <span class="badge">${fmtDate(session.firstTimestamp)}</span>
       </div>
+      ${renderSessionSearchControls()}
     </div>
     ${renderBranchBanner()}
     ${renderConversationMap(session)}
     ${renderSessionSkillsPanel(session, messages)}
-    ${messages.map(renderMessage).join('')}
+    ${messages.map((message, index) => renderMessage(message, (opts.pageInfo?.offset || 0) + index)).join('')}
   `
   if (resetScroll) {
     conv.scrollTop = 0
@@ -4310,6 +5561,7 @@ async function loadMoreConversation() {
       totalMessages: totalMessages || session.messageCount || activeMessages.length,
       nextOffset: nextOffset || activeMessages.length,
       limit: limit || SESSION_PAGE_SIZE,
+      offset: activePageInfo.offset || 0,
     }
     activeMeta = {
       id: sessionKey,
@@ -4328,6 +5580,9 @@ async function loadMoreConversation() {
 async function loadChatGptBranch(branchId) {
   if (!activeId || !branchId) return
   const seq = ++activeLoadSeq
+  activeSearchTarget = null
+  activeSearchNav = null
+  sessionSearchQ = ''
   const conv = document.getElementById('conversation')
   conv.innerHTML = '<div class="no-session"><div class="no-session-text">loading branch...</div></div>'
   try {
@@ -4347,6 +5602,206 @@ async function loadChatGptBranch(branchId) {
 function backToMainPath() {
   if (!activeId) return
   void selectSession(activeId)
+}
+
+function searchTargetFromHit(sessionId, query, hit) {
+  if (!hit) return null
+  return {
+    sessionId,
+    query,
+    messageIndex: Number(hit.messageIndex),
+    blockIndex: Number(hit.blockIndex),
+    matchStart: Number(hit.matchStart),
+    matchEnd: Number(hit.matchEnd),
+  }
+}
+
+function sameSearchLocation(a, b) {
+  if (!a || !b) return false
+  return Number(a.messageIndex) === Number(b.messageIndex)
+    && Number(a.blockIndex) === Number(b.blockIndex)
+    && Number(a.matchStart) === Number(b.matchStart)
+    && Number(a.matchEnd) === Number(b.matchEnd)
+}
+
+async function loadSessionSearchMatches(sessionId, query, initialHit, seq) {
+  if (!sessionId || !query) return
+  try {
+    const data = await jsonOrThrow(await apiFetch(`/api/search/session/${encodeURIComponent(sessionId)}?q=${encodeURIComponent(query)}`))
+    if (seq !== activeLoadSeq || activeId !== sessionId) return
+    const hits = Array.isArray(data.hits) ? data.hits : []
+    const currentIndex = Math.max(0, hits.findIndex(hit => sameSearchLocation(hit, activeSearchTarget || initialHit)))
+    activeSearchNav = {
+      sessionId,
+      query,
+      hits,
+      currentIndex: currentIndex >= 0 ? currentIndex : 0,
+      matchCount: Number(data.matchCount || hits.length || 0),
+      loading: false,
+    }
+    if (hits.length > 0) {
+      activeSearchTarget = searchTargetFromHit(sessionId, query, hits[activeSearchNav.currentIndex])
+    }
+    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+    requestAnimationFrame(scrollToSearchTarget)
+  } catch (error) {
+    if (seq !== activeLoadSeq || activeId !== sessionId) return
+    activeSearchNav = activeSearchNav
+      ? { ...activeSearchNav, loading: false, matchCount: activeSearchNav.hits?.length || 0 }
+      : null
+    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+  }
+}
+
+function focusSessionSearchInput() {
+  requestAnimationFrame(() => {
+    const input = document.querySelector('input[data-session-search]')
+    if (!(input instanceof HTMLInputElement)) return
+    input.focus()
+    const end = input.value.length
+    input.setSelectionRange(end, end)
+  })
+}
+
+function clearSessionSearchResults() {
+  activeSearchTarget = null
+  activeSearchNav = null
+  if (activeSessionData) {
+    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+    focusSessionSearchInput()
+  }
+}
+
+async function runSessionSearch(sessionId, query, loadSeq, searchSeq) {
+  if (!sessionId || !query || query.length < 2) return
+  activeSearchTarget = null
+  activeSearchNav = {
+    sessionId,
+    query,
+    hits: [],
+    currentIndex: 0,
+    matchCount: null,
+    loading: true,
+  }
+  if (activeSessionData) {
+    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+    focusSessionSearchInput()
+  }
+
+  try {
+    const data = await jsonOrThrow(await apiFetch(`/api/search/session/${encodeURIComponent(sessionId)}?q=${encodeURIComponent(query)}`))
+    if (loadSeq !== activeLoadSeq || searchSeq !== sessionSearchSeq || activeId !== sessionId) return
+    const hits = Array.isArray(data.hits) ? data.hits : []
+    activeSearchNav = {
+      sessionId,
+      query,
+      hits,
+      currentIndex: 0,
+      matchCount: Number(data.matchCount || hits.length || 0),
+      loading: false,
+    }
+    if (!hits.length) {
+      activeSearchTarget = null
+      renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+      focusSessionSearchInput()
+      return
+    }
+    await showSearchHitAt(0)
+    focusSessionSearchInput()
+  } catch (error) {
+    if (loadSeq !== activeLoadSeq || searchSeq !== sessionSearchSeq || activeId !== sessionId) return
+    activeSearchTarget = null
+    activeSearchNav = {
+      sessionId,
+      query,
+      hits: [],
+      currentIndex: 0,
+      matchCount: 0,
+      loading: false,
+    }
+    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+    focusSessionSearchInput()
+  }
+}
+
+function handleSessionSearchInput(value) {
+  sessionSearchQ = String(value || '').trim()
+  clearTimeout(sessionSearchTimer)
+  const searchSeq = ++sessionSearchSeq
+  if (!activeId || sessionSearchQ.length < 2) {
+    clearSessionSearchResults()
+    return
+  }
+  const sessionId = activeId
+  const loadSeq = activeLoadSeq
+  const query = sessionSearchQ
+  sessionSearchTimer = setTimeout(() => {
+    void runSessionSearch(sessionId, query, loadSeq, searchSeq)
+  }, 300)
+}
+
+async function showSearchHitAt(index) {
+  if (!activeId || !activeSessionData || !activeSearchNav?.hits?.length) return
+  const hits = activeSearchNav.hits
+  const currentIndex = ((index % hits.length) + hits.length) % hits.length
+  const hit = hits[currentIndex]
+  activeSearchNav = { ...activeSearchNav, currentIndex }
+  activeSearchTarget = searchTargetFromHit(activeId, activeSearchNav.query, hit)
+  const offset = activePageInfo?.offset || 0
+  const loadedEnd = offset + activeMessages.length
+  const targetIndex = Number(hit.messageIndex)
+  if (!activePageInfo?.paginated || (targetIndex >= offset && targetIndex < loadedEnd)) {
+    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+    requestAnimationFrame(scrollToSearchTarget)
+    return
+  }
+
+  const seq = ++activeLoadSeq
+  const pageOffset = Math.max(0, Math.floor(targetIndex) - SEARCH_CONTEXT_BEFORE)
+  const res = await apiFetch(`/api/session/${encodeURIComponent(activeId)}?offset=${pageOffset}&limit=${SESSION_PAGE_SIZE}`)
+  const { session, messages, hasMore, totalMessages, nextOffset, limit } = await res.json()
+  const sessionKey = session.uid || session.id
+  if (seq !== activeLoadSeq || activeId !== sessionKey) return
+  activeSessionData = session
+  activeMessages = messages
+  activePageInfo = {
+    paginated: true,
+    hasMore: !!hasMore,
+    totalMessages: totalMessages || session.messageCount || messages.length,
+    nextOffset: nextOffset || pageOffset + messages.length,
+    limit: limit || SESSION_PAGE_SIZE,
+    offset: pageOffset,
+  }
+  activeMeta = {
+    id: sessionKey,
+    lastTimestamp: session.lastTimestamp,
+    messageCount: session.messageCount,
+    paginated: true,
+    loadedMessages: messages.length,
+  }
+  renderConversation(session, messages, { resetScroll: true, pageInfo: activePageInfo })
+  requestAnimationFrame(scrollToSearchTarget)
+}
+
+function navigateSearchMatch(direction) {
+  if (!activeSearchNav?.hits?.length || activeSearchNav.loading) return
+  void showSearchHitAt((activeSearchNav.currentIndex || 0) + direction)
+}
+
+function searchHitForSession(sessionId) {
+  const hit = contentMatches[sessionId]
+  if (!hit || typeof hit !== 'object') return null
+  if (!Number.isFinite(Number(hit.messageIndex))) return null
+  return hit
+}
+
+function openSessionFromList(sessionId) {
+  const hit = searchHitForSession(sessionId)
+  if (hit) {
+    void selectSession(sessionId, { searchHit: hit, query: lastExecutedSearchQ || searchQ })
+    return
+  }
+  void selectSession(sessionId)
 }
 
 async function openAttachmentFile(button) {
@@ -4398,6 +5853,7 @@ async function refreshActiveSessionIfChanged() {
         totalMessages: totalMessages || session.messageCount || messages.length,
         nextOffset: nextOffset || messages.length,
         limit: responseLimit || limit,
+        offset: 0,
       }
     : null
   activeMeta = {
@@ -4433,6 +5889,43 @@ function isInlineArray(arr) {
   return Array.isArray(arr) && arr.length <= INLINE_ARRAY_MAX && arr.every(x => isScalar(x) && (typeof x !== 'string' || x.length < 40))
 }
 
+function searchHighlightTargetForBlock(messageIndex, blockIndex) {
+  if (!activeSearchTarget) return null
+  if (activeSearchTarget.messageIndex !== messageIndex) return null
+  if (Number.isFinite(activeSearchTarget.blockIndex) && activeSearchTarget.blockIndex !== blockIndex) return null
+  return activeSearchTarget
+}
+
+function renderSearchHighlightedInline(text, target) {
+  const value = String(text ?? '')
+  const q = String(target?.query || '').trim()
+  if (!q) return esc(value)
+  const lower = value.toLowerCase()
+  const needle = q.toLowerCase()
+  let out = ''
+  let cursor = 0
+  while (cursor < value.length) {
+    const idx = lower.indexOf(needle, cursor)
+    if (idx === -1) break
+    out += esc(value.slice(cursor, idx))
+    const isCurrent = Number(target?.matchStart) === idx && Number(target?.matchEnd) === idx + q.length
+    out += `<mark class="search-hit-mark${isCurrent ? ' current' : ''}">${esc(value.slice(idx, idx + q.length))}</mark>`
+    cursor = idx + q.length
+  }
+  out += esc(value.slice(cursor))
+  return out
+}
+
+function scrollToSearchTarget() {
+  if (!activeSearchTarget) return
+  const conv = document.getElementById('conversation')
+  const message = conv?.querySelector(`[data-message-index="${activeSearchTarget.messageIndex}"]`)
+  const currentHit = message?.querySelector('.search-hit-mark.current')
+  const target = currentHit || message
+  if (!target) return
+  target.scrollIntoView({ block: 'center', inline: 'nearest' })
+}
+
 function displaySlice(text, max = DISPLAY_TEXT_MAX) {
   const value = String(text ?? '')
   if (value.length <= max) return { text: value, truncated: false, total: value.length }
@@ -4443,9 +5936,9 @@ function truncationNotice(total, shown = DISPLAY_TEXT_MAX) {
   return `<div style="margin-top:8px;color:var(--muted);font-size:12px">Showing first ${esc(String(shown))} of ${esc(String(total))} characters. Full content is preserved in the encrypted vault/raw backup.</div>`
 }
 
-function renderInlineDisplay(text, max = DISPLAY_TEXT_MAX) {
+function renderInlineDisplay(text, max = DISPLAY_TEXT_MAX, highlightQuery = '') {
   const sliced = displaySlice(text, max)
-  return `${esc(sliced.text)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
+  return `${renderSearchHighlightedInline(sliced.text, highlightQuery)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
 }
 
 function normalizeReferencedDisplayPath(value) {
@@ -4459,10 +5952,10 @@ function normalizeReferencedDisplayPath(value) {
   return /^[A-Za-z]:\//.test(out) ? out.toLowerCase() : out
 }
 
-function renderInlineDisplayWithReferencedAttachments(text, referencedAttachments, max = DISPLAY_TEXT_MAX) {
+function renderInlineDisplayWithReferencedAttachments(text, referencedAttachments, max = DISPLAY_TEXT_MAX, highlightQuery = '') {
   const sliced = displaySlice(text, max)
   const attachments = Array.isArray(referencedAttachments) ? referencedAttachments : []
-  if (attachments.length === 0) return `${esc(sliced.text)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
+  if (attachments.length === 0) return `${renderSearchHighlightedInline(sliced.text, highlightQuery)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
   const byPath = new Map(attachments.map(item => [normalizeReferencedDisplayPath(item.originalPath), item]))
   const imagePattern = /!\[([^\]]*)\]\(([^)]+)\)/g
   let out = ''
@@ -4471,23 +5964,23 @@ function renderInlineDisplayWithReferencedAttachments(text, referencedAttachment
   while ((match = imagePattern.exec(sliced.text))) {
     const attachment = byPath.get(normalizeReferencedDisplayPath(match[2]))
     if (!attachment?.attachmentId) continue
-    out += esc(sliced.text.slice(last, match.index))
+    out += renderSearchHighlightedInline(sliced.text.slice(last, match.index), highlightQuery)
     const alt = match[1] || attachment.attachmentName || 'referenced image'
     out += `<div class="attachment-block referenced-image"><img src="/api/attachment/${attachmentPath(attachment.attachmentId)}" alt="${escAttr(alt)}" style="max-width:100%;max-height:480px;border-radius:4px;border:1px solid var(--border);display:block;margin:8px 0"></div>`
     last = match.index + match[0].length
   }
-  out += esc(sliced.text.slice(last))
+  out += renderSearchHighlightedInline(sliced.text.slice(last), highlightQuery)
   return `${out}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
 }
 
-function renderTextDisplay(text, className, referencedAttachments) {
-  return `<div class="${className}">${renderInlineDisplayWithReferencedAttachments(text, referencedAttachments)}</div>`
+function renderTextDisplay(text, className, referencedAttachments, highlightQuery = '') {
+  return `<div class="${className}">${renderInlineDisplayWithReferencedAttachments(text, referencedAttachments, DISPLAY_TEXT_MAX, highlightQuery)}</div>`
 }
 
-function renderPreDisplay(text, className = '') {
+function renderPreDisplay(text, className = '', highlightQuery = '') {
   const sliced = displaySlice(text)
   const cls = className ? ` class="${escAttr(className)}"` : ''
-  return `<pre${cls}>${esc(sliced.text)}</pre>${sliced.truncated ? truncationNotice(sliced.total) : ''}`
+  return `<pre${cls}>${renderSearchHighlightedInline(sliced.text, highlightQuery)}</pre>${sliced.truncated ? truncationNotice(sliced.total) : ''}`
 }
 
 // Render an arbitrary value as HTML: scalars inline, lists/objects collapsed.
@@ -4684,26 +6177,31 @@ function renderRateLimitStrip(msg) {
   return `<div class="rate-limit-strip"><span style="opacity:0.7">rate limit</span>${parts.join('')}</div>`
 }
 
-function renderMessage(msg) {
+function renderMessage(msg, messageIndex = 0) {
+  const isSearchTargetMessage = !!activeSearchTarget && activeSearchTarget.messageIndex === messageIndex
+  const messageAttrs = `data-message-index="${escAttr(String(messageIndex))}"${isSearchTargetMessage ? ' data-search-target-message="1"' : ''}`
+  const messageClass = `message ${msg.role}${isSearchTargetMessage ? ' search-target-message' : ''}`
   // Synthetic messages surfaced from Claude `result` / `rate_limit_event`
   // events — render as specialized strips rather than normal chat bubbles.
   if (msg.sourceEventType === 'result') {
-    return `<div class="message system">
+    const highlightTarget = searchHighlightTargetForBlock(messageIndex, 0)
+    return `<div class="message system${isSearchTargetMessage ? ' search-target-message' : ''}" ${messageAttrs}>
       <div class="message-role system">turn summary <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
       ${renderAttrStrip(msg)}
       ${renderTurnSummary(msg)}
-      ${msg.content && msg.content[0]?.text ? renderTextDisplay(msg.content[0].text, 'text-block', msg.content[0].referencedAttachments) : ''}
+      ${msg.content && msg.content[0]?.text ? renderTextDisplay(msg.content[0].text, 'text-block', msg.content[0].referencedAttachments, highlightTarget) : ''}
     </div>`
   }
   if (msg.sourceEventType === 'rate_limit_event') {
-    return `<div class="message system">
+    return `<div class="message system${isSearchTargetMessage ? ' search-target-message' : ''}" ${messageAttrs}>
       <div class="message-role system">rate limit <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
       ${renderAttrStrip(msg)}
       ${renderRateLimitStrip(msg)}
     </div>`
   }
 
-  const blocks = msg.content.map(block => {
+  const blocks = msg.content.map((block, blockIndex) => {
+    const highlightTarget = searchHighlightTargetForBlock(messageIndex, blockIndex)
     if (block.type === 'thinking') {
       const id = 'th_' + Math.random().toString(36).slice(2)
       const thinkingText = typeof block.thinking === 'string' ? block.thinking : ''
@@ -4712,15 +6210,15 @@ function renderMessage(msg) {
         : '0 · event captured, no text summary'
       return `<div class="thinking-block">
         <div class="thinking-toggle" onclick="toggleThinking('${id}')">
-          <span class="thinking-arrow" id="arr_${id}">▶</span>
+          <span class="thinking-arrow ${highlightTarget ? 'open' : ''}" id="arr_${id}">▶</span>
           <span>thinking block</span>
           <span style="margin-left:auto;opacity:.5">${thinkingCountLabel}</span>
         </div>
-        <div class="thinking-content" id="${id}">${thinkingText ? renderInlineDisplay(thinkingText) : '<span style="color:var(--muted)">Reasoning event was captured, but the source record did not include a text summary.</span>'}</div>
+        <div class="thinking-content ${highlightTarget ? 'open' : ''}" id="${id}">${thinkingText ? renderInlineDisplay(thinkingText, DISPLAY_TEXT_MAX, highlightTarget) : '<span style="color:var(--muted)">Reasoning event was captured, but the source record did not include a text summary.</span>'}</div>
       </div>`
     }
     if (block.type === 'text' && block.text?.trim()) {
-      return renderTextDisplay(block.text, 'text-block', block.referencedAttachments)
+      return renderTextDisplay(block.text, 'text-block', block.referencedAttachments, highlightTarget)
     }
     if (block.type === 'tool_use') {
       const rawInput = pretty(block.input ?? block.text ?? '')
@@ -4731,7 +6229,7 @@ function renderMessage(msg) {
         </div>
         <details class="detail-block" open>
           <summary>arguments</summary>
-          ${renderPreDisplay(rawInput, 'detail-pre')}
+          ${renderPreDisplay(rawInput, 'detail-pre', highlightTarget)}
         </details>
       </div>`
     }
@@ -4748,7 +6246,7 @@ function renderMessage(msg) {
         </div>
         ${rawOutput ? `<details class="detail-block" open>
           <summary>output</summary>
-          ${renderPreDisplay(rawOutput, 'detail-pre')}
+          ${renderPreDisplay(rawOutput, 'detail-pre', highlightTarget)}
         </details>` : ''}
         ${imageHtml}
       </div>`
@@ -4776,7 +6274,7 @@ function renderMessage(msg) {
     }
     if (block.type === 'other') {
       const rawOther = pretty(block.content ?? block.text ?? '')
-      return rawOther ? renderTextDisplay(rawOther, 'other-block') : ''
+      return rawOther ? renderTextDisplay(rawOther, 'other-block', undefined, highlightTarget) : ''
     }
     return ''
   }).join('')
@@ -4788,7 +6286,7 @@ function renderMessage(msg) {
     if (msg.usage.cacheReadTokens) usageParts.push(`cache_read <span>${msg.usage.cacheReadTokens}</span>`)
   }
 
-  return `<div class="message ${msg.role}">
+  return `<div class="${messageClass}" ${messageAttrs}>
     <div class="message-role ${msg.role}">
       ${msg.role}
       <span class="msg-time">${fmtTime(msg.timestamp)}</span>
@@ -6379,11 +7877,27 @@ async function handleSkillActionClick(e) {
 
 document.getElementById('skills-backup-list')?.addEventListener('click', handleSkillActionClick)
 document.getElementById('conversation')?.addEventListener('click', handleSkillActionClick)
+document.getElementById('conversation')?.addEventListener('input', e => {
+  const target = e.target instanceof Element ? e.target : null
+  const input = target ? target.closest('input[data-session-search]') : null
+  if (!(input instanceof HTMLInputElement)) return
+  handleSessionSearchInput(input.value)
+})
 document.getElementById('conversation')?.addEventListener('click', e => {
   const target = e.target instanceof Element ? e.target : null
+  const headerToggle = target ? target.closest('[data-conv-header-toggle]') : null
+  if (headerToggle) {
+    toggleConversationHeaderHidden()
+    return
+  }
   const attachmentButton = target ? target.closest('button[data-attachment-open-id]') : null
   if (attachmentButton) {
     void openAttachmentFile(attachmentButton)
+    return
+  }
+  const searchNavButton = target ? target.closest('button[data-search-nav]') : null
+  if (searchNavButton) {
+    navigateSearchMatch(searchNavButton.dataset.searchNav === 'prev' ? -1 : 1)
     return
   }
   const branchButton = target ? target.closest('button[data-chatgpt-branch-id]') : null
@@ -6466,6 +7980,7 @@ async function refreshUpdatePanel() {
 function openSettings() {
   settingsOpen = true
   document.getElementById('settings-backdrop').hidden = false
+  setSettingsPanel(activeSettingsPanel)
   void loadAppPreferences()
   void loadUpdatePanel()
   void loadReferencedAttachmentPanel()
@@ -6475,6 +7990,7 @@ function openSettings() {
 
 function openSettingsToChatGptExport() {
   openSettings()
+  setSettingsPanel('imports')
   window.setTimeout(() => {
     const card = document.getElementById('chatgpt-import-card')
     const firstButton = document.getElementById('chatgpt-import-select-btn')
@@ -6645,6 +8161,8 @@ document.getElementById('search').addEventListener('input', e => {
   const nextQ = e.target.value.trim()
   if (nextQ !== searchQ) {
     lastExecutedSearchQ = ''
+    lastExecutedSearchSource = 'all'
+    abortContentSearch()
   }
   searchQ = nextQ
   contentMatches = {}
@@ -6652,9 +8170,10 @@ document.getElementById('search').addEventListener('input', e => {
   renderList()
   clearTimeout(searchTimer)
   if (searchQ.length >= 2) {
-    searchTimer = setTimeout(() => doContentSearch(searchQ), 400)
+    searchTimer = setTimeout(() => doContentSearch(searchQ), 160)
   } else {
     contentSearchSeq += 1
+    abortContentSearch()
     contentSearchPending = false
   }
 })
@@ -6708,6 +8227,9 @@ applyAppLanguage()
 void initApp()
 document.getElementById('open-settings-btn').addEventListener('click', () => openSettings())
 document.getElementById('close-settings-btn').addEventListener('click', () => closeSettings())
+document.querySelectorAll('[data-settings-target]').forEach(btn => {
+  btn.addEventListener('click', () => setSettingsPanel(btn.dataset.settingsTarget))
+})
 document.getElementById('app-language-current')?.addEventListener('click', event => {
   event.preventDefault()
   toggleLanguageMenu()
@@ -6783,7 +8305,7 @@ document.getElementById('session-list').addEventListener('click', e => {
   const item = target ? target.closest('.session-item[data-session-id]') : null
   if (!item) return
   const { sessionId } = item.dataset
-  if (sessionId) void selectSession(sessionId)
+  if (sessionId) openSessionFromList(sessionId)
 })
 document.getElementById('session-list').addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return
@@ -6792,7 +8314,20 @@ document.getElementById('session-list').addEventListener('keydown', e => {
   if (!item) return
   e.preventDefault()
   const { sessionId } = item.dataset
-  if (sessionId) void selectSession(sessionId)
+  if (sessionId) openSessionFromList(sessionId)
+})
+document.getElementById('session-tabs')?.addEventListener('click', e => {
+  const target = e.target instanceof Element ? e.target : null
+  const close = target ? target.closest('[data-tab-close]') : null
+  if (close) {
+    e.stopPropagation()
+    closeSessionTab(close.dataset.tabClose || '')
+    return
+  }
+  const tab = target ? target.closest('.session-tab[data-tab-id]') : null
+  if (!tab) return
+  const { tabId } = tab.dataset
+  if (tabId && tabId !== activeId) void selectSession(tabId)
 })
 document.getElementById('session-list').addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
 document.getElementById('conversation').addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })

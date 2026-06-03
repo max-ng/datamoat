@@ -3,6 +3,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import {
   REFERENCED_ATTACHMENTS_FILE,
+  STATE_DIR,
 } from './config'
 import type { RawRecord, Session, Source } from './types'
 import {
@@ -34,6 +35,7 @@ const MAX_QUEUE_BATCHES_PER_DRAIN = 25
 const MAX_BACKFILL_CONCURRENCY = Math.max(1, Math.min(3, Number(process.env.DATAMOAT_REFERENCED_ATTACHMENT_BACKFILL_CONCURRENCY || 2) || 2))
 const AUTO_BACKFILL_DELAY_MS = positiveInt(process.env.DATAMOAT_REFERENCED_ATTACHMENT_AUTO_BACKFILL_DELAY_MS, 45000)
 const AUTO_BACKFILL_COOLDOWN_MS = positiveInt(process.env.DATAMOAT_REFERENCED_ATTACHMENT_AUTO_BACKFILL_COOLDOWN_MS, 6 * 60 * 60 * 1000)
+const TRANSFER_REPLACE_JOURNAL_FILE = path.join(STATE_DIR, 'transfer-replace-journal.json')
 
 type PermissionIssueRecord = {
   kind: string
@@ -194,11 +196,11 @@ async function readIndex(): Promise<ReferencedAttachmentIndex> {
     if (!fs.existsSync(REFERENCED_ATTACHMENTS_FILE)) return defaultIndex()
     const raw = fs.readFileSync(REFERENCED_ATTACHMENTS_FILE, 'utf8').trim()
     if (!raw) return defaultIndex()
-    if (raw.startsWith('{')) return normalizeIndex(JSON.parse(raw))
+    if (raw.startsWith('{')) return await maybeResetTransferredConsent(normalizeIndex(JSON.parse(raw)))
     const sessionId = stateSessionId()
     if (!sessionId || !raw.startsWith(STATE_PREFIX)) return defaultIndex()
     const json = await decryptStateForSession(sessionId, raw.slice(STATE_PREFIX.length))
-    return normalizeIndex(JSON.parse(json))
+    return await maybeResetTransferredConsent(normalizeIndex(JSON.parse(json)))
   } catch (error) {
     writeLog('warn', 'referenced-attachments', 'read_index_failed', { error: safeError(error) })
     updateHealth('referenced-attachments', {
@@ -206,6 +208,44 @@ async function readIndex(): Promise<ReferencedAttachmentIndex> {
       lastError: safeError(error),
     })
     return defaultIndex()
+  }
+}
+
+async function maybeResetTransferredConsent(index: ReferencedAttachmentIndex): Promise<ReferencedAttachmentIndex> {
+  if (!transferredConsentIsStale(index)) return index
+  index.enabled = false
+  index.enabledByUserAt = null
+  index.lastScanAt = null
+  index.previousSessionsChecked = 0
+  index.permissionIssues = {}
+  index.checkedSessions = {}
+  try {
+    await writeIndex(index)
+    writeAuditEvent('referenced-attachments', 'transferred_consent_reset')
+  } catch (error) {
+    writeLog('warn', 'referenced-attachments', 'transferred_consent_reset_failed', { error: safeError(error) })
+  }
+  return index
+}
+
+function transferredConsentIsStale(index: ReferencedAttachmentIndex): boolean {
+  if (!index.enabled || !index.enabledByUserAt) return false
+  const completedAt = transferCompletedAt()
+  if (!completedAt) return false
+  const enabledAtMs = Date.parse(index.enabledByUserAt)
+  const completedAtMs = Date.parse(completedAt)
+  return Number.isFinite(enabledAtMs)
+    && Number.isFinite(completedAtMs)
+    && enabledAtMs <= completedAtMs
+}
+
+function transferCompletedAt(): string | null {
+  try {
+    const raw = JSON.parse(fs.readFileSync(TRANSFER_REPLACE_JOURNAL_FILE, 'utf8')) as { phase?: unknown; completedAt?: unknown }
+    if (raw.phase !== 'completed' || typeof raw.completedAt !== 'string') return null
+    return raw.completedAt
+  } catch {
+    return null
   }
 }
 
