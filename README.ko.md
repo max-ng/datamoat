@@ -76,7 +76,7 @@ DataMoat는 두 계층을 유지합니다:
 |---|---|---|
 | **macOS** | 현재 지원 | Source install과 signed packaged DMG를 사용할 수 있습니다 |
 | **Linux** | 현재 지원 | Source install을 사용할 수 있습니다 |
-| **Packaged macOS DMG** | [DMG 다운로드](https://datamoat.org/download/macos) (권장) | 지원 Mac에서 Secure Enclave + Touch ID unlock을 제공하는 signed / notarized Apple Silicon DMG |
+| **Packaged macOS DMG** | [DMG 다운로드](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) (권장) | 지원 Mac에서 Secure Enclave + Touch ID unlock을 제공하는 signed / notarized Apple Silicon DMG |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Windows 11 x64 및 Windows 11 on Arm용 unsigned manual packages; x64는 GitHub Actions packaged runtime smoke 통과, ARM64는 real VM UI/background capture smoke 통과; signed installer는 아직 진행 중 |
 
 ### Sources
@@ -139,19 +139,19 @@ flowchart TD
 
 ## Install
 
-Signed / notarized macOS DMG는 Mac users에게 권장되는 install path입니다. Source install은 Linux, development, fallback cases에서 계속 사용할 수 있습니다. macOS DMG는 DataMoat release downloads의 [https://datamoat.org/download/macos](https://datamoat.org/download/macos)에서 받을 수 있으며, 지원 Mac의 Secure Enclave + Touch ID unlock, menu-bar auto-start at login, DataMoat의 R2 release feed를 통한 packaged auto-update를 포함합니다. Windows x64 및 ARM64는 signed installer가 완료되는 동안 unsigned ZIP + `DataMoat.exe` packages로 제공됩니다.
+Signed / notarized macOS DMG는 Mac users에게 권장되는 install path입니다. Source install은 Linux, development, fallback cases에서 계속 사용할 수 있습니다. macOS DMG는 DataMoat release downloads의 [https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)에서 받을 수 있으며, 지원 Mac의 Secure Enclave + Touch ID unlock, menu-bar auto-start at login, DataMoat의 R2 release feed를 통한 packaged auto-update를 포함합니다. Windows x64 및 ARM64는 signed installer가 완료되는 동안 unsigned ZIP + `DataMoat.exe` packages로 제공됩니다.
 
 Release downloads:
 
-[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://datamoat.org/download/macos)
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://datamoat.org/download/windows-x64)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://datamoat.org/download/windows-arm64)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip)
 
 각 Windows ZIP에는 `DataMoat.exe`와 필요한 app files가 포함됩니다. Windows package를 unzip하고 folder contents를 함께 유지한 다음 `Install DataMoat.cmd`를 한 번 실행하세요. 그러면 DataMoat가 launch되고 현재 Windows user의 startup이 등록되어 login 또는 restart 후 tray/background app이 돌아옵니다. 이것은 아직 portable ZIP package이며 signed single-file installer는 아닙니다.
 
 ### AI-Assisted Install
 
-Mac users는 signed 및 notarized packaged DMG를 먼저 사용하세요: [Download DMG](https://datamoat.org/download/macos). 사용자가 명시적으로 source install을 원하거나 packaged release를 사용할 수 없는 경우가 아니라면 macOS에서 `git clone`으로 시작하지 마세요.
+Mac users는 signed 및 notarized packaged DMG를 먼저 사용하세요: [Download DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg). 사용자가 명시적으로 source install을 원하거나 packaged release를 사용할 수 없는 경우가 아니라면 macOS에서 `git clone`으로 시작하지 마세요.
 
 Target desktop을 보고 있을 때 ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI 또는 OpenClaw에게 DataMoat 설치를 요청할 수 있습니다.
 
@@ -180,7 +180,7 @@ DMG install이 실패하지 않는 한 git clone 또는 source install을 사용
 
 Steps:
 1. 최신 macOS DMG 다운로드:
-   https://datamoat.org/download/macos
+   https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg
 2. DMG mount.
 3. DataMoat.app을 ~/Applications에 복사.
 4. 정확히 launch:
@@ -202,8 +202,8 @@ git clone 또는 source install을 사용하지 마세요.
 
 Steps:
 1. DataMoat release downloads에서 올바른 최신 Windows ZIP 다운로드:
-   x64: https://datamoat.org/download/windows-x64
-   ARM64: https://datamoat.org/download/windows-arm64
+   x64: https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip
+   ARM64: https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip
 2. ZIP을 Downloads에 extract.
 3. 정확히 launch:
    %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen
