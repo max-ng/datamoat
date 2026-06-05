@@ -21,7 +21,9 @@
 เว็บไซต์ทางการ: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## Export และ backup ข้อมูล + skills + attachments ของ ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen
+
+Local encrypted backup archive สำหรับ sessions, images, files/PDFs และ folders `SKILL.md`
 
 > **Export และ backup ข้อมูล + skills + ไฟล์แนบทั้งหมดของ ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen.**
 > DataMoat เก็บ AI work history ของคุณไว้แบบ local และ encrypted, รักษา raw source records ให้ครบ และสร้าง normalized index สำหรับ search, export, reuse, handoff และ private AI memory.
@@ -280,6 +282,18 @@ Live git source installs รองรับ in-place source updates Packaged mac
 DataMoat backup supported local transcript files ที่มีอยู่แล้วบน device ของคุณและคุณเข้าถึงได้อยู่แล้ว
 
 มันไม่ได้ให้สิทธิเพิ่มเติมกับ content หรือ source services คุณยังต้องรับผิดชอบในการปฏิบัติตาม terms, policies, plan restrictions และ internal rules ที่ใช้กับ ChatGPT, Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor และ source service อื่นที่คุณใช้
+
+DataMoat ถูกออกแบบมาเพื่อ protect AI records ที่มีอยู่แล้วบน machine ของคุณเอง แทนที่จะปล่อย sessions, skills, attachments และ memory files กระจายอยู่ตาม known local paths หรือพึ่งพา opaque memory plugins, มันเพิ่ม user-controlled local encryption, backup scope, recovery และ auditability
+
+DataMoat ยังสามารถ preserve และ move over images, files/PDFs, generated assets และ attachments ข้าม captured versions หรือ alternate conversation branches ได้เมื่อ records เหล่านั้นมีอยู่ local แล้ว AI memory plugins และ simple export tools จำนวนมากหยุดอยู่แค่ text; DataMoat เก็บ surrounding files ไว้กับ work history ที่สร้างมันขึ้นมา
+
+DataMoat does not create new access ไปยัง AI work history ของคุณ มัน protect local records ที่มีอยู่แล้วบน computer ของคุณใน source-tool folders, exports, logs, attachments หรือ session stores ที่อาจยัง scattered, readable และ unencrypted
+
+DataMoat backup scope ถูกควบคุมโดย user และ source records ที่มีอยู่แล้วบน protected machine มันไม่ bypass account permissions, ไม่ unlock remote services และไม่ grant rights เกินกว่าที่ user มีอยู่แล้วบน computer นั้น
+
+Windows packages ตอนนี้เป็น unsigned manual builds ระหว่างที่ signed installer กำลังทำอยู่ Codebase เป็น public และ source-available for review; teams ที่ต้องการ signed หรือ managed builds สามารถ contact us
+
+คุณไม่จำเป็นต้องเป็น power user เพื่อเริ่ม owning your AI work history DataMoat ให้คุณเริ่มด้วย local archive เล็กๆ วันนี้ แล้วเห็น value ของมันเติบโตตาม conversations, files, prompts และ project context
 
 ## Enterprise
 

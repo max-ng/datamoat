@@ -21,7 +21,9 @@ Ngôn ngữ: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) |
 Website chính thức: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## Export và backup dữ liệu + skills + tệp đính kèm của ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen
+
+Local encrypted backup archive cho sessions, images, files/PDFs và folders `SKILL.md`.
 
 > **Export và backup toàn bộ dữ liệu + skills + tệp đính kèm của ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen.**
 > DataMoat giữ AI work history của bạn ở local và được mã hóa, bảo toàn raw source records nguyên vẹn và tạo normalized index cho search, export, reuse, handoff và private AI memory.
@@ -289,6 +291,18 @@ Live git source installs hỗ trợ in-place source updates. Packaged macOS inst
 DataMoat backup supported local transcript files đã có trên device của bạn và bạn đã có quyền truy cập.
 
 Nó không cấp thêm quyền với content hoặc source services. Bạn vẫn chịu trách nhiệm tuân thủ terms, policies, plan restrictions và internal rules áp dụng cho ChatGPT, Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor và bất kỳ source service nào bạn dùng.
+
+DataMoat được thiết kế để protect AI records đã tồn tại trên chính machine của bạn. Thay vì để sessions, skills, attachments và memory files rải rác ở known local paths hoặc phụ thuộc vào opaque memory plugins, nó thêm user-controlled local encryption, backup scope, recovery và auditability.
+
+DataMoat cũng có thể preserve và move over images, files/PDFs, generated assets và attachments qua captured versions hoặc alternate conversation branches khi các records đó đã tồn tại locally. Nhiều AI memory plugins và simple export tools dừng ở text; DataMoat giữ surrounding files cùng với work history đã tạo ra chúng.
+
+DataMoat does not create new access tới AI work history của bạn. Nó protect local records đã tồn tại trên computer của bạn trong source-tool folders, exports, logs, attachments hoặc session stores, những nơi có thể vẫn scattered, readable và unencrypted.
+
+DataMoat backup scope được control bởi user và bởi source records đã available trên protected machine. Nó không bypass account permissions, không unlock remote services và không grant rights vượt quá những gì user đã có trên computer đó.
+
+Windows packages hiện là unsigned manual builds trong khi signed installer đang được thực hiện. Codebase là public và source-available for review; teams cần signed hoặc managed builds có thể contact us.
+
+Bạn không cần là power user để bắt đầu owning your AI work history. DataMoat cho phép bạn bắt đầu với một local archive nhỏ hôm nay, rồi thấy value của nó compound khi conversations, files, prompts và project context tăng lên.
 
 ## Enterprise
 

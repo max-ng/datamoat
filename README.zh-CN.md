@@ -21,7 +21,9 @@
 官方网站: [https://datamoat.org](https://datamoat.org)
 GitHub 仓库: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## 导出并备份 ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 数据 + skills + 附件
+
+用于 sessions、images、files/PDFs 和 `SKILL.md` folders 的本地加密备份 archive。
 
 > **导出并备份你的全部 ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 数据 + skills + 附件。**
 > DataMoat 将你的 AI 工作历史保存在本地并加密，完整保留原始来源记录，同时建立统一索引，方便搜索、导出、复用、交接和私有 AI memory。
@@ -289,6 +291,18 @@ Live git source installs 支持 in-place source updates。Packaged macOS install
 DataMoat 备份的是你 device 上已存在、而且你已可访问的受支持本地 transcript files。
 
 它不会授予你对内容或 source services 额外权利。你仍然有责任遵守 ChatGPT、Claude、Codex、DeepSeek、Qwen、OpenClaw、Cursor 以及你使用的任何其他 source service 适用的 terms、policies、plan restrictions 和 internal rules。
+
+DataMoat 旨在保护你自己机器上已经存在的 AI records。它不是让 sessions、skills、attachments 和 memory files 继续散落在已知本地路径里，也不是依赖不透明的 memory plugins，而是加入由用户控制的 local encryption、backup scope、recovery 和 auditability。
+
+当这些 records 已经存在于本地时，DataMoat 也可以保留并迁移 captured versions 或 alternate conversation branches 里的 images、files/PDFs、generated assets 和 attachments。多数 AI memory plugins 和 simple export tools 只停留在 text；DataMoat 会把产生这些工作的 surrounding files 一起保存在 work history 里。
+
+DataMoat 不会为你的 AI work history 创造新的访问权限。它保护的是你电脑上 source-tool folders、exports、logs、attachments 或 session stores 里已经存在、但可能仍然分散、可读且未加密的 local records。
+
+DataMoat backup scope 由用户和受保护机器上已经可用的 source records 决定。它不会绕过 account permissions，不会解锁 remote services，也不会授予超过用户在这台电脑上已有范围之外的 rights。
+
+Windows packages 目前是 unsigned manual builds，signed installer 仍在进行中。Codebase 是 public 且 source-available for review；需要 signed 或 managed builds 的 teams 可以联系我们。
+
+你不需要是 power user 才能开始拥有自己的 AI work history。DataMoat 让你今天就可以从一个小的 local archive 开始，然后随着 conversations、files、prompts 和 project context 增长，看见它的价值不断累积。
 
 ## Enterprise
 

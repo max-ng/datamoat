@@ -21,7 +21,9 @@
 Официальный сайт: [https://datamoat.org](https://datamoat.org)
 GitHub репозиторий: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## Экспортируйте и создавайте backup данных + skills + attachments ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen
+
+Локальный encrypted backup archive для sessions, images, files/PDFs и папок `SKILL.md`.
 
 > **Экспортируйте и создавайте резервные копии всех данных + skills + вложений ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen.**
 > DataMoat хранит вашу историю работы с AI локально и в зашифрованном виде, сохраняет исходные raw source records нетронутыми и создает normalized index для поиска, экспорта, повторного использования, handoff и private AI memory.
@@ -280,6 +282,18 @@ Live git source installs поддерживают in-place source updates. Packa
 DataMoat делает backup supported local transcript files, которые уже присутствуют на вашем device и уже доступны вам.
 
 Он не дает дополнительных прав на content или source services. Вы сами отвечаете за соблюдение terms, policies, plan restrictions и internal rules, которые применяются к ChatGPT, Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor и любому другому source service, который вы используете.
+
+DataMoat designed to protect AI records, которые уже существуют на вашей собственной машине. Вместо того чтобы оставлять sessions, skills, attachments и memory files разбросанными по known local paths или полагаться на opaque memory plugins, он добавляет user-controlled local encryption, backup scope, recovery и auditability.
+
+DataMoat также может preserve и move over images, files/PDFs, generated assets и attachments между captured versions или alternate conversation branches, когда эти records уже существуют локально. Большинство AI memory plugins и simple export tools останавливаются на text; DataMoat сохраняет surrounding files вместе с work history, которая их создала.
+
+DataMoat does not create new access к вашей AI work history. Он защищает local records, которые уже существуют на вашем computer в source-tool folders, exports, logs, attachments или session stores и иначе могут оставаться scattered, readable и unencrypted.
+
+DataMoat backup scope контролируется user и source records, которые уже доступны на protected machine. Он не bypass account permissions, не unlock remote services и не дает rights сверх того, что user уже имеет на этом computer.
+
+Windows packages сейчас являются unsigned manual builds, пока signed installer находится в работе. Codebase public и source-available for review; teams, которым нужны signed или managed builds, могут contact us.
+
+Не нужно быть power user, чтобы начать owning your AI work history. DataMoat позволяет начать с небольшого local archive сегодня и увидеть, как его value растет вместе с conversations, files, prompts и project context.
 
 ## Enterprise
 

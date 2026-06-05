@@ -21,9 +21,10 @@ Language: [English](./README.md) | [PortuguÃªs (Brasil)](./README.pt-BR.md) | [ç
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## Export and back up ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments
 
-> **Export and back up all your ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen data + skills + attachments.**
+Local encrypted backup archive for sessions, images, files/PDFs, and `SKILL.md` folders.
+
 > DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized index for search, export, reuse, handoff, and private AI memory.
 >
 > **Your most valuable future AI data is already disappearing.**
@@ -297,11 +298,19 @@ Audit verification checks the integrity of the audit log that is present on disk
 
 Live git source installs support in-place source updates. Packaged macOS installs use DataMoat R2 release downloads as the packaged update source: the DMG is for first install, and later packaged updates download a signed ZIP payload and apply it through the macOS app updater instead of asking users to mount a new DMG for every release.
 
-## Source Service Boundaries
+## Local Record Scope And Source Service Boundaries
 
-DataMoat backs up supported local transcript files that are already present on your device and already accessible to you.
+DataMoat is designed to protect AI records that already exist on your own machine. Instead of leaving sessions, skills, attachments, and memory files scattered across known local paths or relying on opaque memory plugins, it adds user-controlled local encryption, backup scope, recovery, and auditability.
 
-It does not grant additional rights to content or source services. You remain responsible for complying with the terms, policies, plan restrictions, and internal rules that apply to Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor, and any other source service you use.
+DataMoat can also preserve and move over images, files/PDFs, generated assets, and attachments across captured versions or alternate conversation branches when those records already exist locally. Most AI memory plugins and simple export tools stop at text; DataMoat keeps the surrounding files with the work history that produced them.
+
+DataMoat does not create new access to your AI work history. It protects local records that already exist on your own computer in source-tool folders, exports, logs, attachments, or session stores that may otherwise remain scattered, readable, and unencrypted. The goal is to move those already-present records into a user-controlled encrypted memory archive instead of leaving them spread across known local locations.
+
+DataMoat backup scope is controlled by the user and by the source records already available on the protected machine. It does not bypass account permissions, unlock remote services, or grant rights beyond what the user already has on that computer. Users and organizations remain responsible for deciding which local AI records, attachments, code, secrets, or sensitive data should be imported, retained, exported, or excluded under their own policies.
+
+Windows packages are currently unsigned manual builds while the signed installer is in progress. The codebase is public and source-available for review, and teams that require signed or managed builds can contact us.
+
+You do not need to be a power user to start owning your AI work history. DataMoat lets you begin with a small local archive today, then watch its value compound as your conversations, files, prompts, and project context grow.
 
 ## Enterprise
 

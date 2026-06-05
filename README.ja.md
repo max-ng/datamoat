@@ -21,7 +21,9 @@
 公式サイト: [https://datamoat.org](https://datamoat.org)
 GitHub リポジトリ: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen のデータ + skills + 添付ファイルをエクスポートしてバックアップ
+
+Sessions、画像、files/PDFs、`SKILL.md` フォルダのためのローカル暗号化バックアップアーカイブ。
 
 > **ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen のすべてのデータ + skills + 添付ファイルをエクスポートしてバックアップします。**
 > DataMoat は AI 作業履歴をローカルかつ暗号化された状態で保持し、元のソース記録をそのまま保全しながら、検索、エクスポート、再利用、引き継ぎ、プライベート AI memory のための正規化インデックスを構築します。
@@ -289,6 +291,18 @@ Live git source installs は in-place source updates に対応します。Packag
 DataMoat は、あなたの device 上にすでに存在し、あなたがすでにアクセスできる対応 local transcript files をバックアップします。
 
 DataMoat は content または source services に対する追加の権利を付与しません。ChatGPT、Claude、Codex、DeepSeek、Qwen、OpenClaw、Cursor、および使用するその他の source service に適用される terms、policies、plan restrictions、internal rules を遵守する責任はあなたにあります。
+
+DataMoat は、あなた自身の machine 上にすでに存在する AI records を保護するために設計されています。Sessions、skills、attachments、memory files を既知の local paths に散らばったまま、または opaque memory plugins に依存したままにするのではなく、user-controlled local encryption、backup scope、recovery、auditability を追加します。
+
+DataMoat は、captured versions や alternate conversation branches にまたがる images、files/PDFs、generated assets、attachments も、それらの records がすでに local に存在する場合は preserve / move over できます。多くの AI memory plugins や simple export tools は text で止まりますが、DataMoat はその work history を生んだ surrounding files も一緒に保持します。
+
+DataMoat は AI work history への new access を作りません。source-tool folders、exports、logs、attachments、session stores にすでに存在し、散らばったまま readable / unencrypted になり得る local records を保護します。
+
+DataMoat の backup scope は user と、protected machine 上ですでに利用可能な source records によって決まります。Account permissions を bypass せず、remote services を unlock せず、その computer 上で user がすでに持つ rights を超える権利を付与しません。
+
+Windows packages は現在 unsigned manual builds で、signed installer は作成中です。Codebase は public かつ source-available for review であり、signed または managed builds が必要な teams は contact できます。
+
+Power user でなくても、自分の AI work history を所有し始められます。DataMoat なら小さな local archive から始めて、conversations、files、prompts、project context が増えるにつれて価値が積み上がっていきます。
 
 ## Enterprise
 

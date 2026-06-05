@@ -21,7 +21,9 @@
 공식 웹사이트: [https://datamoat.org](https://datamoat.org)
 GitHub 저장소: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 데이터 + skills + 첨부 파일 export 및 backup
+
+Sessions, images, files/PDFs, `SKILL.md` folder를 위한 local encrypted backup archive.
 
 > **ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 데이터 + skills + 첨부 파일을 모두 export하고 backup합니다.**
 > DataMoat는 AI 작업 기록을 local 및 encrypted 상태로 유지하고, raw source records를 온전히 보존하며, search, export, reuse, handoff, private AI memory를 위한 normalized index를 만듭니다.
@@ -280,6 +282,18 @@ Live git source installs는 in-place source updates를 지원합니다. Packaged
 DataMoat는 이미 device에 존재하고 이미 접근 가능한 supported local transcript files를 backup합니다.
 
 DataMoat는 content 또는 source services에 대한 추가 권리를 부여하지 않습니다. ChatGPT, Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor 및 사용하는 다른 source service에 적용되는 terms, policies, plan restrictions, internal rules를 준수할 책임은 사용자에게 있습니다.
+
+DataMoat는 사용자의 machine에 이미 존재하는 AI records를 보호하도록 설계되었습니다. Sessions, skills, attachments, memory files를 알려진 local paths에 흩어진 채 두거나 opaque memory plugins에 의존하는 대신 user-controlled local encryption, backup scope, recovery, auditability를 추가합니다.
+
+DataMoat는 captured versions 또는 alternate conversation branches에 걸친 images, files/PDFs, generated assets, attachments도 해당 records가 이미 local에 존재할 때 preserve하고 move over할 수 있습니다. 대부분의 AI memory plugins와 simple export tools는 text에서 멈추지만, DataMoat는 그 work history를 만든 surrounding files까지 함께 보관합니다.
+
+DataMoat는 AI work history에 대한 new access를 만들지 않습니다. Source-tool folders, exports, logs, attachments, session stores 안에 이미 존재하며 흩어져 readable 및 unencrypted 상태로 남을 수 있는 local records를 보호합니다.
+
+DataMoat backup scope는 user와 protected machine에서 이미 사용 가능한 source records가 결정합니다. Account permissions를 bypass하지 않고, remote services를 unlock하지 않으며, user가 그 computer에서 이미 가진 rights를 넘어서는 권한을 부여하지 않습니다.
+
+Windows packages는 현재 unsigned manual builds이며 signed installer는 진행 중입니다. Codebase는 public 및 source-available for review 상태이고, signed 또는 managed builds가 필요한 teams는 contact할 수 있습니다.
+
+Power user가 아니어도 AI work history를 소유하기 시작할 수 있습니다. DataMoat는 작은 local archive로 시작한 뒤 conversations, files, prompts, project context가 늘어날수록 가치가 쌓이게 해줍니다.
 
 ## Enterprise
 

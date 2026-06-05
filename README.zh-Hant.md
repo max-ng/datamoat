@@ -2,7 +2,7 @@
 
 語言: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [簡體中文](./README.zh-CN.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
-[![Version](https://img.shields.io/badge/version-2.0.7-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.8-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -21,7 +21,9 @@
 官方網站: [https://datamoat.org](https://datamoat.org)
 GitHub 儲存庫: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## 匯出並備份 ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 資料 + skills + 附件
+
+用於 sessions、images、files/PDFs 和 `SKILL.md` folders 的本地加密備份 archive。
 
 > **匯出並備份你的全部 ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen 資料 + skills + 附件。**
 > DataMoat 將你的 AI 工作歷史儲存在本地並加密，完整保留原始來源記錄，同時建立統一索引，方便搜尋、匯出、重複使用、交接和私有 AI memory。
@@ -47,12 +49,16 @@ DataMoat 保留兩層資料:
 **目前支援的來源:** ChatGPT export ZIP/資料夾匯入、Claude CLI、Codex CLI、Codex app local sessions、macOS 上的 Claude Desktop local-agent sessions、Claude Code GUI workflow 寫入本地時的 DeepSeek 和 Qwen sessions、受支援的本地 OpenClaw session records，以及受支援的本地 Cursor agent transcripts。
 **更多資料來源和平台版本已在 roadmap:** star 和 watch 這個 repository，就可以跟進新的 capture integrations 和平台更新發布。
 
-## 2.0.7 新功能：ChatGPT Export 記憶匯入
+## 2.0.8 新功能：從 vault 直接重用上下文
 
 DataMoat 現在可以把支援的 ChatGPT export ZIP 檔案或解壓後的 export 資料夾匯入到同一個加密本地 memory archive 中，和 Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw、skills 與附件放在一起保護。
 
 - **還原、查看、搜尋和備份 ChatGPT exports。** 支援的對話、分支、附件、assets 和 raw export 檔案會匯入到加密 vault。
+- **從 vault 直接複製上下文。** 每條 message 都可以複製「到這一條為止」的 context pack。這不是瀏覽器選取文字，也不是從畫面 DOM 複製；DataMoat 會直接讀取加密 vault 裡已捕捉的 records，按順序重建角色、時間、模型/來源 metadata、tool call、tool result、已捕捉的 thinking block、usage、raw references 和附件引用。
+- **比手動 copy/paste 更少丟失結構。** 超長 session 不需要全部 render 在畫面上，也可以複製到指定位置以前的內容，方便貼到 ChatGPT、Claude 或其他模型繼續使用。DataMoat 只會匯出本機來源記錄或匯入備份中實際捕捉到的資料；如果原平台從未提供某些隱藏狀態，DataMoat 不會憑空生成。
+- **預設可讀格式，保留 plain text fallback。** Message text 預設以可讀的 Markdown-like 格式顯示 code block、list、table 和 heading；Settings 可關閉，回到原本 plain text layout。
 - **保留 raw export，同時避免浪費磁碟。** DataMoat 保留原始 source records，並把重複度高的 raw backup data 存入壓縮加密 archive；真實 source-record 測試顯示 raw archive 大約是原始來源 bytes 的 60%。
+- **自動清理 raw-archive pending metadata。** 2.0.8 會在 unlock 後和 transfer export 前靜默把 `pending/` metadata 合併入加密 manifest，先確認對應 chunk file 存在，成功後才移除 pending file，減少 USB copy 和 backup 時的大量 tiny files。
 - **跨電腦轉移工作。** 複製 DataMoat 資料夾到另一台機器，即可跨 macOS、Windows 和 Linux 還原，包括 Mac 到 Windows、Linux 到 Mac。
 - **隨身保存第二份備份。** 把加密 DataMoat 資料夾保存到 USB 或外置硬碟，讓 AI 工作歷史可以獨立於原電腦保存和攜帶。
 
@@ -86,7 +92,7 @@ DataMoat 現在可以把支援的 ChatGPT export ZIP 檔案或解壓後的 expor
 | **macOS** | 目前支援 | Source install 和已簽名 packaged DMG 已可用 |
 | **Linux** | 目前支援 | Source install 已可用 |
 | **Packaged macOS DMG** | [下載 DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) (推薦) | 已簽名 / notarized Apple Silicon DMG，在支援的 Mac 上支援 Secure Enclave + Touch ID unlock |
-| **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Windows 11 x64 和 Windows 11 on Arm 的未簽名 manual packages；x64 已透過 GitHub Actions packaged runtime smoke，ARM64 已透過真實 VM UI/background capture smoke；signed installer 仍在製作中 |
+| **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Windows 11 x64 和 Windows 11 on Arm 的帶 SHA256 校驗的 portable ZIP packages；x64 已透過 GitHub Actions packaged runtime smoke，ARM64 已透過真實 VM UI/background capture smoke；signed installer 仍在製作中 |
 
 ### Sources
 
@@ -148,7 +154,7 @@ flowchart TD
 
 ## 安裝
 
-已簽名 / notarized macOS DMG 是 Mac users 推薦的安裝方式。Source install 仍然可用於 Linux、development 和 fallback cases。macOS DMG 可從 DataMoat release downloads 下載: [https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)，並包括支援 Mac 上的 Secure Enclave + Touch ID unlock、menu-bar login 自動啟動，以及透過 DataMoat R2 release feed 的 packaged auto-update。Windows x64 和 ARM64 目前提供未簽名 ZIP + `DataMoat.exe` packages，signed installer 正在完成中。
+已簽名 / notarized macOS DMG 是 Mac users 推薦的安裝方式。Source install 仍然可用於 Linux、development 和 fallback cases。macOS DMG 可從 DataMoat release downloads 下載: [https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)，並包括支援 Mac 上的 Secure Enclave + Touch ID unlock、menu-bar login 自動啟動，以及透過 DataMoat R2 release feed 的 packaged auto-update。Windows x64 和 ARM64 目前提供帶 SHA256 校驗的 ZIP + `DataMoat.exe` packages，signed installer 正在完成中。
 
 Release downloads:
 
@@ -289,6 +295,18 @@ Live git source installs 支援 in-place source updates。Packaged macOS install
 DataMoat 備份的是你 device 上已存在、而且你已可訪問的受支援本地 transcript files。
 
 它不會授予你對內容或 source services 額外權利。你仍然有責任遵守 ChatGPT、Claude、Codex、DeepSeek、Qwen、OpenClaw、Cursor 以及你使用的任何其他 source service 適用的 terms、policies、plan restrictions 和 internal rules。
+
+DataMoat 旨在保護你自己機器上已經存在的 AI records。它不是讓 sessions、skills、attachments 和 memory files 繼續散落在已知本地路徑裡，也不是依賴不透明的 memory plugins，而是加入由使用者控制的 local encryption、backup scope、recovery 和 auditability。
+
+當這些 records 已經存在於本地時，DataMoat 也可以保留並遷移 captured versions 或 alternate conversation branches 裡的 images、files/PDFs、generated assets 和 attachments。多數 AI memory plugins 和 simple export tools 只停留在 text；DataMoat 會把產生這些工作的 surrounding files 一起保存在 work history 裡。
+
+DataMoat 不會為你的 AI work history 創造新的訪問權限。它保護的是你電腦上 source-tool folders、exports、logs、attachments 或 session stores 裡已經存在、但可能仍然分散、可讀且未加密的 local records。
+
+DataMoat backup scope 由使用者和受保護機器上已經可用的 source records 決定。它不會繞過 account permissions，不會解鎖 remote services，也不會授予超過使用者在這台電腦上已有範圍之外的 rights。
+
+Windows packages 目前是 unsigned manual builds，signed installer 仍在進行中。Codebase 是 public 且 source-available for review；需要 signed 或 managed builds 的 teams 可以聯絡我們。
+
+你不需要是 power user 才能開始擁有自己的 AI work history。DataMoat 讓你今天就可以從一個小的 local archive 開始，然後隨著 conversations、files、prompts 和 project context 成長，看見它的價值不斷累積。
 
 ## Enterprise
 

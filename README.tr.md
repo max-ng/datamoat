@@ -21,7 +21,9 @@ Dil: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体
 Resmi website: [https://datamoat.org](https://datamoat.org)
 GitHub deposu: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-<img src=".github/assets/readme-brand-hero.svg" alt="Export and back up all your ChatGPT, Claude, Codex, Cursor, DeepSeek, and Qwen data, skills, and attachments." width="100%">
+## ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen verileri + skills + eklerini export edin ve yedekleyin
+
+Sessions, images, files/PDFs ve `SKILL.md` folders için local encrypted backup archive.
 
 > **Tüm ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen verilerinizi + skills + eklerinizi dışa aktarın ve yedekleyin.**
 > DataMoat, AI çalışma geçmişinizi yerel ve şifreli tutar; raw source records kayıtlarını bozmadan saklar ve arama, export, reuse, handoff ve private AI memory için normalized index oluşturur.
@@ -280,6 +282,18 @@ Live git source installs in-place source updates destekler. Packaged macOS insta
 DataMoat, cihazınızda zaten bulunan ve sizin tarafınızdan zaten erişilebilir olan supported local transcript files'ı yedekler.
 
 Content veya source services üzerinde ek hak vermez. ChatGPT, Claude, Codex, DeepSeek, Qwen, OpenClaw, Cursor ve kullandığınız diğer source service için geçerli terms, policies, plan restrictions ve internal rules'a uymaktan siz sorumlusunuz.
+
+DataMoat, kendi machine'inizde zaten bulunan AI records'ı korumak için tasarlanmıştır. Sessions, skills, attachments ve memory files'ı known local paths içinde dağınık bırakmak veya opaque memory plugins'e güvenmek yerine user-controlled local encryption, backup scope, recovery ve auditability ekler.
+
+DataMoat, captured versions veya alternate conversation branches genelinde images, files/PDFs, generated assets ve attachments kayıtlarını da, bu records zaten local olarak varsa preserve edip move over edebilir. Çoğu AI memory plugins ve simple export tools text'te durur; DataMoat surrounding files'ı onları üreten work history ile birlikte tutar.
+
+DataMoat, AI work history'nize new access yaratmaz. Source-tool folders, exports, logs, attachments veya session stores içinde computer'ınızda zaten bulunan ve aksi halde scattered, readable ve unencrypted kalabilecek local records'ı korur.
+
+DataMoat backup scope user tarafından ve protected machine üzerinde zaten available olan source records tarafından kontrol edilir. Account permissions'ı bypass etmez, remote services'i unlock etmez ve user'ın o computer'da zaten sahip olduğu rights'ın ötesinde hak vermez.
+
+Windows packages şu anda signed installer ilerlerken unsigned manual builds olarak sunulur. Codebase public ve source-available for review durumundadır; signed veya managed builds gereken teams contact us edebilir.
+
+Power user olmanız gerekmez. DataMoat bugün küçük bir local archive ile başlamanıza ve conversations, files, prompts, project context büyüdükçe onun value'sunun compounding olmasına yardımcı olur.
 
 ## Enterprise
 
