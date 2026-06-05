@@ -289,6 +289,8 @@ DataMoat ยังสามารถ preserve และ move over images, files/
 
 DataMoat does not create new access ไปยัง AI work history ของคุณ มัน protect local records ที่มีอยู่แล้วบน computer ของคุณใน source-tool folders, exports, logs, attachments หรือ session stores ที่อาจยัง scattered, readable และ unencrypted
 
+AI tools จำนวนมาก store work history เป็น ordinary local files บน computer อยู่แล้ว ใครหรือ process ใดที่มี access ไปยัง user account, disk, backups หรือ source-tool folders นั้น อาจ read records เหล่านั้นได้ก่อน DataMoat protect มัน DataMoat ไม่ได้ทำให้ data นี้ exposed มากขึ้น; มัน move selected already-present records เข้า encrypted archive ที่ user ควบคุม
+
 DataMoat backup scope ถูกควบคุมโดย user และ source records ที่มีอยู่แล้วบน protected machine มันไม่ bypass account permissions, ไม่ unlock remote services และไม่ grant rights เกินกว่าที่ user มีอยู่แล้วบน computer นั้น
 
 Windows packages ตอนนี้เป็น unsigned manual builds ระหว่างที่ signed installer กำลังทำอยู่ Codebase เป็น public และ source-available for review; teams ที่ต้องการ signed หรือ managed builds สามารถ contact us

@@ -298,6 +298,8 @@ DataMoat cũng có thể preserve và move over images, files/PDFs, generated as
 
 DataMoat does not create new access tới AI work history của bạn. Nó protect local records đã tồn tại trên computer của bạn trong source-tool folders, exports, logs, attachments hoặc session stores, những nơi có thể vẫn scattered, readable và unencrypted.
 
+Nhiều AI tools đã store work history như ordinary local files trên computer. Bất kỳ người hoặc process nào có access tới user account, disk, backups hoặc source-tool folders đó đều có thể read các records này trước khi DataMoat protect chúng. DataMoat không làm data này exposed hơn; nó move selected already-present records vào encrypted archive do user kiểm soát.
+
 DataMoat backup scope được control bởi user và bởi source records đã available trên protected machine. Nó không bypass account permissions, không unlock remote services và không grant rights vượt quá những gì user đã có trên computer đó.
 
 Windows packages hiện là unsigned manual builds trong khi signed installer đang được thực hiện. Codebase là public và source-available for review; teams cần signed hoặc managed builds có thể contact us.

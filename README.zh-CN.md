@@ -298,6 +298,8 @@ DataMoat 旨在保护你自己机器上已经存在的 AI records。它不是让
 
 DataMoat 不会为你的 AI work history 创造新的访问权限。它保护的是你电脑上 source-tool folders、exports、logs、attachments 或 session stores 里已经存在、但可能仍然分散、可读且未加密的 local records。
 
+很多 AI tools 本身已经把 work history 当作普通本地文件存放在电脑上。任何拥有这个 user account、disk、backup 或 source-tool folders 访问权限的人或 process，都可能在 DataMoat 保护之前读到这些 records。DataMoat 不会让这些 data 变得更 exposed；它会把用户选择的 already-present records 移入由用户控制的 encrypted archive。
+
 DataMoat backup scope 由用户和受保护机器上已经可用的 source records 决定。它不会绕过 account permissions，不会解锁 remote services，也不会授予超过用户在这台电脑上已有范围之外的 rights。
 
 Windows packages 目前是 unsigned manual builds，signed installer 仍在进行中。Codebase 是 public 且 source-available for review；需要 signed 或 managed builds 的 teams 可以联系我们。

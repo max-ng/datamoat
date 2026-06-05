@@ -289,6 +289,8 @@ DataMoat는 captured versions 또는 alternate conversation branches에 걸친 i
 
 DataMoat는 AI work history에 대한 new access를 만들지 않습니다. Source-tool folders, exports, logs, attachments, session stores 안에 이미 존재하며 흩어져 readable 및 unencrypted 상태로 남을 수 있는 local records를 보호합니다.
 
+많은 AI tools는 work history를 이미 computer의 ordinary local files로 저장합니다. 해당 user account, disk, backups 또는 source-tool folders에 access할 수 있는 사람이나 process는 DataMoat가 보호하기 전의 records를 읽을 수 있습니다. DataMoat는 이 data를 더 exposed하게 만들지 않습니다. User가 선택한 already-present records를 user-controlled encrypted archive로 옮깁니다.
+
 DataMoat backup scope는 user와 protected machine에서 이미 사용 가능한 source records가 결정합니다. Account permissions를 bypass하지 않고, remote services를 unlock하지 않으며, user가 그 computer에서 이미 가진 rights를 넘어서는 권한을 부여하지 않습니다.
 
 Windows packages는 현재 unsigned manual builds이며 signed installer는 진행 중입니다. Codebase는 public 및 source-available for review 상태이고, signed 또는 managed builds가 필요한 teams는 contact할 수 있습니다.

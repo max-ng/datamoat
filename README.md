@@ -306,6 +306,8 @@ DataMoat can also preserve and move over images, files/PDFs, generated assets, a
 
 DataMoat does not create new access to your AI work history. It protects local records that already exist on your own computer in source-tool folders, exports, logs, attachments, or session stores that may otherwise remain scattered, readable, and unencrypted. The goal is to move those already-present records into a user-controlled encrypted memory archive instead of leaving them spread across known local locations.
 
+Many AI tools already store work history as ordinary local files on the computer. Anyone or any process with access to that user account, disk, backups, or source-tool folders may be able to read those records before DataMoat protects them. DataMoat does not make this data more exposed; it moves selected already-present records into an encrypted archive controlled by the user.
+
 DataMoat backup scope is controlled by the user and by the source records already available on the protected machine. It does not bypass account permissions, unlock remote services, or grant rights beyond what the user already has on that computer. Users and organizations remain responsible for deciding which local AI records, attachments, code, secrets, or sensitive data should be imported, retained, exported, or excluded under their own policies.
 
 Windows packages are currently unsigned manual builds while the signed installer is in progress. The codebase is public and source-available for review, and teams that require signed or managed builds can contact us.

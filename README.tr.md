@@ -289,6 +289,8 @@ DataMoat, captured versions veya alternate conversation branches genelinde image
 
 DataMoat, AI work history'nize new access yaratmaz. Source-tool folders, exports, logs, attachments veya session stores içinde computer'ınızda zaten bulunan ve aksi halde scattered, readable ve unencrypted kalabilecek local records'ı korur.
 
+Birçok AI tools work history'yi computer üzerinde ordinary local files olarak zaten saklar. Bu user account, disk, backups veya source-tool folders'a access'i olan herhangi bir kişi veya process, DataMoat korumadan önce bu records'ı okuyabilir. DataMoat bu data'yı daha exposed hale getirmez; user'ın seçtiği already-present records'ı user-controlled encrypted archive içine taşır.
+
 DataMoat backup scope user tarafından ve protected machine üzerinde zaten available olan source records tarafından kontrol edilir. Account permissions'ı bypass etmez, remote services'i unlock etmez ve user'ın o computer'da zaten sahip olduğu rights'ın ötesinde hak vermez.
 
 Windows packages şu anda signed installer ilerlerken unsigned manual builds olarak sunulur. Codebase public ve source-available for review durumundadır; signed veya managed builds gereken teams contact us edebilir.

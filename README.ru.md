@@ -289,6 +289,8 @@ DataMoat также может preserve и move over images, files/PDFs, generat
 
 DataMoat does not create new access к вашей AI work history. Он защищает local records, которые уже существуют на вашем computer в source-tool folders, exports, logs, attachments или session stores и иначе могут оставаться scattered, readable и unencrypted.
 
+Многие AI tools уже хранят work history как ordinary local files на computer. Любой person или process с access к этому user account, disk, backups или source-tool folders может иметь возможность читать эти records до того, как DataMoat их защитит. DataMoat не делает эти data более exposed; он переносит selected already-present records в encrypted archive, controlled by the user.
+
 DataMoat backup scope контролируется user и source records, которые уже доступны на protected machine. Он не bypass account permissions, не unlock remote services и не дает rights сверх того, что user уже имеет на этом computer.
 
 Windows packages сейчас являются unsigned manual builds, пока signed installer находится в работе. Codebase public и source-available for review; teams, которым нужны signed или managed builds, могут contact us.
