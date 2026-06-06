@@ -21,12 +21,12 @@
 Официальный сайт: [https://datamoat.org](https://datamoat.org)
 GitHub репозиторий: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Экспортируйте и создавайте backup данных + skills + attachments ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen
+## Экспортируйте, создавайте резервные копии, ищите, анализируйте и повторно используйте все, что вы создаете с ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen и OpenClaw
 
 Локальный encrypted backup archive для sessions, images, files/PDFs и папок `SKILL.md`.
 
-> **Экспортируйте и создавайте резервные копии всех данных + skills + вложений ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen.**
-> DataMoat хранит вашу историю работы с AI локально и в зашифрованном виде, сохраняет исходные raw source records нетронутыми и создает normalized index для поиска, экспорта, повторного использования, handoff и private AI memory.
+> **Экспортируйте, создавайте резервные копии, ищите, анализируйте и повторно используйте все, что вы создаете с ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen и OpenClaw.**
+> DataMoat хранит вашу историю работы с AI локально и в зашифрованном виде, сохраняет исходные raw source records нетронутыми и создает normalized layer для поиска, анализа, экспорта, повторного использования, handoff и private AI memory.
 >
 > **Ваши самые ценные будущие AI-данные уже исчезают.**
 > Скачайте DataMoat сейчас, чтобы увидеть, сколько истории работы ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen и OpenClaw вы еще можете захватить.

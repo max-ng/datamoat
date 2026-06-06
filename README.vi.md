@@ -21,12 +21,12 @@ Ngôn ngữ: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) |
 Website chính thức: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Export và backup dữ liệu + skills + tệp đính kèm của ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen
+## Export, backup, tìm kiếm, phân tích và tái sử dụng mọi thứ bạn tạo với ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw
 
 Local encrypted backup archive cho sessions, images, files/PDFs và folders `SKILL.md`.
 
-> **Export và backup toàn bộ dữ liệu + skills + tệp đính kèm của ChatGPT / Claude / Codex / Cursor / DeepSeek / Qwen.**
-> DataMoat giữ AI work history của bạn ở local và được mã hóa, bảo toàn raw source records nguyên vẹn và tạo normalized index cho search, export, reuse, handoff và private AI memory.
+> **Export, backup, tìm kiếm, phân tích và tái sử dụng mọi thứ bạn tạo với ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw.**
+> DataMoat giữ AI work history của bạn ở local và được mã hóa, bảo toàn raw source records nguyên vẹn và tạo normalized layer cho search, analysis, export, reuse, handoff và private AI memory.
 >
 > **Dữ liệu AI quý giá nhất trong tương lai của bạn đang biến mất rồi.**
 > Tải DataMoat ngay để xem bạn còn có thể capture được bao nhiêu work history từ ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw.
