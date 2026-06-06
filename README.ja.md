@@ -21,11 +21,11 @@
 公式サイト: [https://datamoat.org](https://datamoat.org)
 GitHub リポジトリ: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw で作るすべてをエクスポート、バックアップ、分析、検索、再利用
+## ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw で作るすべてを保護、エクスポート、バックアップ、分析、検索、再利用
 
 Sessions、画像、files/PDFs、`SKILL.md` フォルダのためのローカル暗号化バックアップアーカイブ。
 
-> **ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw で作るすべてをエクスポート、バックアップ、分析、検索、再利用します。**
+> **ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw で作るすべてを保護、エクスポート、バックアップ、分析、検索、再利用します。**
 > DataMoat は AI 作業履歴をローカルかつ暗号化された状態で保持し、元のソース記録をそのまま保全しながら、分析、検索、エクスポート、再利用、引き継ぎ、プライベート AI memory のための正規化レイヤーを構築します。
 >
 > **将来いちばん価値を持つ AI データは、すでに消え始めています。**

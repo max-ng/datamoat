@@ -21,11 +21,11 @@ Dil: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体
 Resmi website: [https://datamoat.org](https://datamoat.org)
 GitHub deposu: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw ile oluşturduğunuz her şeyi export edin, yedekleyin, analiz edin, arayın ve yeniden kullanın
+## ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw ile oluşturduğunuz her şeyi koruyun, export edin, yedekleyin, analiz edin, arayın ve yeniden kullanın
 
 Sessions, images, files/PDFs ve `SKILL.md` folders için local encrypted backup archive.
 
-> **ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw ile oluşturduğunuz her şeyi export edin, yedekleyin, analiz edin, arayın ve yeniden kullanın.**
+> **ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw ile oluşturduğunuz her şeyi koruyun, export edin, yedekleyin, analiz edin, arayın ve yeniden kullanın.**
 > DataMoat, AI çalışma geçmişinizi yerel ve şifreli tutar; raw source records kayıtlarını bozmadan saklar ve analiz, arama, export, reuse, handoff ve private AI memory için normalized layer oluşturur.
 >
 > **Gelecekte en değerli olacak AI verileriniz zaten kayboluyor.**

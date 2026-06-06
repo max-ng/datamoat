@@ -21,11 +21,11 @@ Idioma: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简
 Site oficial: [https://datamoat.org](https://datamoat.org)
 Repositório GitHub: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Exporte, faça backup, analise, pesquise e reutilize tudo o que você cria com ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw
+## Proteja, exporte, faça backup, analise, pesquise e reutilize tudo o que você cria com ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw
 
 Arquivo local criptografado de backup para sessões, imagens, arquivos/PDFs e pastas `SKILL.md`.
 
-> **Exporte, faça backup, analise, pesquise e reutilize tudo o que você cria com ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw.**
+> **Proteja, exporte, faça backup, analise, pesquise e reutilize tudo o que você cria com ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw.**
 > O DataMoat mantém seu histórico de trabalho com IA local e criptografado, preservando os registros brutos de origem intactos e criando uma camada normalizada para análise, busca, exportação, reutilização, handoff e memória privada de IA.
 >
 > **Seus dados de IA mais valiosos para o futuro já estão desaparecendo.**

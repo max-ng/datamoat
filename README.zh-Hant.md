@@ -21,11 +21,11 @@
 官方網站: [https://datamoat.org](https://datamoat.org)
 GitHub 儲存庫: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## 匯出、備份、分析、搜尋和重用你用 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 建立的一切
+## 保護、匯出、備份、分析、搜尋和重用你用 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 建立的一切
 
 用於 sessions、images、files/PDFs 和 `SKILL.md` folders 的本地加密備份 archive。
 
-> **匯出、備份、分析、搜尋和重用你用 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 建立的一切。**
+> **保護、匯出、備份、分析、搜尋和重用你用 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 建立的一切。**
 > DataMoat 將你的 AI 工作歷史儲存在本地並加密，完整保留原始來源記錄，同時建立統一層，方便分析、搜尋、匯出、重用、交接和私有 AI memory。
 >
 > **你未來最有價值的 AI 資料已經在消失。**

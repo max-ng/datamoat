@@ -21,7 +21,7 @@ Language: [English](./README.md) | [PortuguÃªs (Brasil)](./README.pt-BR.md) | [ç
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Export, back up, analyze, search, and reuse everything you build with ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw
+## Protect, export, back up, analyze, search, and reuse everything you build with ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw
 
 Local encrypted backup archive for sessions, images, files/PDFs, and `SKILL.md` folders.
 

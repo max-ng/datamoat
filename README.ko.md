@@ -21,11 +21,11 @@
 공식 웹사이트: [https://datamoat.org](https://datamoat.org)
 GitHub 저장소: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, OpenClaw로 만든 모든 것을 내보내고, 백업하고, 분석하고, 검색하고, 재사용
+## ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, OpenClaw로 만든 모든 것을 보호하고, 내보내고, 백업하고, 분석하고, 검색하고, 재사용
 
 Sessions, images, files/PDFs, `SKILL.md` folder를 위한 local encrypted backup archive.
 
-> **ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, OpenClaw로 만든 모든 것을 내보내고, 백업하고, 분석하고, 검색하고, 재사용합니다.**
+> **ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, OpenClaw로 만든 모든 것을 보호하고, 내보내고, 백업하고, 분석하고, 검색하고, 재사용합니다.**
 > DataMoat는 AI 작업 기록을 local 및 encrypted 상태로 유지하고, raw source records를 온전히 보존하며, analysis, search, export, reuse, handoff, private AI memory를 위한 normalized layer를 만듭니다.
 >
 > **미래에 가장 가치 있을 AI 데이터는 이미 사라지고 있습니다.**
