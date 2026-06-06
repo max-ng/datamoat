@@ -293,6 +293,30 @@ Birçok AI tools work history'yi computer üzerinde ordinary local files olarak 
 
 DataMoat backup scope user tarafından ve protected machine üzerinde zaten available olan source records tarafından kontrol edilir. Account permissions'ı bypass etmez, remote services'i unlock etmez ve user'ın o computer'da zaten sahip olduğu rights'ın ötesinde hak vermez.
 
+## Threat model: why installing can reduce local exposure
+
+### Hiçbir şey yapmamak da riskli olabilir
+
+DataMoat sizden sıfırdan yeni bir sensitive dataset oluşturmanızı istemez. Birçok AI tools için bu dataset zaten computer'ınızda local transcripts, logs, exports, SQLite records, JSONL files, attachments ve skills folders olarak vardır.
+
+Dedicated archive yoksa bu records, predictable local paths içinde ordinary files olarak dağınık kalabilir ve yalnızca normal OS account permissions tarafından kontrol edilir. DataMoat'ın işi bu records'ı tanımlamanıza yardım etmek, selected supported records'ı local encrypted vault içine kopyalamak ve recoverable, searchable, auditable archive'ı sizin control'ünüz altında tutmaktır.
+
+### DataMoat'tan önce
+
+Birçok AI tools transcripts, tool output, attachments, project context ve bazen reasoning-related blocks'u ordinary local files olarak zaten saklar. Bu files known application folders, exports, logs, SQLite databases, JSONL transcripts ve attachment caches içinde bulunabilir. Aynı OS user olarak çalışan herhangi bir process bunların bir kısmını zaten okuyabiliyor olabilir.
+
+### DataMoat ne yapar
+
+DataMoat remote AI services için new access oluşturmaz ve OS permissions'ı bypass etmez. Yalnızca current local user tarafından zaten accessible olan records'ı okur, sonra selected supported records'ı user-controlled local encrypted archive içine kaydeder. Supported local read paths ve capture reasons public application code içinde review için görülebilir; DataMoat hidden cloud collection veya undisclosed remote capture kullanmaz.
+
+### DataMoat otomatik olarak neyi çözmez
+
+DataMoat original source files'ı sihirli biçimde silmez. User bir cleanup/export workflow seçmedikçe original records source apps'in folders'ında kalabilir. DataMoat protected encrypted copy oluşturarak scattered plaintext exposure'ı azaltır; endpoint security, disk encryption veya source-app retention policy yerine geçmez.
+
+### Ana tradeoff
+
+DataMoat'ı install etmek selected AI record locations'a access eden bir local watcher/importer process ekler. Karşılığında users önemli AI work'ü unencrypted local files içinde dağınık bırakmak yerine searchable encrypted archive, recovery path, audit log ve portable backup alır.
+
 Windows packages şu anda signed installer ilerlerken unsigned manual builds olarak sunulur. Codebase public ve source-available for review durumundadır; signed veya managed builds gereken teams contact us edebilir.
 
 Power user olmanız gerekmez. DataMoat bugün küçük bir local archive ile başlamanıza ve conversations, files, prompts, project context büyüdükçe onun value'sunun compounding olmasına yardımcı olur.
@@ -317,7 +341,7 @@ Bu şu anlama gelir:
 - internal company use izinlidir
 - bu grant dışındaki uses, licensor'dan separate commercial license gerektirir
 
-Bu proje **source-available**'dır, OSI-approved open source değildir.
+**BUSL-1.1** seçmemizin nedeni code'u auditable tutarken misleading repackaged builds, malware clones ve security-sensitive local archive tool için unsupported commercial forks riskini azaltmaktır. Tüm application code public for review durumundadır.
 
 Tam koşullar için [LICENSE.md](LICENSE.md) dosyasına bakın.
 

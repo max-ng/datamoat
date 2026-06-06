@@ -293,6 +293,30 @@ AI tools จำนวนมาก store work history เป็น ordinary local
 
 DataMoat backup scope ถูกควบคุมโดย user และ source records ที่มีอยู่แล้วบน protected machine มันไม่ bypass account permissions, ไม่ unlock remote services และไม่ grant rights เกินกว่าที่ user มีอยู่แล้วบน computer นั้น
 
+## Threat model: why installing can reduce local exposure
+
+### ทำไมการไม่ทำอะไรเลยก็อาจมีความเสี่ยง
+
+DataMoat ไม่ได้ขอให้คุณสร้าง sensitive dataset ใหม่จากศูนย์ สำหรับ AI tools จำนวนมาก dataset นั้นมีอยู่แล้วบน computer ของคุณในรูปแบบ local transcripts, logs, exports, SQLite records, JSONL files, attachments และ skills folders
+
+ถ้าไม่มี dedicated archive, records เหล่านี้อาจกระจายอยู่ใน predictable local paths เป็น ordinary files ที่ควบคุมด้วย OS account permissions ปกติเท่านั้น งานของ DataMoat คือช่วยระบุ records เหล่านี้ copy selected supported records เข้า local encrypted vault และเก็บ recoverable, searchable, auditable archive ไว้ภายใต้ control ของคุณ
+
+### ก่อน DataMoat
+
+AI tools จำนวนมากเก็บ transcripts, tool output, attachments, project context และบางครั้ง reasoning-related blocks เป็น ordinary local files อยู่แล้ว Files เหล่านี้อาจอยู่ใน known application folders, exports, logs, SQLite databases, JSONL transcripts และ attachment caches Process ใดก็ตามที่รันเป็น OS user เดียวกันอาจอ่านบางส่วนได้อยู่แล้ว
+
+### DataMoat ทำอะไร
+
+DataMoat ไม่สร้าง new access ไปยัง remote AI services และไม่ bypass OS permissions มันอ่านเฉพาะ records ที่ current local user เข้าถึงได้อยู่แล้ว จากนั้นเก็บ selected supported records เข้า user-controlled local encrypted archive Local read paths และ capture reasons ที่รองรับเปิดให้ review ได้ใน public application code; DataMoat ไม่มี hidden cloud collection หรือ undisclosed remote capture
+
+### DataMoat ไม่ได้แก้อะไรโดยอัตโนมัติ
+
+DataMoat ไม่ได้ลบ original source files ให้อัตโนมัติ ถ้า user ไม่เลือก cleanup/export workflow, original records อาจยังอยู่ใน folders ของ source apps DataMoat ลด scattered plaintext exposure ด้วยการสร้าง protected encrypted copy; มันไม่ใช่ตัวแทนของ endpoint security, disk encryption หรือ source-app retention policy
+
+### Tradeoff หลัก
+
+การติดตั้ง DataMoat เพิ่ม local watcher/importer process ที่ access selected AI record locations ได้ แลกกับการที่ users ได้ searchable encrypted archive, recovery path, audit log และ portable backup แทนที่จะปล่อย AI work สำคัญกระจายอยู่ใน unencrypted local files
+
 Windows packages ตอนนี้เป็น unsigned manual builds ระหว่างที่ signed installer กำลังทำอยู่ Codebase เป็น public และ source-available for review; teams ที่ต้องการ signed หรือ managed builds สามารถ contact us
 
 คุณไม่จำเป็นต้องเป็น power user เพื่อเริ่ม owning your AI work history DataMoat ให้คุณเริ่มด้วย local archive เล็กๆ วันนี้ แล้วเห็น value ของมันเติบโตตาม conversations, files, prompts และ project context
@@ -317,7 +341,7 @@ DataMoat เป็น open-sourced ภายใต้ **Business Source License 
 - internal company use อนุญาต
 - uses นอก grant นี้ต้องใช้ separate commercial license จาก licensor
 
-นี่คือ **source-available** ไม่ใช่ OSI-approved open source
+เราเลือก **BUSL-1.1** เพื่อให้ code ยัง auditable และลดความเสี่ยงจาก misleading repackaged builds, malware clones และ unsupported commercial forks ของ security-sensitive local archive tool นี้ Application code ทั้งหมดเป็น public for review
 
 ดูเงื่อนไขทั้งหมดที่ [LICENSE.md](LICENSE.md)
 

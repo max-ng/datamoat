@@ -293,6 +293,30 @@ DataMoat는 AI work history에 대한 new access를 만들지 않습니다. Sour
 
 DataMoat backup scope는 user와 protected machine에서 이미 사용 가능한 source records가 결정합니다. Account permissions를 bypass하지 않고, remote services를 unlock하지 않으며, user가 그 computer에서 이미 가진 rights를 넘어서는 권한을 부여하지 않습니다.
 
+## Threat model: why installing can reduce local exposure
+
+### 아무것도 하지 않는 것도 위험할 수 있는 이유
+
+DataMoat는 새로운 sensitive dataset를 처음부터 만들라고 요구하지 않습니다. 많은 AI tools에서는 그 dataset가 이미 local transcripts, logs, exports, SQLite records, JSONL files, attachments, skills folders 형태로 사용자의 computer에 존재합니다.
+
+전용 archive가 없으면 이런 records는 일반 OS account permissions에만 의존하는 ordinary files로 predictable local paths 곳곳에 흩어진 채 남을 수 있습니다. DataMoat의 역할은 이런 records를 식별하고, user가 선택한 supported records를 local encrypted vault로 복사한 뒤, recoverable, searchable, auditable archive를 user control 아래에 두는 것입니다.
+
+### DataMoat 사용 전
+
+많은 AI tools는 transcripts, tool output, attachments, project context, 때로는 reasoning-related blocks를 ordinary local files로 이미 저장합니다. 이런 files는 known application folders, exports, logs, SQLite databases, JSONL transcripts, attachment caches에 있을 수 있습니다. 같은 OS user로 실행되는 process라면 그중 일부를 이미 읽을 수 있습니다.
+
+### DataMoat가 하는 일
+
+DataMoat는 remote AI services에 대한 new access를 만들지 않고 OS permissions를 bypass하지 않습니다. 현재 local user가 이미 접근할 수 있는 records만 읽고, user가 선택한 supported records를 user-controlled local encrypted archive에 저장합니다. 지원되는 local read paths와 capture reasons는 public application code에서 review할 수 있습니다. DataMoat는 hidden cloud collection이나 undisclosed remote capture를 사용하지 않습니다.
+
+### DataMoat가 자동으로 해결하지 않는 것
+
+DataMoat는 original source files를 자동으로 지우지 않습니다. User가 cleanup/export workflow를 선택하지 않는 한 original records는 source apps의 folders에 계속 남아 있을 수 있습니다. DataMoat는 protected encrypted copy를 만들어 scattered plaintext exposure를 줄이지만 endpoint security, disk encryption, source-app retention policy를 대체하지 않습니다.
+
+### 주요 tradeoff
+
+DataMoat 설치는 선택된 AI record locations에 access하는 local watcher/importer process를 추가합니다. 대신 users는 중요한 AI work를 unencrypted local files에 흩어진 채 두는 대신 searchable encrypted archive, recovery path, audit log, portable backup을 얻습니다.
+
 Windows packages는 현재 unsigned manual builds이며 signed installer는 진행 중입니다. Codebase는 public 및 source-available for review 상태이고, signed 또는 managed builds가 필요한 teams는 contact할 수 있습니다.
 
 Power user가 아니어도 AI work history를 소유하기 시작할 수 있습니다. DataMoat는 작은 local archive로 시작한 뒤 conversations, files, prompts, project context가 늘어날수록 가치가 쌓이게 해줍니다.
@@ -317,7 +341,7 @@ DataMoat는 **Business Source License 1.1 (`BUSL-1.1`)** 및 **Additional Use Gr
 - internal company use 허용
 - 이 grant 밖의 use는 licensor로부터 separate commercial license가 필요합니다
 
-이 프로젝트는 **source-available**이며 OSI-approved open source가 아닙니다.
+우리는 code를 auditable하게 유지하면서 misleading repackaged builds, malware clones, 그리고 security-sensitive local archive tool에 대한 unsupported commercial forks의 위험을 줄이기 위해 **BUSL-1.1**을 선택했습니다. 모든 application code는 review를 위해 public입니다.
 
 전체 조건은 [LICENSE.md](LICENSE.md)를 확인하세요.
 

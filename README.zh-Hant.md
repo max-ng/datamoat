@@ -306,6 +306,30 @@ DataMoat 不會為你的 AI work history 創造新的訪問權限。它保護的
 
 DataMoat backup scope 由使用者和受保護機器上已經可用的 source records 決定。它不會繞過 account permissions，不會解鎖 remote services，也不會授予超過使用者在這台電腦上已有範圍之外的 rights。
 
+## Threat model: why installing can reduce local exposure
+
+### 為什麼什麼都不做也可能有風險
+
+DataMoat 不是要求你從零建立一個新的 sensitive dataset。對許多 AI tools 來說，這個 dataset 已經以 local transcripts、logs、exports、SQLite records、JSONL files、attachments 和 skills folders 的形式存在於你的電腦上。
+
+如果沒有專門的 archive，這些 records 可能繼續散落在可預測的本地路徑裡，只受普通 OS account permissions 控制。DataMoat 的工作是幫你識別這些 records，把使用者選擇的 supported records 複製到本地 encrypted vault，並保留一個由你控制、可恢復、可搜尋、可審計的 archive。
+
+### 使用 DataMoat 之前
+
+許多 AI tools 已經把 transcripts、tool output、attachments、project context，有時還有 reasoning-related blocks，作為普通本地檔案保存。這些檔案可能位於已知 application folders、exports、logs、SQLite databases、JSONL transcripts 和 attachment caches。任何以同一 OS user 身分執行的 process，都可能已經能讀取其中一部分。
+
+### DataMoat 做什麼
+
+DataMoat 不會建立對 remote AI services 的新 access，也不會繞過 OS permissions。它只讀取目前本地使用者已經可 access 的 records，然後把使用者選擇的 supported records 存入由使用者控制的本地 encrypted archive。受支援的本地讀取路徑和捕獲原因，都可以在公開的 application code 中審閱；DataMoat 不使用隱藏的 cloud collection，也不使用未公開的 remote capture。
+
+### DataMoat 不會自動解決什麼
+
+DataMoat 不會神奇地抹掉原始 source files。除非使用者選擇 cleanup/export workflow，原始 records 仍可能留在 source apps 的 folders 裡。DataMoat 透過建立受保護的 encrypted copy 來減少分散 plaintext 暴露；它不能替代 endpoint security、disk encryption 或 source-app retention policy。
+
+### 主要取捨
+
+安裝 DataMoat 會引入一個 local watcher/importer process，並讓它 access 使用者選擇的 AI record locations。作為交換，使用者得到 searchable encrypted archive、recovery path、audit log 和 portable backup，而不是讓重要 AI work 繼續散落在 unencrypted local files 裡。
+
 Windows packages 目前是 unsigned manual builds，signed installer 仍在進行中。Codebase 是 public 且 source-available for review；需要 signed 或 managed builds 的 teams 可以聯絡我們。
 
 你不需要是 power user 才能開始擁有自己的 AI work history。DataMoat 讓你今天就可以從一個小的 local archive 開始，然後隨著 conversations、files、prompts 和 project context 成長，看見它的價值不斷累積。
@@ -330,7 +354,7 @@ DataMoat 以 **Business Source License 1.1 (`BUSL-1.1`)** 連同 **Additional Us
 - internal company use 允許
 - grant 以外的用途需要向 licensor 取得 separate commercial license
 
-這是 **source-available**，不是 OSI-approved open source。
+我們選擇 **BUSL-1.1**，是為了讓程式碼保持可審計，同時降低誤導性重新打包版本、惡意軟體複製品，以及不受支援的商業 fork 濫用這個安全敏感本地 archive tool 的風險。所有 application code 都公開供審閱。
 
 完整條款見 [LICENSE.md](LICENSE.md)。
 

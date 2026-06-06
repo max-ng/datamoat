@@ -302,6 +302,30 @@ DataMoat は AI work history への new access を作りません。source-tool 
 
 DataMoat の backup scope は user と、protected machine 上ですでに利用可能な source records によって決まります。Account permissions を bypass せず、remote services を unlock せず、その computer 上で user がすでに持つ rights を超える権利を付与しません。
 
+## Threat model: why installing can reduce local exposure
+
+### 何もしないことにもリスクがあります
+
+DataMoat は、新しい sensitive dataset をゼロから作れと言っているわけではありません。多くの AI tools では、その dataset は local transcripts、logs、exports、SQLite records、JSONL files、attachments、skills folders として、すでにあなたの computer 上に存在します。
+
+専用の archive がなければ、それらの records は通常の OS account permissions だけで管理される ordinary files として、予測しやすい local paths に散らばったままになります。DataMoat の役割は、それらの records を見つけ、user が選んだ supported records を local encrypted vault に copy し、recoverable、searchable、auditable な archive として user control のもとに置くことです。
+
+### DataMoat の前
+
+多くの AI tools は、transcripts、tool output、attachments、project context、場合によっては reasoning-related blocks を ordinary local files として保存しています。これらの files は known application folders、exports、logs、SQLite databases、JSONL transcripts、attachment caches に置かれていることがあります。同じ OS user として動く process は、その一部をすでに読める可能性があります。
+
+### DataMoat がすること
+
+DataMoat は remote AI services への new access を作らず、OS permissions を bypass しません。現在の local user がすでに access できる records だけを読み、user が選んだ supported records を user-controlled local encrypted archive に保存します。対応する local read paths と capture reasons は public application code で review できます。DataMoat は hidden cloud collection や undisclosed remote capture を使いません。
+
+### DataMoat が自動では解決しないこと
+
+DataMoat は original source files を魔法のように消すものではありません。User が cleanup/export workflow を選ばない限り、original records は source apps の folders に残る場合があります。DataMoat は protected encrypted copy を作ることで scattered plaintext exposure を減らしますが、endpoint security、disk encryption、source-app retention policy の代替ではありません。
+
+### 主なトレードオフ
+
+DataMoat を install すると、選択された AI record locations に access する local watcher/importer process が追加されます。その代わり、users は unencrypted local files に重要な AI work を散らばらせたままにするのではなく、searchable encrypted archive、recovery path、audit log、portable backup を得ます。
+
 Windows packages は現在 unsigned manual builds で、signed installer は作成中です。Codebase は public かつ source-available for review であり、signed または managed builds が必要な teams は contact できます。
 
 Power user でなくても、自分の AI work history を所有し始められます。DataMoat なら小さな local archive から始めて、conversations、files、prompts、project context が増えるにつれて価値が積み上がっていきます。
@@ -326,7 +350,7 @@ DataMoat は **Business Source License 1.1 (`BUSL-1.1`)** と **Additional Use G
 - internal company use は許可されています
 - その grant の外の用途には、licensor からの separate commercial license が必要です
 
-これは **source-available** であり、OSI-approved open source ではありません。
+**BUSL-1.1** を選んだのは、code を auditable に保ちながら、misleading repackaged builds、malware clones、そして security-sensitive な local archive tool の unsupported commercial forks のリスクを下げるためです。All application code は review のために public です。
 
 完全な条件は [LICENSE.md](LICENSE.md) を参照してください。
 

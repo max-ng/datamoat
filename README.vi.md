@@ -302,6 +302,30 @@ Nhiều AI tools đã store work history như ordinary local files trên compute
 
 DataMoat backup scope được control bởi user và bởi source records đã available trên protected machine. Nó không bypass account permissions, không unlock remote services và không grant rights vượt quá những gì user đã có trên computer đó.
 
+## Threat model: why installing can reduce local exposure
+
+### Vì sao không làm gì cũng có thể rủi ro
+
+DataMoat không yêu cầu bạn tạo một sensitive dataset mới từ con số không. Với nhiều AI tools, dataset đó đã tồn tại trên computer của bạn dưới dạng local transcripts, logs, exports, SQLite records, JSONL files, attachments và skills folders.
+
+Nếu không có dedicated archive, những records này có thể vẫn nằm rải rác trong predictable local paths như ordinary files chỉ được kiểm soát bởi OS account permissions thông thường. Việc của DataMoat là giúp bạn nhận diện những records đó, copy selected supported records vào local encrypted vault, và giữ một recoverable, searchable, auditable archive dưới control của bạn.
+
+### Trước DataMoat
+
+Nhiều AI tools đã lưu transcripts, tool output, attachments, project context, và đôi khi reasoning-related blocks như ordinary local files. Các files này có thể nằm trong known application folders, exports, logs, SQLite databases, JSONL transcripts và attachment caches. Bất kỳ process nào chạy với cùng OS user đều có thể đã đọc được một phần trong số đó.
+
+### DataMoat làm gì
+
+DataMoat không tạo new access tới remote AI services và không bypass OS permissions. Nó chỉ đọc records đã available cho current local user, rồi lưu selected supported records vào user-controlled local encrypted archive. Supported local read paths và capture reasons đều visible trong public application code để review; DataMoat không dùng hidden cloud collection hay undisclosed remote capture.
+
+### DataMoat không tự động giải quyết điều gì
+
+DataMoat không tự động xóa original source files. Trừ khi user chọn cleanup/export workflow, original records vẫn có thể còn trong folders của source apps. DataMoat giảm scattered plaintext exposure bằng cách tạo protected encrypted copy; nó không thay thế endpoint security, disk encryption hay source-app retention policy.
+
+### Tradeoff chính
+
+Cài DataMoat sẽ thêm một local watcher/importer process có access tới selected AI record locations. Đổi lại, users có searchable encrypted archive, recovery path, audit log và portable backup thay vì để AI work quan trọng nằm rải rác trong unencrypted local files.
+
 Windows packages hiện là unsigned manual builds trong khi signed installer đang được thực hiện. Codebase là public và source-available for review; teams cần signed hoặc managed builds có thể contact us.
 
 Bạn không cần là power user để bắt đầu owning your AI work history. DataMoat cho phép bạn bắt đầu với một local archive nhỏ hôm nay, rồi thấy value của nó compound khi conversations, files, prompts và project context tăng lên.
@@ -326,7 +350,7 @@ DataMoat được open-sourced theo **Business Source License 1.1 (`BUSL-1.1`)**
 - internal company use được phép
 - uses ngoài grant này cần separate commercial license từ licensor
 
-Đây là **source-available**, không phải OSI-approved open source.
+Chúng tôi chọn **BUSL-1.1** để giữ code auditable trong khi giảm rủi ro từ misleading repackaged builds, malware clones và unsupported commercial forks của một security-sensitive local archive tool. Toàn bộ application code là public for review.
 
 Xem [LICENSE.md](LICENSE.md) để biết đầy đủ điều khoản.
 

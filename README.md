@@ -310,6 +310,30 @@ Many AI tools already store work history as ordinary local files on the computer
 
 DataMoat backup scope is controlled by the user and by the source records already available on the protected machine. It does not bypass account permissions, unlock remote services, or grant rights beyond what the user already has on that computer. Users and organizations remain responsible for deciding which local AI records, attachments, code, secrets, or sensitive data should be imported, retained, exported, or excluded under their own policies.
 
+## Threat model: why installing can reduce local exposure
+
+### Why doing nothing can also be risky
+
+DataMoat is not asking you to create a new sensitive dataset from nothing. For many AI tools, that dataset already exists on your computer as local transcripts, logs, exports, SQLite records, JSONL files, attachments, and skills folders.
+
+Without a dedicated archive, those records may remain scattered across predictable local paths as ordinary files controlled only by normal OS account permissions. DataMoat's job is to help you identify those records, copy selected supported records into a local encrypted vault, and keep a recoverable, searchable, auditable archive under your control.
+
+### Before DataMoat
+
+Many AI tools already store transcripts, tool output, attachments, project context, and sometimes reasoning-related blocks as ordinary local files. These files may sit in known application folders, exports, logs, SQLite databases, JSONL transcripts, and attachment caches. Any process running as the same OS user may already be able to read some of them.
+
+### What DataMoat does
+
+DataMoat does not create new access to remote AI services and does not bypass OS permissions. It only reads records already available to the current local user, then stores selected supported records into a local encrypted archive controlled by the user. The supported local read paths and capture reasons are visible in the public application code for review; DataMoat does not use hidden cloud collection or undisclosed remote capture.
+
+### What DataMoat does not solve automatically
+
+DataMoat does not magically erase the original source files. Unless the user chooses a cleanup/export workflow, original records may still remain in the source apps' folders. DataMoat reduces scattered plaintext exposure by creating a protected encrypted copy; it is not a substitute for endpoint security, disk encryption, or source-app retention policy.
+
+### Main tradeoff
+
+Installing DataMoat introduces a local watcher/importer process with access to selected AI record locations. In exchange, users get a searchable encrypted archive, recovery path, audit log, and portable backup instead of leaving important AI work scattered in unencrypted local files.
+
 Windows packages are currently unsigned manual builds while the signed installer is in progress. The codebase is public and source-available for review, and teams that require signed or managed builds can contact us.
 
 You do not need to be a power user to start owning your AI work history. DataMoat lets you begin with a small local archive today, then watch its value compound as your conversations, files, prompts, and project context grow.
@@ -334,7 +358,7 @@ This means:
 - internal company use is allowed
 - uses outside that grant require a separate commercial license from the licensor
 
-This is **source-available**, not OSI-approved open source.
+We chose **BUSL-1.1** to keep the code auditable while reducing the risk of misleading repackaged builds, malware clones, and unsupported commercial forks of a security-sensitive local archive tool. All application code is public for review.
 
 See [LICENSE.md](LICENSE.md) for the full terms.
 

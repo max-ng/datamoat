@@ -293,6 +293,30 @@ DataMoat does not create new access к вашей AI work history. Он защи
 
 DataMoat backup scope контролируется user и source records, которые уже доступны на protected machine. Он не bypass account permissions, не unlock remote services и не дает rights сверх того, что user уже имеет на этом computer.
 
+## Threat model: why installing can reduce local exposure
+
+### Почему бездействие тоже может быть рискованным
+
+DataMoat не просит вас создавать новый sensitive dataset с нуля. Для многих AI tools этот dataset уже существует на вашем computer как local transcripts, logs, exports, SQLite records, JSONL files, attachments и skills folders.
+
+Без dedicated archive эти records могут оставаться разбросанными по predictable local paths как ordinary files, защищенные только обычными OS account permissions. Задача DataMoat - помочь найти эти records, скопировать выбранные supported records в local encrypted vault и сохранить recoverable, searchable, auditable archive под вашим контролем.
+
+### До DataMoat
+
+Многие AI tools уже хранят transcripts, tool output, attachments, project context и иногда reasoning-related blocks как ordinary local files. Эти files могут находиться в known application folders, exports, logs, SQLite databases, JSONL transcripts и attachment caches. Любой process, работающий от того же OS user, уже может читать часть из них.
+
+### Что делает DataMoat
+
+DataMoat не создает new access к remote AI services и не bypass OS permissions. Он читает только records, уже доступные current local user, а затем сохраняет выбранные supported records в user-controlled local encrypted archive. Supported local read paths и capture reasons видны в public application code for review; DataMoat не использует hidden cloud collection или undisclosed remote capture.
+
+### Что DataMoat не решает автоматически
+
+DataMoat не стирает original source files автоматически. Если user не выберет cleanup/export workflow, original records могут оставаться в folders исходных apps. DataMoat уменьшает scattered plaintext exposure за счет protected encrypted copy; это не замена endpoint security, disk encryption или source-app retention policy.
+
+### Главный tradeoff
+
+Установка DataMoat добавляет local watcher/importer process с access к выбранным AI record locations. В обмен users получают searchable encrypted archive, recovery path, audit log и portable backup вместо того, чтобы оставлять важную AI work разбросанной в unencrypted local files.
+
 Windows packages сейчас являются unsigned manual builds, пока signed installer находится в работе. Codebase public и source-available for review; teams, которым нужны signed или managed builds, могут contact us.
 
 Не нужно быть power user, чтобы начать owning your AI work history. DataMoat позволяет начать с небольшого local archive сегодня и увидеть, как его value растет вместе с conversations, files, prompts и project context.
@@ -317,7 +341,7 @@ DataMoat is open-sourced под **Business Source License 1.1 (`BUSL-1.1`)** с 
 - internal company use разрешен
 - uses вне этого grant требуют отдельной commercial license от licensor
 
-Это **source-available**, не OSI-approved open source.
+Мы выбрали **BUSL-1.1**, чтобы code оставался auditable и одновременно снижался риск misleading repackaged builds, malware clones и unsupported commercial forks для security-sensitive local archive tool. Весь application code public for review.
 
 См. [LICENSE.md](LICENSE.md) для полных условий.
 
