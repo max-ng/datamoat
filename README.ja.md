@@ -21,12 +21,12 @@
 公式サイト: [https://datamoat.org](https://datamoat.org)
 GitHub リポジトリ: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw で作るすべてをエクスポート、バックアップ、検索、分析、再利用
+## ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw で作るすべてをエクスポート、バックアップ、分析、検索、再利用
 
 Sessions、画像、files/PDFs、`SKILL.md` フォルダのためのローカル暗号化バックアップアーカイブ。
 
-> **ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw で作るすべてをエクスポート、バックアップ、検索、分析、再利用します。**
-> DataMoat は AI 作業履歴をローカルかつ暗号化された状態で保持し、元のソース記録をそのまま保全しながら、検索、分析、エクスポート、再利用、引き継ぎ、プライベート AI memory のための正規化レイヤーを構築します。
+> **ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw で作るすべてをエクスポート、バックアップ、分析、検索、再利用します。**
+> DataMoat は AI 作業履歴をローカルかつ暗号化された状態で保持し、元のソース記録をそのまま保全しながら、分析、検索、エクスポート、再利用、引き継ぎ、プライベート AI memory のための正規化レイヤーを構築します。
 >
 > **将来いちばん価値を持つ AI データは、すでに消え始めています。**
 > 今すぐ DataMoat をダウンロードして、ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw の作業履歴をどれだけまだ捕捉できるか確認してください。
@@ -44,7 +44,7 @@ DataMoat は、ChatGPT exports、Claude CLI、Claude Desktop、Codex CLI、Codex
 DataMoat は 2 つの層を保持します:
 
 - **Raw archive:** 元の session JSONL、SQLite records、logs、attachments、metadata、skills folder snapshots、そしてローカルに保存された thinking tokens または reasoning blocks は、できるだけソース形式に近い形で保存されます。
-- **Normalized index:** 異なるツールの records は共通 schema に変換され、ツールをまたいで検索、review、export、分析、再利用、handoff ができます。
+- **Normalized index:** 異なるツールの records は共通 schema に変換され、ツールをまたいで分析、検索、review、export、再利用、handoff ができます。
 
 **現在対応しているソース:** ChatGPT export ZIP/フォルダーインポート、Claude CLI、Codex CLI、Codex app local sessions、macOS の Claude Desktop local-agent sessions、Claude Code GUI workflows がローカルに書き込む DeepSeek と Qwen sessions、対応するローカル OpenClaw session records、対応するローカル Cursor agent transcripts。
 **さらに多くのデータソースとプラットフォームリリースは roadmap にあります:** この repository を star / watch すると、新しい capture integrations と platform updates のリリースを追えます。
@@ -326,7 +326,7 @@ DataMoat は original source files を魔法のように消すものではあり
 
 DataMoat を install すると、選択された AI record locations に access する local watcher/importer process が追加されます。その代わり、users は unencrypted local files に重要な AI work を散らばらせたままにするのではなく、searchable encrypted archive、recovery path、audit log、portable backup を得ます。
 
-Windows packages は現在 unsigned manual builds で、signed installer は作成中です。Codebase は public かつ source-available for review であり、signed または managed builds が必要な teams は contact できます。
+Windows packages は現在 unsigned manual builds で、signed installer は作成中です。Codebase は review のために public であり、signed または managed builds が必要な teams は contact できます。
 
 Power user でなくても、自分の AI work history を所有し始められます。DataMoat なら小さな local archive から始めて、conversations、files、prompts、project context が増えるにつれて価値が積み上がっていきます。
 

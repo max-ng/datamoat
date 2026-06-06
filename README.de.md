@@ -21,12 +21,12 @@ Sprache: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [�
 Offizielle Website: [https://datamoat.org](https://datamoat.org)
 GitHub-Repository: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Alles, was Sie mit ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen und OpenClaw erstellen, exportieren, sichern, durchsuchen, analysieren und wiederverwenden
+## Alles, was Sie mit ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen und OpenClaw erstellen, exportieren, sichern, analysieren, durchsuchen und wiederverwenden
 
 Lokales verschlüsseltes Backup-Archiv für Sessions, Bilder, Dateien/PDFs und `SKILL.md`-Ordner.
 
-> **Exportieren, sichern, durchsuchen, analysieren und verwenden Sie alles wieder, was Sie mit ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen und OpenClaw erstellen.**
-> DataMoat hält Ihre AI-Arbeitshistorie lokal und verschlüsselt, bewahrt die rohen Quellaufzeichnungen intakt und erstellt eine normalisierte Ebene für Suche, Analyse, Export, Wiederverwendung, Übergabe und private AI memory.
+> **Exportieren, sichern, analysieren, durchsuchen und verwenden Sie alles wieder, was Sie mit ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen und OpenClaw erstellen.**
+> DataMoat hält Ihre AI-Arbeitshistorie lokal und verschlüsselt, bewahrt die rohen Quellaufzeichnungen intakt und erstellt eine normalisierte Ebene für Analyse, Suche, Export, Wiederverwendung, Übergabe und private AI memory.
 >
 > **Ihre wertvollsten zukünftigen AI-Daten verschwinden bereits.**
 > Laden Sie DataMoat jetzt herunter, um zu sehen, wie viel Claude-, Codex-, Cursor-, OpenClaw-, DeepSeek- und Qwen-Arbeitshistorie Sie noch erfassen können.
@@ -44,7 +44,7 @@ DataMoat ist ein AI work history memory archive für Personen und Teams, die mit
 DataMoat hält zwei Ebenen:
 
 - **Raw archive:** ursprüngliche Session-JSONL, SQLite-Datensätze, Logs, Anhänge, Metadaten, Snapshots von Skills-Ordnern und lokal gespeicherte thinking tokens oder reasoning blocks werden so nah wie möglich am Quellformat bewahrt.
-- **Normalized index:** Datensätze aus verschiedenen Tools werden in ein gemeinsames Schema umgewandelt, sodass Sie toolübergreifend suchen, prüfen, exportieren, analysieren, wiederverwenden und Arbeit übergeben können.
+- **Normalized index:** Datensätze aus verschiedenen Tools werden in ein gemeinsames Schema umgewandelt, sodass Sie toolübergreifend analysieren, durchsuchen, prüfen, exportieren, wiederverwenden und Arbeit übergeben können.
 
 **Heute unterstützte Quellen:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, lokale Sessions der Codex app, Claude Desktop local-agent sessions auf macOS, DeepSeek- und Qwen-Sessions, wenn sie von Claude Code GUI Workflows lokal geschrieben werden, unterstützte lokale OpenClaw session records und unterstützte lokale Cursor agent transcripts.
 **Weitere Datenquellen und Plattform-Releases stehen auf der Roadmap:** star und watch dieses Repository, um neue Capture-Integrationen und Plattform-Updates zu verfolgen, sobald sie erscheinen.
@@ -317,7 +317,7 @@ DataMoat löscht original source files nicht automatisch. Wenn der User keinen c
 
 Die Installation von DataMoat führt einen local watcher/importer process ein, der Zugriff auf ausgewählte AI record locations hat. Im Gegenzug erhalten users ein searchable encrypted archive, recovery path, audit log und portable backup, statt wichtige AI work in unencrypted local files verstreut zu lassen.
 
-Windows packages sind derzeit unsigned manual builds, während der signed installer in Arbeit ist. Die codebase ist public und source-available for review; teams, die signed oder managed builds benötigen, können uns kontaktieren.
+Windows packages sind derzeit unsigned manual builds, während der signed installer in Arbeit ist. Die codebase ist public for review; teams, die signed oder managed builds benötigen, können uns kontaktieren.
 
 Sie müssen kein power user sein, um Ihre AI work history selbst zu besitzen. DataMoat lässt Sie heute mit einem kleinen lokalen archive anfangen und dessen Wert mit conversations, files, prompts und project context wachsen sehen.
 

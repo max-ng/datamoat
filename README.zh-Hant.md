@@ -21,12 +21,12 @@
 官方網站: [https://datamoat.org](https://datamoat.org)
 GitHub 儲存庫: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## 匯出、備份、搜尋、分析和重用你用 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 建立的一切
+## 匯出、備份、分析、搜尋和重用你用 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 建立的一切
 
 用於 sessions、images、files/PDFs 和 `SKILL.md` folders 的本地加密備份 archive。
 
-> **匯出、備份、搜尋、分析和重用你用 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 建立的一切。**
-> DataMoat 將你的 AI 工作歷史儲存在本地並加密，完整保留原始來源記錄，同時建立統一層，方便搜尋、分析、匯出、重用、交接和私有 AI memory。
+> **匯出、備份、分析、搜尋和重用你用 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 建立的一切。**
+> DataMoat 將你的 AI 工作歷史儲存在本地並加密，完整保留原始來源記錄，同時建立統一層，方便分析、搜尋、匯出、重用、交接和私有 AI memory。
 >
 > **你未來最有價值的 AI 資料已經在消失。**
 > 立即下載 DataMoat，看看你還能擷取多少 ChatGPT、Claude、Codex、Cursor、DeepSeek、Qwen 和 OpenClaw 工作歷史。
@@ -44,7 +44,7 @@ DataMoat 是一個 AI work history memory archive，面向使用 ChatGPT exports
 DataMoat 保留兩層資料:
 
 - **Raw archive:** 原始 session JSONL、SQLite records、logs、attachments、metadata、skills folder snapshots，以及任何本地儲存的 thinking tokens 或 reasoning blocks，會盡量以接近來源格式儲存。
-- **Normalized index:** 來自不同工具的 records 會轉換成共同 schema，方便你跨工具搜尋、複查、匯出、分析、重複使用和交接工作。
+- **Normalized index:** 來自不同工具的 records 會轉換成共同 schema，方便你跨工具分析、搜尋、複查、匯出、重用和交接工作。
 
 **目前支援的來源:** ChatGPT export ZIP/資料夾匯入、Claude CLI、Codex CLI、Codex app local sessions、macOS 上的 Claude Desktop local-agent sessions、Claude Code GUI workflow 寫入本地時的 DeepSeek 和 Qwen sessions、受支援的本地 OpenClaw session records，以及受支援的本地 Cursor agent transcripts。
 **更多資料來源和平台版本已在 roadmap:** star 和 watch 這個 repository，就可以跟進新的 capture integrations 和平台更新發布。
@@ -330,7 +330,7 @@ DataMoat 不會神奇地抹掉原始 source files。除非使用者選擇 cleanu
 
 安裝 DataMoat 會引入一個 local watcher/importer process，並讓它 access 使用者選擇的 AI record locations。作為交換，使用者得到 searchable encrypted archive、recovery path、audit log 和 portable backup，而不是讓重要 AI work 繼續散落在 unencrypted local files 裡。
 
-Windows packages 目前是 unsigned manual builds，signed installer 仍在進行中。Codebase 是 public 且 source-available for review；需要 signed 或 managed builds 的 teams 可以聯絡我們。
+Windows packages 目前是 unsigned manual builds，signed installer 仍在進行中。Codebase 公開供審閱；需要 signed 或 managed builds 的 teams 可以聯絡我們。
 
 你不需要是 power user 才能開始擁有自己的 AI work history。DataMoat 讓你今天就可以從一個小的 local archive 開始，然後隨著 conversations、files、prompts 和 project context 成長，看見它的價值不斷累積。
 

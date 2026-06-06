@@ -21,12 +21,12 @@ Dil: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体
 Resmi website: [https://datamoat.org](https://datamoat.org)
 GitHub deposu: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw ile oluşturduğunuz her şeyi export edin, yedekleyin, arayın, analiz edin ve yeniden kullanın
+## ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw ile oluşturduğunuz her şeyi export edin, yedekleyin, analiz edin, arayın ve yeniden kullanın
 
 Sessions, images, files/PDFs ve `SKILL.md` folders için local encrypted backup archive.
 
-> **ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw ile oluşturduğunuz her şeyi export edin, yedekleyin, arayın, analiz edin ve yeniden kullanın.**
-> DataMoat, AI çalışma geçmişinizi yerel ve şifreli tutar; raw source records kayıtlarını bozmadan saklar ve arama, analiz, export, reuse, handoff ve private AI memory için normalized layer oluşturur.
+> **ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw ile oluşturduğunuz her şeyi export edin, yedekleyin, analiz edin, arayın ve yeniden kullanın.**
+> DataMoat, AI çalışma geçmişinizi yerel ve şifreli tutar; raw source records kayıtlarını bozmadan saklar ve analiz, arama, export, reuse, handoff ve private AI memory için normalized layer oluşturur.
 >
 > **Gelecekte en değerli olacak AI verileriniz zaten kayboluyor.**
 > DataMoat'ı şimdi indirerek ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen ve OpenClaw çalışma geçmişinizin ne kadarını hâlâ capture edebileceğinizi görün.
@@ -44,7 +44,7 @@ DataMoat, ChatGPT exports, Claude CLI, Claude Desktop, Claude Code GUI workflows
 DataMoat iki katman tutar:
 
 - **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots ve locally stored thinking tokens veya reasoning blocks mümkün olduğunca source formatına yakın şekilde saklanır.
-- **Normalized index:** farklı tools kayıtları common schema'ya dönüştürülür; böylece tools arasında search, review, export, analyze, reuse ve handoff yapabilirsiniz.
+- **Normalized index:** farklı tools kayıtları common schema'ya dönüştürülür; böylece tools arasında analyze, search, review, export, reuse ve handoff yapabilirsiniz.
 
 **Bugün desteklenen sources:** ChatGPT export ZIP/folder importları, Claude CLI, Codex CLI, Codex app local sessions, macOS'ta Claude Desktop local-agent sessions, Claude Code GUI workflows tarafından local yazıldığında DeepSeek ve Qwen sessions, desteklenen local OpenClaw session records ve desteklenen local Cursor agent transcripts.
 **Daha fazla data source ve platform release roadmap'te:** yeni capture integrations ve platform updates çıktığında takip etmek için bu repository'yi star/watch edin.
@@ -317,7 +317,7 @@ DataMoat original source files'ı sihirli biçimde silmez. User bir cleanup/expo
 
 DataMoat'ı install etmek selected AI record locations'a access eden bir local watcher/importer process ekler. Karşılığında users önemli AI work'ü unencrypted local files içinde dağınık bırakmak yerine searchable encrypted archive, recovery path, audit log ve portable backup alır.
 
-Windows packages şu anda signed installer ilerlerken unsigned manual builds olarak sunulur. Codebase public ve source-available for review durumundadır; signed veya managed builds gereken teams contact us edebilir.
+Windows packages şu anda signed installer ilerlerken unsigned manual builds olarak sunulur. Codebase public for review durumundadır; signed veya managed builds gereken teams contact us edebilir.
 
 Power user olmanız gerekmez. DataMoat bugün küçük bir local archive ile başlamanıza ve conversations, files, prompts, project context büyüdükçe onun value'sunun compounding olmasına yardımcı olur.
 

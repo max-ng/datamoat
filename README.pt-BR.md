@@ -21,12 +21,12 @@ Idioma: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简
 Site oficial: [https://datamoat.org](https://datamoat.org)
 Repositório GitHub: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Exporte, faça backup, pesquise, analise e reutilize tudo o que você cria com ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw
+## Exporte, faça backup, analise, pesquise e reutilize tudo o que você cria com ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw
 
 Arquivo local criptografado de backup para sessões, imagens, arquivos/PDFs e pastas `SKILL.md`.
 
-> **Exporte, faça backup, pesquise, analise e reutilize tudo o que você cria com ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw.**
-> O DataMoat mantém seu histórico de trabalho com IA local e criptografado, preservando os registros brutos de origem intactos e criando uma camada normalizada para busca, análise, exportação, reutilização, handoff e memória privada de IA.
+> **Exporte, faça backup, analise, pesquise e reutilize tudo o que você cria com ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw.**
+> O DataMoat mantém seu histórico de trabalho com IA local e criptografado, preservando os registros brutos de origem intactos e criando uma camada normalizada para análise, busca, exportação, reutilização, handoff e memória privada de IA.
 >
 > **Seus dados de IA mais valiosos para o futuro já estão desaparecendo.**
 > Baixe o DataMoat agora para ver quanto histórico de trabalho do ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen e OpenClaw você ainda consegue capturar.
@@ -44,7 +44,7 @@ DataMoat é um arquivo de memória de histórico de trabalho com IA para pessoas
 O DataMoat mantém duas camadas:
 
 - **Arquivo bruto:** JSONL de sessão original, registros SQLite, logs, anexos, metadados, snapshots de pastas de skills e qualquer thinking token ou bloco de raciocínio armazenado localmente são preservados o mais próximo possível do formato de origem.
-- **Índice normalizado:** registros de ferramentas diferentes são convertidos para um esquema comum, para que você possa buscar, revisar, exportar, analisar, reutilizar e entregar trabalho entre ferramentas.
+- **Índice normalizado:** registros de ferramentas diferentes são convertidos para um esquema comum, para que você possa analisar, buscar, revisar, exportar, reutilizar e entregar trabalho entre ferramentas.
 
 **Fontes compatíveis hoje:** importação ZIP/pasta de ChatGPT export, Claude CLI, Codex CLI, sessões locais do Codex app, sessões local-agent do Claude Desktop no macOS, sessões DeepSeek e Qwen quando escritas localmente por workflows do Claude Code GUI, registros locais compatíveis do OpenClaw e transcripts locais compatíveis do agente do Cursor.
 **Mais fontes de dados e lançamentos de plataforma estão no roadmap:** dê star e watch neste repositório para acompanhar novas integrações de captura e atualizações de plataforma quando forem lançadas.
@@ -317,7 +317,7 @@ O DataMoat não apaga magicamente os original source files. A menos que o usuár
 
 Instalar o DataMoat introduz um local watcher/importer process com acesso a selected AI record locations. Em troca, users recebem um searchable encrypted archive, recovery path, audit log e portable backup em vez de deixar AI work importante espalhado em unencrypted local files.
 
-Os Windows packages atualmente são unsigned manual builds enquanto o signed installer está em progresso. A codebase é public e source-available for review, e teams que precisam de signed ou managed builds podem entrar em contato.
+Os Windows packages atualmente são unsigned manual builds enquanto o signed installer está em progresso. A codebase é public for review, e teams que precisam de signed ou managed builds podem entrar em contato.
 
 Você não precisa ser power user para começar a possuir seu AI work history. O DataMoat permite começar com um pequeno local archive hoje e ver o valor dele crescer conforme suas conversations, files, prompts e project context aumentam.
 

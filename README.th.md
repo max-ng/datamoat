@@ -21,12 +21,12 @@
 เว็บไซต์ทางการ: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Export, backup, search, analyze และ reuse ทุกอย่างที่คุณสร้างด้วย ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen และ OpenClaw
+## Export, backup, analyze, search และ reuse ทุกอย่างที่คุณสร้างด้วย ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen และ OpenClaw
 
 Local encrypted backup archive สำหรับ sessions, images, files/PDFs และ folders `SKILL.md`
 
-> **Export, backup, search, analyze และ reuse ทุกอย่างที่คุณสร้างด้วย ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen และ OpenClaw.**
-> DataMoat เก็บ AI work history ของคุณไว้แบบ local และ encrypted, รักษา raw source records ให้ครบ และสร้าง normalized layer สำหรับ search, analysis, export, reuse, handoff และ private AI memory.
+> **Export, backup, analyze, search และ reuse ทุกอย่างที่คุณสร้างด้วย ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen และ OpenClaw.**
+> DataMoat เก็บ AI work history ของคุณไว้แบบ local และ encrypted, รักษา raw source records ให้ครบ และสร้าง normalized layer สำหรับ analysis, search, export, reuse, handoff และ private AI memory.
 >
 > **ข้อมูล AI ที่มีค่าที่สุดในอนาคตของคุณกำลังหายไปแล้ว**
 > ดาวน์โหลด DataMoat ตอนนี้เพื่อดูว่าคุณยัง capture work history จาก ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen และ OpenClaw ได้มากแค่ไหน
@@ -44,7 +44,7 @@ DataMoat คือ AI work history memory archive สำหรับคนแล
 DataMoat เก็บสองชั้น:
 
 - **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots และ locally stored thinking tokens หรือ reasoning blocks จะถูกเก็บให้ใกล้ source format ที่สุด
-- **Normalized index:** records จาก tools ต่าง ๆ จะถูกแปลงเป็น common schema เพื่อให้ search, review, export, analyze, reuse และ handoff งานข้าม tools ได้
+- **Normalized index:** records จาก tools ต่าง ๆ จะถูกแปลงเป็น common schema เพื่อให้ analyze, search, review, export, reuse และ handoff งานข้าม tools ได้
 
 **Sources ที่รองรับวันนี้:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions บน macOS, DeepSeek และ Qwen sessions เมื่อถูกเขียน local โดย Claude Code GUI workflows, supported local OpenClaw session records และ supported local Cursor agent transcripts
 **Data sources และ platform releases เพิ่มเติมอยู่ใน roadmap:** star และ watch repository นี้เพื่อติดตาม capture integrations และ platform updates ใหม่เมื่อ ship
@@ -317,7 +317,7 @@ DataMoat ไม่ได้ลบ original source files ให้อัตโน
 
 การติดตั้ง DataMoat เพิ่ม local watcher/importer process ที่ access selected AI record locations ได้ แลกกับการที่ users ได้ searchable encrypted archive, recovery path, audit log และ portable backup แทนที่จะปล่อย AI work สำคัญกระจายอยู่ใน unencrypted local files
 
-Windows packages ตอนนี้เป็น unsigned manual builds ระหว่างที่ signed installer กำลังทำอยู่ Codebase เป็น public และ source-available for review; teams ที่ต้องการ signed หรือ managed builds สามารถ contact us
+Windows packages ตอนนี้เป็น unsigned manual builds ระหว่างที่ signed installer กำลังทำอยู่ Codebase เป็น public for review; teams ที่ต้องการ signed หรือ managed builds สามารถ contact us
 
 คุณไม่จำเป็นต้องเป็น power user เพื่อเริ่ม owning your AI work history DataMoat ให้คุณเริ่มด้วย local archive เล็กๆ วันนี้ แล้วเห็น value ของมันเติบโตตาม conversations, files, prompts และ project context
 

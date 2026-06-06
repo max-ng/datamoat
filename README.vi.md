@@ -21,12 +21,12 @@ Ngôn ngữ: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) |
 Website chính thức: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Export, backup, tìm kiếm, phân tích và tái sử dụng mọi thứ bạn tạo với ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw
+## Export, backup, phân tích, tìm kiếm và tái sử dụng mọi thứ bạn tạo với ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw
 
 Local encrypted backup archive cho sessions, images, files/PDFs và folders `SKILL.md`.
 
-> **Export, backup, tìm kiếm, phân tích và tái sử dụng mọi thứ bạn tạo với ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw.**
-> DataMoat giữ AI work history của bạn ở local và được mã hóa, bảo toàn raw source records nguyên vẹn và tạo normalized layer cho search, analysis, export, reuse, handoff và private AI memory.
+> **Export, backup, phân tích, tìm kiếm và tái sử dụng mọi thứ bạn tạo với ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw.**
+> DataMoat giữ AI work history của bạn ở local và được mã hóa, bảo toàn raw source records nguyên vẹn và tạo normalized layer cho analysis, search, export, reuse, handoff và private AI memory.
 >
 > **Dữ liệu AI quý giá nhất trong tương lai của bạn đang biến mất rồi.**
 > Tải DataMoat ngay để xem bạn còn có thể capture được bao nhiêu work history từ ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen và OpenClaw.
@@ -44,7 +44,7 @@ DataMoat là AI work history memory archive cho cá nhân và đội nhóm làm 
 DataMoat giữ hai lớp:
 
 - **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots và mọi locally stored thinking tokens hoặc reasoning blocks được giữ gần với source format nhất có thể.
-- **Normalized index:** records từ các tools khác nhau được chuyển thành common schema để bạn có thể search, review, export, analyze, reuse và handoff work xuyên tools.
+- **Normalized index:** records từ các tools khác nhau được chuyển thành common schema để bạn có thể analyze, search, review, export, reuse và handoff work xuyên tools.
 
 **Sources được hỗ trợ hôm nay:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions trên macOS, DeepSeek và Qwen sessions khi được Claude Code GUI workflows ghi local, supported local OpenClaw session records và supported local Cursor agent transcripts.
 **Nhiều data sources và platform releases khác nằm trên roadmap:** star và watch repository này để theo dõi capture integrations và platform updates mới khi chúng ship.
@@ -326,7 +326,7 @@ DataMoat không tự động xóa original source files. Trừ khi user chọn c
 
 Cài DataMoat sẽ thêm một local watcher/importer process có access tới selected AI record locations. Đổi lại, users có searchable encrypted archive, recovery path, audit log và portable backup thay vì để AI work quan trọng nằm rải rác trong unencrypted local files.
 
-Windows packages hiện là unsigned manual builds trong khi signed installer đang được thực hiện. Codebase là public và source-available for review; teams cần signed hoặc managed builds có thể contact us.
+Windows packages hiện là unsigned manual builds trong khi signed installer đang được thực hiện. Codebase là public for review; teams cần signed hoặc managed builds có thể contact us.
 
 Bạn không cần là power user để bắt đầu owning your AI work history. DataMoat cho phép bạn bắt đầu với một local archive nhỏ hôm nay, rồi thấy value của nó compound khi conversations, files, prompts và project context tăng lên.
 

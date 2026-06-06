@@ -21,11 +21,11 @@ Language: [English](./README.md) | [PortuguÃªs (Brasil)](./README.pt-BR.md) | [ç
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Export, back up, search, analyze, and reuse everything you build with ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw
+## Export, back up, analyze, search, and reuse everything you build with ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw
 
 Local encrypted backup archive for sessions, images, files/PDFs, and `SKILL.md` folders.
 
-> DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized layer for search, analysis, export, reuse, handoff, and private AI memory.
+> DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized layer for analysis, search, export, reuse, handoff, and private AI memory.
 >
 > **Your most valuable future AI data is already disappearing.**
 > Download DataMoat now to see how much ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw work history you can still capture.
@@ -43,7 +43,7 @@ DataMoat is an AI work history memory archive for people and teams working acros
 DataMoat keeps two layers:
 
 - **Raw archive:** original session JSONL, SQLite records, logs, attachments, metadata, skills folder snapshots, and any locally stored thinking tokens or reasoning blocks are preserved as close to the source format as possible.
-- **Normalized index:** records from different tools are converted into a common schema so you can search, review, export, analyze, reuse, and hand off work across tools.
+- **Normalized index:** records from different tools are converted into a common schema so you can analyze, search, review, export, reuse, and hand off work across tools.
 
 **Supported sources today:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local Cursor agent transcripts, DeepSeek and Qwen sessions when written locally by Claude Code GUI workflows, and supported local OpenClaw session records.
 **More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
@@ -334,7 +334,7 @@ DataMoat does not magically erase the original source files. Unless the user cho
 
 Installing DataMoat introduces a local watcher/importer process with access to selected AI record locations. In exchange, users get a searchable encrypted archive, recovery path, audit log, and portable backup instead of leaving important AI work scattered in unencrypted local files.
 
-Windows packages are currently unsigned manual builds while the signed installer is in progress. The codebase is public and source-available for review, and teams that require signed or managed builds can contact us.
+Windows packages are currently unsigned manual builds while the signed installer is in progress. The codebase is public for review, and teams that require signed or managed builds can contact us.
 
 You do not need to be a power user to start owning your AI work history. DataMoat lets you begin with a small local archive today, then watch its value compound as your conversations, files, prompts, and project context grow.
 
