@@ -78,7 +78,7 @@ DataMoat iki katman tutar:
 |---|---|---|
 | **macOS** | Bugün destekleniyor | Source install ve signed packaged DMG şu anda mevcut |
 | **Linux** | Bugün destekleniyor | Source install şu anda mevcut |
-| **Packaged macOS DMG** | [DMG indir](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-tr) (önerilir) | Desteklenen Mac'lerde Secure Enclave + Touch ID unlock içeren signed / notarized Apple Silicon DMG |
+| **Packaged macOS DMG** | [DMG indir](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) (önerilir) | Desteklenen Mac'lerde Secure Enclave + Touch ID unlock içeren signed / notarized Apple Silicon DMG |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Windows 11 x64 ve Windows 11 on Arm için unsigned manual packages; x64 GitHub Actions packaged runtime smoke geçti, ARM64 gerçek VM UI/background capture smoke geçti; signed installer hâlâ yapımda |
 
 ### Sources
@@ -145,15 +145,15 @@ Signed / notarized macOS DMG, Mac users için önerilen install path'tir. Source
 
 Release downloads:
 
-[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-tr)
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip?s=gh-tr)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip?s=gh-tr)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-win32-x64.zip)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-win32-arm64.zip)
 
 Her Windows ZIP, `DataMoat.exe` ve gerekli app files içerir. Windows package'i unzip edin, folder contents'i birlikte tutun ve `Install DataMoat.cmd` dosyasını bir kez çalıştırın. Bu, DataMoat'ı launch eder ve current Windows user için startup kaydeder; böylece tray/background app login veya restart sonrası geri gelir. Bu hâlâ portable ZIP package'tir, signed single-file installer değildir.
 
 ### AI-Assisted Install
 
-Mac users için önce signed ve notarized packaged DMG kullanın: [Download DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-tr). Kullanıcı açıkça source install istemedikçe veya packaged release mevcut değilse macOS'ta `git clone` ile başlamayın.
+Mac users için önce signed ve notarized packaged DMG kullanın: [Download DMG](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg). Kullanıcı açıkça source install istemedikçe veya packaged release mevcut değilse macOS'ta `git clone` ile başlamayın.
 
 Target desktop'a bakıyorken ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI veya OpenClaw'dan DataMoat'ı kurmasını isteyebilirsiniz.
 
