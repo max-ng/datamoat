@@ -87,7 +87,7 @@ DataMoat は対応する ChatGPT export ZIP ファイルまたは展開済み ex
 |---|---|---|
 | **macOS** | 現在対応 | Source install と署名済み packaged DMG が利用できます |
 | **Linux** | 現在対応 | Source install が利用できます |
-| **Packaged macOS DMG** | [DMG をダウンロード](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) (推奨) | Secure Enclave + Touch ID unlock に対応した、署名済み / notarized Apple Silicon DMG |
+| **Packaged macOS DMG** | [DMG をダウンロード](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-ja) (推奨) | Secure Enclave + Touch ID unlock に対応した、署名済み / notarized Apple Silicon DMG |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Windows 11 x64 と Windows 11 on Arm 向けの unsigned manual packages。x64 は GitHub Actions packaged runtime smoke 済み、ARM64 は実 VM UI/background capture smoke 済み。signed installer はまだ進行中 |
 
 ### Sources
@@ -154,15 +154,15 @@ flowchart TD
 
 Release downloads:
 
-[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-ja)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip?s=gh-ja)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip?s=gh-ja)
 
 各 Windows ZIP には `DataMoat.exe` と必要な app files が含まれます。Windows package を unzip し、folder contents を一緒に保ったまま、`Install DataMoat.cmd` を 1 回実行してください。これにより DataMoat が launch され、現在の Windows user 向けに startup が登録され、login または restart 後に tray/background app が戻ってきます。これはまだ portable ZIP package であり、signed single-file installer ではありません。
 
 ### AI-Assisted Install
 
-Mac users はまず署名済みかつ notarized の packaged DMG を使ってください: [Download DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)。ユーザーが明示的に source install を望む場合、または packaged release が利用できない場合を除き、macOS では `git clone` から始めないでください。
+Mac users はまず署名済みかつ notarized の packaged DMG を使ってください: [Download DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-ja)。ユーザーが明示的に source install を望む場合、または packaged release が利用できない場合を除き、macOS では `git clone` から始めないでください。
 
 target desktop を見ているとき、Claude CLI、Codex CLI、OpenClaw に DataMoat のインストールを依頼できます。
 

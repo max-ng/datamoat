@@ -98,7 +98,7 @@ Copy the DataMoat folder to another machine and restore across macOS, Windows, a
 |---|---|---|
 | **macOS** | Supported today | Source install and signed packaged DMG are available now |
 | **Linux** | Supported today | Source install available now |
-| **Packaged macOS DMG** | [Download DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
+| **Packaged macOS DMG** | [Download DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-en) (recommended) | Signed / notarized Apple Silicon DMG with Secure Enclave + Touch ID unlock on supported Macs |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Unsigned manual packages for Windows 11 x64 and Windows 11 on Arm; x64 has passed GitHub Actions packaged runtime smoke, ARM64 has passed real VM UI/background capture smoke; signed installer still in progress |
 
 ### Sources
@@ -166,15 +166,15 @@ The signed / notarized macOS DMG is the recommended install path for Mac users. 
 
 Release downloads:
 
-[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-en)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip?s=gh-en)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip?s=gh-en)
 
 Each Windows ZIP includes `DataMoat.exe` plus the required app files. Unzip the Windows package, keep the folder contents together, and run `Install DataMoat.cmd` once. That launches DataMoat and registers startup for the current Windows user so the tray/background app comes back after login or restart. This is still a portable ZIP package, not a signed single-file installer yet.
 
 ### AI-Assisted Install
 
-For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg). Do not start with `git clone` on macOS unless the user explicitly wants source install or the packaged release is unavailable.
+For Mac users, use the signed and notarized packaged DMG first: [Download DMG](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg?s=gh-en). Do not start with `git clone` on macOS unless the user explicitly wants source install or the packaged release is unavailable.
 
 You can ask Claude CLI, Codex CLI, or OpenClaw to install DataMoat when you are looking at the target desktop.
 
