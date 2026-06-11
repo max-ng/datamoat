@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "datamoat",
+  "description": "Back up, analyze, and reuse ChatGPT | Claude | Codex | Cursor | DeepSeek | Qwen | Openclaw data + skills + attachments locally",
+  "owner": {
+    "name": "max-ng",
+    "url": "https://github.com/max-ng"
+  },
+  "plugins": [
+    {
+      "name": "datamoat",
+      "description": "Back up, analyze, and reuse ChatGPT | Claude | Codex | Cursor | DeepSeek | Qwen | Openclaw data + skills + attachments locally",
+      "version": "2.0.7",
+      "author": {
+        "name": "max-ng",
+        "url": "https://github.com/max-ng"
+      },
+      "source": "./plugins/datamoat",
+      "category": "productivity",
+      "strict": false
+    }
+  ]
+}
