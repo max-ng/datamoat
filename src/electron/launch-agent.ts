@@ -51,6 +51,13 @@ function launchctl(args: string[]): void {
   child_process.execFileSync('launchctl', args, { stdio: 'ignore' })
 }
 
+function launchctlOutput(args: string[]): string {
+  return child_process.execFileSync('launchctl', args, {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+  })
+}
+
 function userDomain(): string {
   return `gui/${process.getuid?.() ?? os.userInfo().uid}`
 }
@@ -66,6 +73,19 @@ function launchAgentLoaded(): boolean {
   } catch {
     return false
   }
+}
+
+function launchAgentRunning(): boolean {
+  try {
+    const output = launchctlOutput(['print', serviceTarget()])
+    return /\n\s*state = running\b/.test(output) || /\n\s*pid = \d+\b/.test(output)
+  } catch {
+    return false
+  }
+}
+
+function kickstartLaunchAgent(): void {
+  launchctl(['kickstart', '-k', serviceTarget()])
 }
 
 function loadLaunchAgent(): void {
@@ -194,6 +214,7 @@ export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOption
     : null
   const changed = previous !== plist
   const launcherMode = options.remoteNoScreen ? 'remote-no-screen' : 'tray'
+  let kickstarted = false
 
   try {
     fs.mkdirSync(LAUNCH_AGENTS_DIR, { recursive: true })
@@ -209,12 +230,19 @@ export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOption
     } else if (!launchAgentLoaded()) {
       loadLaunchAgent()
     }
+    if (!launchAgentRunning()) {
+      kickstartLaunchAgent()
+      kickstarted = true
+    }
+    const running = launchAgentRunning()
     updateHealth('electron', {
       launchAtLogin: true,
       launchAgentLabel: PACKAGED_TRAY_LAUNCH_AGENT_LABEL_ACTIVE,
       launchAgentPath: PACKAGED_TRAY_LAUNCH_AGENT_PATH,
       launchAgentAppPath: appPath,
       launchAgentMode: launcherMode,
+      launchAgentRunning: running,
+      launchAgentKickstartedAt: kickstarted ? new Date().toISOString() : undefined,
       remoteNoScreen: options.remoteNoScreen === true,
       launchAgentUpdatedAt: changed ? new Date().toISOString() : undefined,
     })
@@ -225,6 +253,8 @@ export function ensurePackagedTrayLaunchAgent(options: PackagedLaunchAgentOption
       launcherMode,
       remoteNoScreen: options.remoteNoScreen === true,
       changed,
+      kickstarted,
+      running,
     })
   } catch (error) {
     updateHealth('electron', {

@@ -16,7 +16,7 @@ const WINDOWS_SECRET_DIR = path.join(STATE_DIR, 'windows-secrets')
 
 export const IS_MAC = platform() === 'darwin'
 const TOUCHID_HELPER_BUNDLE_EXECUTABLE = path.join('DataMoatTouchID.app', 'Contents', 'MacOS', 'DataMoatTouchID')
-const TOUCHID_DMG_ONLY_REASON = 'Touch ID + Secure Enclave is only available in the packaged DMG app.'
+const TOUCHID_DMG_ONLY_REASON = 'Touch ID requires DataMoat installed from the signed DMG.'
 const KEYCHAIN_UNAVAILABLE_REASON = 'macOS login keychain is unavailable'
 let cachedMacHelperSecretAccessIdentity: string | null | undefined
 
@@ -317,6 +317,13 @@ function resolveTouchIdHelperPath(): string {
   return bareCandidate
 }
 
+function resolveTouchIdHelperAppPath(): string | null {
+  const helperPath = resolveTouchIdHelperPath()
+  if (!helperPath || !fs.existsSync(helperPath)) return null
+  const appPath = path.resolve(helperPath, '..', '..', '..')
+  return appPath.endsWith('.app') && fs.existsSync(appPath) ? appPath : null
+}
+
 export function macHelperSecretAccessRequesterPath(): string | null {
   if (!IS_MAC) return null
   const helperPath = resolveTouchIdHelperPath()
@@ -354,6 +361,34 @@ export function macHelperSecretAccessRequesterIdentity(): string | null {
   return cachedMacHelperSecretAccessIdentity
 }
 
+function touchIdHelperPackagingProblem(): string | null {
+  const helperAppPath = resolveTouchIdHelperAppPath()
+  if (!helperAppPath) return 'Touch ID helper is missing from this app.'
+  if (!macHelperSecretAccessRequesterIdentity()) {
+    return 'Touch ID requires DataMoat installed from the signed DMG; this local app is ad-hoc signed.'
+  }
+
+  const entitlements = spawnSync('/usr/bin/codesign', ['-d', '--entitlements', ':-', helperAppPath], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: 3000,
+  })
+  const details = `${entitlements.stdout || ''}\n${entitlements.stderr || ''}`
+  if (
+    entitlements.status !== 0
+    || !details.includes('com.apple.application-identifier')
+    || !details.includes('keychain-access-groups')
+  ) {
+    return 'Touch ID helper is missing the signed Secure Enclave entitlements.'
+  }
+
+  const profilePath = path.join(helperAppPath, 'Contents', 'embedded.provisionprofile')
+  if (!fs.existsSync(profilePath)) {
+    return 'Touch ID helper is missing its embedded provisioning profile.'
+  }
+  return null
+}
+
 export async function secureEnclaveAvailable(): Promise<boolean> {
   return (await secureEnclaveStatus()).available
 }
@@ -362,6 +397,10 @@ export async function secureEnclaveStatus(): Promise<SecureEnclaveStatus> {
   if (!IS_MAC) return { available: false, reason: 'Touch ID requires macOS.' }
   if (detectInstallContext().mode !== 'packaged') {
     return { available: false, reason: TOUCHID_DMG_ONLY_REASON }
+  }
+  const packagingProblem = touchIdHelperPackagingProblem()
+  if (packagingProblem) {
+    return { available: false, reason: packagingProblem }
   }
   let lastError: unknown = null
   try {

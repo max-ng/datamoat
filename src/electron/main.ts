@@ -5,7 +5,7 @@ import * as path from 'path'
 import { diskRuntimeBuildId, currentRuntimeBuildId, ensureDaemonRunning, findDaemonPids, resolveActivePort, stopDaemonPids } from '../runtime'
 import { HEALTH_FILE, PUBLIC_STATUS_FILE } from '../config'
 import { isSetupDone } from '../auth'
-import { disableBootstrapCapture, enableBootstrapCapture, preflightBootstrapCaptureDetailed } from '../bootstrap-capture'
+import { disableBootstrapCapture, enableBootstrapCapture, isBootstrapCaptureEnabled, loadBootstrapCaptureState, preflightBootstrapCaptureDetailed } from '../bootstrap-capture'
 import { detectInstallContext } from '../install-context'
 import { installCrashHandlers, updateHealth, writeLog } from '../logging'
 import { applyInstallPreference, clearInstallChoice, detectDualInstallState, installChoiceMatchesState, saveInstallChoice, type DualInstallState, type InstallPreference } from '../packaged-handoff'
@@ -534,6 +534,7 @@ async function ensureDaemonRunningForRemoteNoScreenWithRetry(reason: string): Pr
       running: true,
       port: runtime.port,
       startedAt: new Date().toISOString(),
+      stoppedAt: null,
       trayOnly: true,
       daemonStartError: null,
       daemonStartFailedAt: null,
@@ -604,7 +605,17 @@ function ensureRemoteNoScreenAutostart(): void {
 }
 
 function ensurePackagedAutostart(remoteNoScreen: boolean): void {
-  const keepRemoteNoScreen = remoteNoScreen || !isSetupDone()
+  // Autostart mode must match how the app was actually launched. A normal
+  // interactive launch — even during first-run, before setup is complete — must
+  // install the plain tray login agent, never the remote-no-screen agent.
+  // Otherwise the RunAtLoad agent relaunches DataMoat headless with
+  // --datamoat-remote-no-screen, the single-instance lock hands the user's GUI
+  // click off to that no-screen instance, and the main window never appears.
+  // Only keep the no-screen agent when this launch is itself remote-no-screen
+  // or a genuine remote-no-screen pre-setup capture is already running.
+  const activeRemoteNoScreenCapture = isBootstrapCaptureEnabled()
+    && loadBootstrapCaptureState()?.requestedBy === 'remote-no-screen'
+  const keepRemoteNoScreen = remoteNoScreen || activeRemoteNoScreenCapture
   if (process.platform === 'darwin') {
     ensurePackagedTrayLaunchAgent({ remoteNoScreen: keepRemoteNoScreen })
   } else if (process.platform === 'win32') {
@@ -1861,6 +1872,8 @@ function createTray(): void {
   }
   updateHealth('electron', {
     trayCreatedAt: new Date().toISOString(),
+    running: true,
+    stoppedAt: null,
     trayVisible: true,
     trayBounds,
   })
@@ -2034,6 +2047,6 @@ if (rejectWindowsSystemLaunchIfNeeded()) {
   app.on('quit', () => {
     if (trayRefreshTimer) clearInterval(trayRefreshTimer)
     if (daemonWatchdogTimer) clearInterval(daemonWatchdogTimer)
-    updateHealth('electron', { running: false, stoppedAt: new Date().toISOString() })
+    updateHealth('electron', { running: false, trayVisible: false, stoppedAt: new Date().toISOString() })
   })
 }

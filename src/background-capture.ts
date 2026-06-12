@@ -1,6 +1,6 @@
 import * as crypto from 'crypto'
 import * as path from 'path'
-import { spawnSync } from 'child_process'
+import { spawn, spawnSync } from 'child_process'
 import {
   type AuthConfig,
   loadAuthConfig,
@@ -27,8 +27,11 @@ import { startWatchers } from './watcher'
 import { runParserReparseIfNeeded } from './parser-reparse'
 import { updateHealth, writeAuditEvent, writeLog } from './logging'
 import { ensureWindowsAutostart, isWindowsSystemContext, resolveWindowsStartupTarget } from './windows-autostart'
+import { launcherBinaryForScripts, launcherEnvForBackgroundWorker } from './runtime'
 
 const BACKGROUND_CAPTURE_SECRET_PREFIX = 'backgroundCaptureSecret'
+const PARSER_REPARSE_BACKGROUND_DELAY_MS = 15000
+let parserReparseScheduled = false
 
 export type StartBackgroundCaptureOptions = {
   parserReparse?: 'await' | 'background' | 'skip'
@@ -316,14 +319,64 @@ export async function ensureBackgroundCaptureSession(): Promise<string | null> {
 }
 
 function runParserReparseInBackground(reason: string): void {
-  void runParserReparseIfNeeded(reason).catch(error => {
-    writeLog('warn', 'parser-reparse', 'background_reparse_failed', { reason, error })
-    updateHealth('parser-reparse', {
-      running: false,
-      lastErrorAt: new Date().toISOString(),
-      lastError: error instanceof Error ? error.message : String(error),
-    })
+  if (parserReparseScheduled) return
+  parserReparseScheduled = true
+  updateHealth('parser-reparse', {
+    running: false,
+    scheduledAt: new Date().toISOString(),
+    scheduledReason: reason,
+    scheduledDelayMs: PARSER_REPARSE_BACKGROUND_DELAY_MS,
   })
+  setTimeout(() => {
+    parserReparseScheduled = false
+    const workerScript = path.join(__dirname, 'parser-reparse-worker.js')
+    const env = {
+      ...launcherEnvForBackgroundWorker('parser-reparse'),
+      DATAMOAT_PARSER_REPARSE_MAX_SESSIONS_PER_RUN: process.env.DATAMOAT_PARSER_REPARSE_MAX_SESSIONS_PER_RUN || '40',
+      DATAMOAT_PARSER_REPARSE_MAX_REPARSED_PER_RUN: process.env.DATAMOAT_PARSER_REPARSE_MAX_REPARSED_PER_RUN || '12',
+      DATAMOAT_PARSER_REPARSE_MAX_RUNTIME_MS: process.env.DATAMOAT_PARSER_REPARSE_MAX_RUNTIME_MS || '12000',
+    }
+    try {
+      const child = spawn(
+        launcherBinaryForScripts(),
+        [workerScript, `--reason=${reason}`],
+        {
+          stdio: 'ignore',
+          env,
+        },
+      )
+      updateHealth('parser-reparse', {
+        running: false,
+        workerPid: child.pid ?? null,
+        workerStartedAt: new Date().toISOString(),
+        workerReason: reason,
+        workerError: null,
+      })
+      child.once('error', error => {
+        writeLog('warn', 'parser-reparse', 'background_worker_spawn_failed', { reason, error })
+        updateHealth('parser-reparse', {
+          running: false,
+          workerErrorAt: new Date().toISOString(),
+          workerError: error instanceof Error ? error.message : String(error),
+        })
+      })
+      child.once('exit', (code, signal) => {
+        updateHealth('parser-reparse', {
+          running: false,
+          workerExitedAt: new Date().toISOString(),
+          workerExitCode: code,
+          workerExitSignal: signal,
+        })
+      })
+    } catch (error) {
+      writeLog('warn', 'parser-reparse', 'background_worker_start_failed', { reason, error })
+      updateHealth('parser-reparse', {
+        running: false,
+        lastErrorAt: new Date().toISOString(),
+        lastError: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }, PARSER_REPARSE_BACKGROUND_DELAY_MS)
 }
 
 export async function startBackgroundCapture(options: StartBackgroundCaptureOptions = {}): Promise<boolean> {

@@ -1434,6 +1434,7 @@ function prepareConversation(
     appVersion: `${manifestVersion ? `export-v${manifestVersion}` : 'export-unknown'} parser-v${CHATGPT_PARSER_VERSION}`,
     model,
     modelProvider: 'openai',
+    title: conversation.title || undefined,
     firstTimestamp,
     lastTimestamp,
     cwd: conversation.title || 'Untitled ChatGPT conversation',

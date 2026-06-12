@@ -14,12 +14,14 @@ export const SUPPORTED_UI_LANGUAGES: readonly { code: UiLanguageCode; label: str
 type UiPreferences = {
   schemaVersion: 1
   language: UiLanguageCode
+  readableMessageFormatting: boolean
   configured: boolean
 }
 
 const DEFAULT_PREFERENCES: UiPreferences = {
   schemaVersion: 1,
   language: 'en',
+  readableMessageFormatting: true,
   configured: false,
 }
 
@@ -129,6 +131,7 @@ export function readUiPreferences(): UiPreferences {
     return {
       schemaVersion: 1,
       language: normalizeUiLanguage(parsed.language),
+      readableMessageFormatting: parsed.readableMessageFormatting !== false,
       configured: true,
     }
   } catch {
@@ -136,17 +139,25 @@ export function readUiPreferences(): UiPreferences {
   }
 }
 
-export function saveUiPreferences(input: { language?: unknown }): UiPreferences {
+export function saveUiPreferences(input: { language?: unknown; readableMessageFormatting?: unknown }): UiPreferences {
+  const current = readUiPreferences()
   const preferences: UiPreferences = {
     schemaVersion: 1,
-    language: normalizeUiLanguage(input.language),
+    language: input.language === undefined ? current.language : normalizeUiLanguage(input.language),
+    readableMessageFormatting: input.readableMessageFormatting === undefined
+      ? current.readableMessageFormatting
+      : input.readableMessageFormatting !== false,
     configured: true,
   }
 
   fs.mkdirSync(STATE_DIR, { recursive: true })
   fs.writeFileSync(
     UI_PREFERENCES_FILE,
-    JSON.stringify({ schemaVersion: preferences.schemaVersion, language: preferences.language }, null, 2),
+    JSON.stringify({
+      schemaVersion: preferences.schemaVersion,
+      language: preferences.language,
+      readableMessageFormatting: preferences.readableMessageFormatting,
+    }, null, 2),
     { mode: 0o600 },
   )
   try {

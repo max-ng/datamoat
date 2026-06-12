@@ -18,6 +18,7 @@ import {
   writeAttachmentToWritable,
   readPublicStatus,
   setVaultSession,
+  saveSessions,
   encryptVaultFiles,
   encryptAttachmentFiles,
   encryptStateFiles,
@@ -40,9 +41,20 @@ import {
 } from '../auth'
 import { authConfigHasTouchId, shouldExposeTouchIdUnlock, touchIdFailureNeedsPasswordRefresh } from '../auth-options'
 import { IS_MAC, secureEnclaveStatus, backgroundCaptureSecretDelete } from '../keychain'
-import { updateHealth, writeAuditEvent, writeLog } from '../logging'
+import { safeError, updateHealth, writeAuditEvent, writeLog } from '../logging'
 import { scheduleVaultDuplicateMaintenance } from '../vault-maintenance'
+import {
+  appendAnnotationOps,
+  buildAnnotationOp,
+  foldAnnotationOps,
+  messageContentHash,
+  readAnnotationOps,
+  sessionAnchorForSession,
+} from '../annotations'
+import type { AnnotationAction, AnnotationKind, SessionAnnotationState } from '../annotations'
 import { BootstrapImportProgress, getWatcherStartupProgress, importBootstrapCaptureIntoVault, startWatchers, stopWatchers } from '../watcher'
+import { refreshSessionTitles, titleForSession } from '../session-titles'
+import { isClaudeSyntheticModel } from '../extractors/claude'
 import { ensureBackgroundCaptureConfigured, startBackgroundCapture, stopBackgroundCapture } from '../background-capture'
 import {
   createVaultSession,
@@ -108,6 +120,7 @@ import {
   readChatGptBranchMessages,
   runChatGptExportImport,
 } from '../chatgpt-export'
+import { cleanupAllSourceArchivePending } from '../source-archive'
 import {
   readUiPreferences,
   saveUiPreferences,
@@ -139,17 +152,54 @@ const OPEN_ATTACHMENT_EXTENSIONS: Record<string, string> = {
   'image/jpg': 'jpg',
   'image/gif': 'gif',
   'image/webp': 'webp',
+  'video/mp4': 'mp4',
+  'video/quicktime': 'mov',
+  'video/webm': 'webm',
   'application/pdf': 'pdf',
   'text/plain': 'txt',
   'text/html': 'html',
   'text/markdown': 'md',
   'text/csv': 'csv',
   'application/json': 'json',
+  'application/jsonl': 'jsonl',
+  'application/yaml': 'yaml',
+  'application/toml': 'toml',
+  'text/javascript': 'js',
+  'text/typescript': 'ts',
+  'text/x-python': 'py',
+  'text/x-ruby': 'rb',
+  'text/x-go': 'go',
+  'text/x-rust': 'rs',
+  'text/x-swift': 'swift',
+  'text/x-java-source': 'java',
+  'text/x-kotlin': 'kt',
+  'text/x-c': 'c',
+  'text/x-c++': 'cpp',
+  'text/x-csharp': 'cs',
+  'application/x-httpd-php': 'php',
+  'application/x-sh': 'sh',
+  'application/sql': 'sql',
+  'text/css': 'css',
+  'text/x-scss': 'scss',
+  'text/x-sass': 'sass',
+  'text/x-less': 'less',
+  'text/x-vue': 'vue',
+  'text/x-svelte': 'svelte',
+  'text/x-lua': 'lua',
+  'text/x-r': 'r',
+  'text/x-perl': 'pl',
+  'text/x-elixir': 'ex',
+  'text/x-erlang': 'erl',
+  'text/x-clojure': 'clj',
+  'text/x-scala': 'scala',
+  'text/x-dart': 'dart',
 }
 
 function attachmentExtension(mediaType: string): string {
   return OPEN_ATTACHMENT_EXTENSIONS[mediaType] || 'bin'
 }
+
+const LOCAL_OPEN_VIDEO_EXTENSIONS = new Set(['.mp4', '.m4v', '.mov', '.qt', '.webm'])
 
 function sanitizeAttachmentFileName(value: unknown, fallback: string): string {
   const name = typeof value === 'string' ? value.trim() : ''
@@ -159,6 +209,14 @@ function sanitizeAttachmentFileName(value: unknown, fallback: string): string {
     .slice(0, 120)
     .trim()
   return cleaned || fallback
+}
+
+function localVideoOpenPath(value: unknown): string | null {
+  const raw = typeof value === 'string' ? value.trim() : ''
+  if (!raw || !path.isAbsolute(raw)) return null
+  const resolved = path.resolve(raw)
+  const ext = path.extname(resolved).toLowerCase()
+  return LOCAL_OPEN_VIDEO_EXTENSIONS.has(ext) ? resolved : null
 }
 
 function openPathWithSystem(filePath: string): Promise<void> {
@@ -233,6 +291,7 @@ const SEARCH_MEMORY_CACHE_LIMIT = 16
 const SEARCH_MEMORY_CACHE_TTL_MS = 10 * 60 * 1000
 const SEARCH_SOURCE_FILTERS: Source[] = ['claude-cli', 'codex-cli', 'claude-app', 'openclaw', 'cursor', 'chatgpt-export']
 const BACKGROUND_CAPTURE_RETRY_THROTTLE_MS = 30000
+const SOURCE_ARCHIVE_PENDING_CLEANUP_DELAY_MS = 15000
 const CSRF_COOKIE = 'dm_csrf'
 const CSRF_HEADER = 'x-dm-csrf'
 const authAttempts = new Map<AuthMethod, AuthAttemptState>()
@@ -242,6 +301,7 @@ let pendingSetup: PendingSetupState | null = null
 let pendingSetupInit: Promise<SetupInitPayload> | null = null
 let backgroundCaptureRetryInFlight = false
 let lastBackgroundCaptureRetryAt = 0
+let sourceArchivePendingCleanupScheduled = false
 let touchIdRepairNeeded = false
 let touchIdRepairReason = ''
 let activeUiServer: http.Server | null = null
@@ -717,6 +777,7 @@ async function activateVault(
     skipBackgroundCaptureStart?: boolean
     skipWatcherStart?: boolean
     suppressCaptureWarning?: boolean
+    parserReparse?: 'await' | 'background' | 'skip'
     bootstrapImportProgress?: (progress: BootstrapImportProgress) => void
     setupProgress?: (progress: Partial<SetupActivationProgress>) => void
   } = {},
@@ -740,7 +801,7 @@ async function activateVault(
     running: true,
     phase: 'sealing',
     label: 'Creating encrypted vault',
-    detail: 'Setting up local-only encrypted storage on this Mac.',
+    detail: 'Setting up local-only encrypted storage on this Mac before importing protected records.',
     percent: 8,
   })
   setVaultSession(helperSessionId)
@@ -774,8 +835,8 @@ async function activateVault(
   }
   report({
     phase: 'sealing',
-    label: 'Sealing existing encrypted files',
-    detail: 'Migrating any previous vault, attachment, and state files into the current encrypted format.',
+    label: 'Preparing encrypted local records',
+    detail: 'Checking vault, attachment, and state files before moving pre-setup capture into the encrypted vault.',
     percent: 28,
   })
   writeLog('info', 'auth', 'activate_vault_step', { step: 'encrypt_vault_files_start' })
@@ -795,9 +856,9 @@ async function activateVault(
   }
   report({
     phase: 'importing',
-    label: bootstrapBeforeImport.entries > 0 ? 'Importing protected pre-setup capture' : 'Checking pre-setup capture',
+    label: bootstrapBeforeImport.entries > 0 ? 'Importing protected local records' : 'Checking protected local records',
     detail: bootstrapBeforeImport.entries > 0
-      ? 'Moving protected records into the encrypted vault.'
+      ? 'Writing pre-setup capture into the encrypted vault. Large local AI histories can take a few minutes.'
       : 'Checking protected records before opening.',
     percent: 42,
     totalFiles: bootstrapBeforeImport.entries,
@@ -847,7 +908,7 @@ async function activateVault(
       progressText: visibleSessions > 0 ? 'indexing' : 'scanning',
       stepText: visibleSessions > 0 ? 'Indexing sessions' : 'Scanning local records',
     })
-    backgroundStarted = await startBackgroundCapture({ parserReparse: 'skip' })
+    backgroundStarted = await startBackgroundCapture({ parserReparse: options.parserReparse ?? 'background' })
     writeLog('info', 'auth', 'activate_vault_step', { step: 'background_start_done', backgroundStarted })
   }
   if (!backgroundStarted && !options.skipWatcherStart) {
@@ -906,6 +967,7 @@ async function activateVault(
     lastScanSkipReason: 'vault_activation_immediate_backfill_disabled',
   })
   scheduleReferencedAttachmentBackfillAfterUnlock('unlock-idle')
+  scheduleSourceArchivePendingCleanup('unlock-idle')
   scheduleVaultDuplicateMaintenance('unlock-idle')
   updateHealth('daemon', {
     locked: false,
@@ -964,7 +1026,7 @@ async function restoreBackgroundCaptureAfterRecoveryReset(
       })
     }
 
-    const backgroundStarted = captureSessionPresent || await startBackgroundCapture({ parserReparse: 'skip' })
+    const backgroundStarted = captureSessionPresent || await startBackgroundCapture({ parserReparse: 'background' })
     updateHealth('capture', {
       configured: backgroundConfigured,
       running: backgroundStarted,
@@ -1016,6 +1078,40 @@ function activationResponse(
   return { ...base, ...extras }
 }
 
+async function restartBootstrapWatchersAfterSetupFailure(reason: string): Promise<void> {
+  if (isSetupDone()) return
+  const summary = bootstrapCaptureSummary()
+  if (!summary.enabled) return
+
+  try {
+    await startWatchers('bootstrap')
+    updateHealth('daemon', {
+      bootstrapCapture: true,
+      bootstrapCaptureRequestedBy: summary.requestedBy,
+      bootstrapCaptureStartedAt: summary.createdAt,
+      bootstrapWatcherRunning: true,
+      lastBootstrapWatcherRestartAt: new Date().toISOString(),
+      lastBootstrapWatcherRestartReason: reason,
+    })
+    updateHealth('capture', {
+      configured: false,
+      running: false,
+      bootstrapCapture: true,
+    })
+    writeAuditEvent('setup', 'bootstrap_watchers_restarted_after_setup_failure', {
+      reason,
+      entries: summary.entries,
+    })
+  } catch (error) {
+    writeLog('warn', 'setup', 'bootstrap_watchers_restart_after_failure_failed', { reason, error })
+    updateHealth('daemon', {
+      bootstrapWatcherRunning: false,
+      lastBootstrapWatcherRestartErrorAt: new Date().toISOString(),
+      lastBootstrapWatcherRestartError: error instanceof Error ? error.message : String(error),
+    })
+  }
+}
+
 async function activateVaultForSetup(
   helperSessionId: string,
   bootstrapImportProgress?: (progress: BootstrapImportProgress) => void,
@@ -1023,6 +1119,7 @@ async function activateVaultForSetup(
 ): Promise<Awaited<ReturnType<typeof activateVault>>> {
   return activateVault(helperSessionId, {
     suppressCaptureWarning: true,
+    parserReparse: 'skip',
     bootstrapImportProgress,
     setupProgress,
   })
@@ -1045,7 +1142,7 @@ async function retryBackgroundCaptureForActiveVault(reason: string): Promise<voi
       forceReconfigure: true,
       reason,
     })
-    const backgroundStarted = await startBackgroundCapture({ parserReparse: 'skip' })
+    const backgroundStarted = await startBackgroundCapture({ parserReparse: 'background' })
     updateHealth('capture', {
       configured: backgroundConfigured,
       running: backgroundStarted,
@@ -1074,6 +1171,58 @@ async function retryBackgroundCaptureForActiveVault(reason: string): Promise<voi
   } finally {
     backgroundCaptureRetryInFlight = false
   }
+}
+
+function scheduleSourceArchivePendingCleanup(reason: string): void {
+  if (sourceArchivePendingCleanupScheduled) return
+  sourceArchivePendingCleanupScheduled = true
+  setTimeout(() => {
+    const sessionId = getVaultSessionId()
+    if (!sessionId) {
+      sourceArchivePendingCleanupScheduled = false
+      return
+    }
+    cleanupAllSourceArchivePending(sessionId)
+      .then(result => {
+        updateHealth('raw-archive', {
+          pendingCleanupRunning: false,
+          pendingCleanupReason: reason,
+          pendingCleanupCompletedAt: new Date().toISOString(),
+          pendingFiles: result.pendingFiles,
+          mergedPendingFiles: result.mergedPendingFiles,
+          skippedPendingFiles: result.skippedPendingFiles,
+          missingChunks: result.missingChunks,
+          malformedPendingFiles: result.malformedPendingFiles,
+          errors: result.errors.length,
+        })
+        writeAuditEvent('raw-archive', 'pending_cleanup_completed', {
+          reason,
+          pendingFiles: result.pendingFiles,
+          mergedPendingFiles: result.mergedPendingFiles,
+          skippedPendingFiles: result.skippedPendingFiles,
+          missingChunks: result.missingChunks,
+          malformedPendingFiles: result.malformedPendingFiles,
+          errors: result.errors.length,
+        })
+      })
+      .catch(error => {
+        updateHealth('raw-archive', {
+          pendingCleanupRunning: false,
+          pendingCleanupReason: reason,
+          pendingCleanupFailedAt: new Date().toISOString(),
+          error: error instanceof Error ? error.message : String(error),
+        })
+        writeLog('warn', 'raw-archive', 'pending_cleanup_failed', { reason, error })
+      })
+      .finally(() => {
+        sourceArchivePendingCleanupScheduled = false
+      })
+  }, SOURCE_ARCHIVE_PENDING_CLEANUP_DELAY_MS)
+  updateHealth('raw-archive', {
+    pendingCleanupRunning: true,
+    pendingCleanupReason: reason,
+    pendingCleanupScheduledAt: new Date().toISOString(),
+  })
 }
 
 async function sendJson(res: Response, status: number, payload: unknown): Promise<void> {
@@ -1388,6 +1537,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         "style-src 'self' 'unsafe-inline'",
         "font-src 'self' data:",
         "img-src 'self' data: blob:",
+        "media-src 'self'",
         `connect-src 'self' http://${host}`,
         "object-src 'none'",
         "base-uri 'self'",
@@ -1429,7 +1579,10 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
   app.post('/api/preferences', (req, res) => {
     res.json({
-      ...saveUiPreferences({ language: req.body?.language }),
+      ...saveUiPreferences({
+        language: req.body?.language,
+        readableMessageFormatting: req.body?.readableMessageFormatting,
+      }),
       supportedLanguages: SUPPORTED_UI_LANGUAGES,
     })
   })
@@ -1560,6 +1713,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     const wantsPassword = !!pendingSetup.passwordEnabled
     const wantsTouchId = !!pendingSetup.touchIdEnabled
     let helperSessionId: string | null = null
+    let touchIdSetupWarning: string | null = null
 
     try {
       const touchIdStatus = await secureEnclaveStatus()
@@ -1586,7 +1740,23 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         authRecord.passwordWrappedVaultKey = wrapped.blob
         authRecord.passwordWrapSalt = wrapped.salt
       }
-      if (wantsTouchId) authRecord.touchIdWrappedVaultKey = await wrapAndVerifyTouchIdForSession(helperSessionId)
+      if (wantsTouchId) {
+        try {
+          authRecord.touchIdWrappedVaultKey = await wrapAndVerifyTouchIdForSession(helperSessionId)
+        } catch (error) {
+          if (!wantsPassword) throw error
+          const message = error instanceof Error ? error.message : String(error)
+          touchIdSetupWarning = 'Touch ID could not be enabled right now. Your master password and recovery phrase are active; you can enable Touch ID later from DataMoat.'
+          authRecord.touchIdEnabled = false
+          writeLog('warn', 'setup', 'touchid_setup_fallback_to_password', { error: message })
+          updateHealth('auth', {
+            touchIdEnabled: false,
+            touchIdSetupSkippedAt: new Date().toISOString(),
+            lastTouchIdSetupError: message,
+          })
+          writeAuditEvent('setup', 'touchid_setup_fallback_to_password')
+        }
+      }
 
       const mnemonicWrapped = await wrapSecretForSession(helperSessionId, normalizeMnemonic(pendingSetup.mnemonic))
       authRecord.mnemonicWrappedVaultKey = mnemonicWrapped.blob
@@ -1616,23 +1786,24 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       const activation = await activateVaultForSetup(helperSessionId, progress => {
         const total = progress.totalFiles
         const imported = progress.importedFiles
+        const messageCount = Math.max(0, Number(progress.importedMessages || 0))
         const pct = total > 0
           ? Math.max(42, Math.min(58, 42 + (imported / total) * 16))
           : 48
         updateSetupActivationProgress({
           running: !progress.done,
           phase: 'importing',
-          label: total > 0 ? 'Importing protected pre-setup capture' : 'Checking pre-setup capture',
+          label: total > 0 ? 'Importing protected local records' : 'Checking protected local records',
           detail: total > 0
-            ? 'Moving protected records into the encrypted vault.'
+            ? `Writing ${imported}/${total} protected files into the encrypted vault${messageCount > 0 ? ` (${messageCount} messages so far).` : '.'}`
             : 'Checking protected records before opening.',
           percent: pct,
           importedFiles: progress.importedFiles,
           totalFiles: progress.totalFiles,
           importedMessages: progress.importedMessages,
           progressUnit: 'pre-setup records',
-          progressText: undefined,
-          stepText: undefined,
+          progressText: total > 0 ? `${imported}/${total}` : undefined,
+          stepText: total > 0 ? 'Importing records' : 'Checking records',
           processedSessions: 0,
           totalSessions: 0,
           discoveredSessions: 0,
@@ -1666,14 +1837,15 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         ...authRecord,
         setupComplete: true,
       })
-      issueSession(res, wantsTouchId ? 'touchid' : 'password')
+      issueSession(res, authRecord.touchIdEnabled ? 'touchid' : 'password')
       writeAuditEvent('setup', 'setup_activated', {
         passwordEnabled: wantsPassword,
-        touchIdEnabled: wantsTouchId,
+        touchIdRequested: wantsTouchId,
+        touchIdEnabled: !!authRecord.touchIdEnabled,
         totpEnrolled: !!pendingSetup.totpEnrolled,
       })
       pendingSetup = null
-      res.json(activationResponse(activation))
+      res.json(activationResponse(activation, touchIdSetupWarning ? { captureWarning: touchIdSetupWarning } : {}))
     } catch (error) {
       updateSetupActivationProgress({
         running: false,
@@ -1698,6 +1870,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         await backgroundCaptureSecretDelete()
       }
       deleteAuthConfig()
+      await restartBootstrapWatchersAfterSetupFailure('setup_activate_failed')
       res.status(500).json({ error: 'Could not activate vault' })
     }
   })
@@ -1714,23 +1887,26 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   })
 
   app.get('/api/auth/options', async (_req, res) => {
+    if (!isSetupDone()) return res.status(404).json({ error: 'config missing' })
     const config = loadAuthConfig()
     if (!config) return res.status(404).json({ error: 'config missing' })
     const installMode = detectInstallContext().mode
     const touchIdConfigured = shouldExposeTouchIdUnlock(config, installMode, false)
-    let touchIdRefreshRequired = !!config.touchIdRefreshRequired
-    if (touchIdConfigured && !touchIdRefreshRequired) {
+    const touchIdRefreshRequired = !!config.touchIdRefreshRequired
+    let touchIdAvailableNow = touchIdConfigured && !touchIdRefreshRequired
+    if (touchIdAvailableNow) {
+      // Only OFFER Touch ID when the Secure Enclave can respond right now. A
+      // transient unavailability (cold helper, biometry busy) hides the button
+      // for this load only — it must NOT be persisted to auth.json, or one slow
+      // check would permanently force the password-refresh screen on every
+      // reopen. Genuine Secure Enclave key corruption is still caught at unwrap
+      // time and persisted via markTouchIdRepairNeeded().
       const touchIdStatus = await secureEnclaveStatus()
-      touchIdRefreshRequired = !touchIdStatus.available
-      if (touchIdRefreshRequired) {
-        config.touchIdRefreshRequired = true
-        config.touchIdRefreshRequiredAt = new Date().toISOString()
-        saveAuthConfig(config)
-      }
+      touchIdAvailableNow = touchIdStatus.available
     }
     res.json({
       passwordEnabled: !!(config.passwordEnabled ?? config.passwordHash),
-      touchIdEnabled: touchIdConfigured && !touchIdRefreshRequired,
+      touchIdEnabled: touchIdAvailableNow,
       touchIdRefreshRequired,
       totpEnrolled: !!config.totpEnrolled,
     })
@@ -2065,8 +2241,128 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
   app.get('/api/sessions', requireAuth, async (_req, res) => {
     await retryBackgroundCaptureForActiveVault('sessions_auto_retry')
-    const sessions = await loadSessions()
+    const sessions = await loadSessionsWithTitleRefresh()
     res.json(await normalizeSessionsForUI(sessions))
+  })
+
+  // ---- Annotations (bookmarks / votes) -------------------------------------
+  // Sessions carry only a bookmark; messages carry bookmark + vote. State is a
+  // fold of the per-anchor op log (see src/annotations.ts).
+
+  app.get('/api/annotations/summary', requireAuth, async (_req, res) => {
+    const sessions = await loadSessions()
+    const byAnchor = new Map<string, Session>()
+    for (const session of sessions) {
+      const { anchor } = sessionAnchorForSession(session)
+      if (!byAnchor.has(anchor)) byAnchor.set(anchor, session)
+    }
+    const sessionsOut: Record<string, { bookmark: boolean; labels: string[] }> = {}
+    const messagesOut: Array<{
+      sessionUid: string
+      uuid: string
+      bookmark: boolean
+      vote: 'up' | 'down' | null
+      messageIndex: number
+      role: string
+      timestamp: string
+      snippet: string
+    }> = []
+    for (const [anchor, session] of byAnchor) {
+      let folded: SessionAnnotationState
+      try {
+        const ops = await readAnnotationOps(anchor)
+        if (ops.length === 0) continue
+        folded = foldAnnotationOps(ops)
+        const sessionUid = session.uid || session.id
+        const messageKeys = Object.keys(folded.messages)
+        if (messageKeys.length > 0) {
+          // Resolve message-level annotations against the parsed transcript so
+          // entries carry an index + snippet for direct jumps from the list.
+          const parsed = await readSessionMessages(session)
+          const uuids = new Set(parsed.map(message => String(message.id)))
+          if (messageKeys.some(key => !uuids.has(key))) {
+            const contentHashes = new Map<string, string>()
+            for (const message of parsed) contentHashes.set(messageContentHash(message), String(message.id))
+            folded = foldAnnotationOps(ops, { uuids, contentHashes })
+          }
+          const indexByUuid = new Map<string, number>()
+          parsed.forEach((message, index) => indexByUuid.set(String(message.id), index))
+          for (const [uuid, state] of Object.entries(folded.messages)) {
+            const index = indexByUuid.get(uuid)
+            if (index === undefined) continue
+            const message = parsed[index]
+            messagesOut.push({
+              sessionUid,
+              uuid,
+              bookmark: state.bookmark,
+              vote: state.vote,
+              messageIndex: index,
+              role: message.role,
+              timestamp: message.timestamp,
+              snippet: annotationSnippet(message),
+            })
+          }
+        }
+        if (folded.bookmark || folded.labels.length > 0) {
+          sessionsOut[sessionUid] = { bookmark: folded.bookmark, labels: folded.labels }
+        }
+      } catch (error) {
+        writeLog('warn', 'annotations', 'summary_anchor_failed', { anchor, error: safeError(error) })
+      }
+    }
+    messagesOut.sort((a, b) => (Date.parse(b.timestamp) || 0) - (Date.parse(a.timestamp) || 0))
+    res.json({ sessions: sessionsOut, messages: messagesOut })
+  })
+
+  app.get('/api/session/:id/annotations', requireAuth, async (req, res) => {
+    const sessions = await loadSessions()
+    const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
+    if (!session) return res.status(404).json({ error: 'not found' })
+    res.json(await foldSessionAnnotationsForUI(session))
+  })
+
+  app.post('/api/session/:id/annotate', requireAuth, async (req, res) => {
+    const sessions = await loadSessions()
+    const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
+    if (!session) return res.status(404).json({ error: 'not found' })
+
+    const { scope, messageUuid, kind, action, value } = req.body as {
+      scope?: string; messageUuid?: string; kind?: string; action?: string; value?: unknown
+    }
+    if (scope !== 'session' && scope !== 'message') return res.status(400).json({ error: 'invalid scope' })
+    if (action !== 'set' && action !== 'clear') return res.status(400).json({ error: 'invalid action' })
+    // Sessions only support bookmark; messages support bookmark + vote.
+    if (scope === 'session' && kind !== 'bookmark') return res.status(400).json({ error: 'sessions only support bookmark' })
+    if (scope === 'message' && kind !== 'bookmark' && kind !== 'vote') return res.status(400).json({ error: 'invalid kind' })
+    if (kind === 'vote' && action === 'set' && value !== 'up' && value !== 'down') {
+      return res.status(400).json({ error: 'vote value must be up or down' })
+    }
+
+    let message: Message | undefined
+    if (scope === 'message') {
+      if (typeof messageUuid !== 'string' || !messageUuid.trim()) return res.status(400).json({ error: 'messageUuid required' })
+      const parsed = await readSessionMessages(session)
+      message = parsed.find(item => String(item.id) === messageUuid)
+      if (!message) return res.status(404).json({ error: 'message not found' })
+    }
+
+    const op = buildAnnotationOp({
+      session,
+      scope,
+      message,
+      kind: kind as AnnotationKind,
+      action: action as AnnotationAction,
+      value: kind === 'bookmark' ? (action === 'set' ? true : undefined) : (action === 'set' ? value : undefined),
+    })
+    const { anchor } = sessionAnchorForSession(session)
+    await appendAnnotationOps(anchor, [op])
+    writeAuditEvent('annotations', 'annotation_saved', {
+      scope,
+      kind,
+      action,
+      session: String(session.id || session.uid).slice(0, 8),
+    })
+    res.json(await foldSessionAnnotationsForUI(session))
   })
 
   app.get('/api/skills-backup', requireAuth, async (_req, res) => {
@@ -2090,7 +2386,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   })
 
   app.get('/api/session/:id', requireAuth, async (req, res) => {
-    const sessions = await loadSessions()
+    const sessions = await loadSessionsWithTitleRefresh()
     const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
     if (!session) return res.status(404).json({ error: 'not found' })
     const offset = positiveIntQuery(req.query.offset)
@@ -2106,6 +2402,27 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       limit,
       nextOffset: limit > 0 ? offset + messages.length : messages.length,
       hasMore: limit > 0 && offset + messages.length < totalMessages,
+    })
+  })
+
+  app.get('/api/session/:id/context', requireAuth, async (req, res) => {
+    const sessions = await loadSessions()
+    const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
+    if (!session) return res.status(404).json({ error: 'not found' })
+    const totalMessages = Math.max(0, Number(session.messageCount || 0))
+    const requestedThrough = positiveIntQuery(req.query.through)
+    const throughIndex = totalMessages > 0
+      ? Math.min(requestedThrough, totalMessages - 1)
+      : requestedThrough
+    const limit = throughIndex + 1
+    const messages = limit > 0
+      ? await readMessagesForUI(session, { offset: 0, limit })
+      : []
+    res.json({
+      session: normalizeSessionForUI(session, messages),
+      throughIndex,
+      messageCount: messages.length,
+      text: formatContextPackForClipboard(session, messages, throughIndex),
     })
   })
 
@@ -2357,6 +2674,21 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     }
   })
 
+  app.post('/api/local-video/open', requireAuth, async (req, res) => {
+    try {
+      const filePath = localVideoOpenPath(req.body?.path)
+      if (!filePath) return res.status(400).json({ error: 'video path is not supported' })
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'video file was not found' })
+      const stat = fs.statSync(filePath)
+      if (!stat.isFile()) return res.status(400).json({ error: 'video path is not a file' })
+      await openPathWithSystem(filePath)
+      res.json({ ok: true })
+    } catch (error) {
+      writeLog('warn', 'attachment', 'local_video_open_failed', { error })
+      res.status(500).json({ error: 'video could not be opened' })
+    }
+  })
+
   app.get('/api/status', requireAuth, async (_req, res) => {
     await retryBackgroundCaptureForActiveVault('status_auto_retry')
     const sessions = await loadSessions()
@@ -2441,6 +2773,15 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   })
 
   app.post('/api/transfer/export/open-folder', requireAuth, async (_req, res) => {
+    const sessions = await loadSessions()
+    const status = await transferExportStatus({ sessionCount: sessions.length })
+    if (!status.manifest || status.status === 'checking' || status.status === 'cannot transfer yet') {
+      return res.json({
+        ok: false,
+        path: status.root,
+        error: 'Check the DataMoat folder first, then open it for copying.',
+      })
+    }
     res.json(await openTransferFolder())
   })
 
@@ -2725,16 +3066,132 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   return { port, url: `http://localhost:${port}` }
 }
 
+function annotationSnippet(message: Message): string {
+  for (const block of message.content || []) {
+    if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+      return block.text.trim().replace(/\s+/g, ' ').slice(0, 96)
+    }
+    if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim()) {
+      return block.thinking.trim().replace(/\s+/g, ' ').slice(0, 96)
+    }
+    if (block.type === 'tool_use' && block.name) return `tool call: ${block.name}`
+    if (block.type === 'tool_result') return 'tool output'
+  }
+  return `${message.role} message`
+}
+
+async function foldSessionAnnotationsForUI(session: Session): Promise<{
+  bookmark: boolean
+  labels: string[]
+  messages: Record<string, { bookmark: boolean; vote: 'up' | 'down' | null; labels: string[] }>
+  orphanCount: number
+}> {
+  const { anchor } = sessionAnchorForSession(session)
+  const ops = await readAnnotationOps(anchor)
+  if (ops.length === 0) return { bookmark: false, labels: [], messages: {}, orphanCount: 0 }
+  let folded = foldAnnotationOps(ops)
+  const messageKeys = Object.keys(folded.messages)
+  if (messageKeys.length > 0) {
+    const parsed = await readSessionMessages(session)
+    const uuids = new Set(parsed.map(message => String(message.id)))
+    if (messageKeys.some(key => !uuids.has(key))) {
+      const contentHashes = new Map<string, string>()
+      for (const message of parsed) contentHashes.set(messageContentHash(message), String(message.id))
+      folded = foldAnnotationOps(ops, { uuids, contentHashes })
+    }
+  }
+  return folded
+}
+
 async function normalizeSessionsForUI(sessions: Session[]): Promise<Session[]> {
   return sessions.map(session => normalizeSessionForUI(session))
 }
 
 function normalizeSessionForUI(session: Session, messages?: Message[]): Session {
+  const title = titleForSession(session) || session.title
+  const model = usableDisplayModel(session.model)
+    || modelFromMessages(messages)
+    || fallbackDisplayModel(session)
   return {
     ...session,
+    title,
+    model,
     cwd: normalizeClaudeAppCwdForUI(session),
     hasThinking: session.hasThinking || (messages ? messages.some(messageHasThinkingBlock) : false),
   }
+}
+
+async function loadSessionsWithTitleRefresh(): Promise<Session[]> {
+  const sessions = await loadSessions()
+  const refreshed = refreshSessionTitles(sessions)
+  const repaired = await refreshClaudeSessionModels(refreshed.sessions)
+  if (refreshed.changed || repaired.changed) {
+    await saveSessions(repaired.sessions)
+  }
+  return repaired.sessions
+}
+
+function usableDisplayModel(model: string | undefined): string | undefined {
+  const value = typeof model === 'string' ? model.trim() : ''
+  if (!value || value === 'unknown' || isClaudeSyntheticModel(value)) return undefined
+  return value
+}
+
+function modelFromMessages(messages: Message[] | undefined): string | undefined {
+  if (!messages) return undefined
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const model = usableDisplayModel(messages[index]?.model)
+    if (model) return model
+  }
+  return undefined
+}
+
+function fallbackDisplayModel(session: Session): string {
+  if (session.source === 'claude-cli' || session.source === 'claude-app') return 'Claude'
+  if (session.source === 'codex-cli') return 'Codex'
+  if (session.source === 'cursor') return 'Cursor'
+  if (session.source === 'chatgpt-export') return 'ChatGPT'
+  if (session.source === 'openclaw') return 'OpenClaw'
+  return session.source
+}
+
+function shouldRepairClaudeSessionModel(session: Session): boolean {
+  if (session.source !== 'claude-cli' && session.source !== 'claude-app') return false
+  return !usableDisplayModel(session.model)
+}
+
+async function findModelInSessionMessages(session: Session): Promise<string | undefined> {
+  const total = Math.max(0, Number(session.messageCount || 0))
+  const tailLimit = 200
+  const tailOffset = Math.max(0, total - tailLimit)
+  const tail = await readSessionMessagesPage(session, tailOffset, tailLimit)
+  const tailModel = modelFromMessages(tail)
+  if (tailModel || tailOffset === 0) return tailModel
+  return modelFromMessages(await readSessionMessages(session))
+}
+
+async function refreshClaudeSessionModels(sessions: Session[]): Promise<{ sessions: Session[]; changed: boolean }> {
+  let changed = false
+  const next: Session[] = []
+  for (const session of sessions) {
+    if (!shouldRepairClaudeSessionModel(session)) {
+      next.push(session)
+      continue
+    }
+    let model: string | undefined
+    try {
+      model = await findModelInSessionMessages(session)
+    } catch {
+      model = undefined
+    }
+    if (model && model !== session.model) {
+      changed = true
+      next.push({ ...session, model })
+    } else {
+      next.push(session)
+    }
+  }
+  return { sessions: next, changed }
 }
 
 type ReadMessagesForUIOptions = {
@@ -2770,6 +3227,110 @@ type SearchMatcher = {
 }
 
 const searchMemoryCache = new Map<string, SearchMemoryCacheEntry>()
+
+function contextJson(value: unknown): string {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
+  } catch {
+    return String(value)
+  }
+}
+
+function contextFence(info: string, text: string): string {
+  const body = String(text ?? '')
+  let fence = '```'
+  while (body.includes(fence)) fence += '`'
+  return `${fence}${info ? info : ''}\n${body}\n${fence}`
+}
+
+function contextMetaLine(label: string, value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  if (Array.isArray(value) && value.length === 0) return null
+  if (typeof value === 'object' && Object.keys(value as Record<string, unknown>).length === 0) return null
+  return `- ${label}: ${contextJson(value).replace(/\n/g, ' ')}`
+}
+
+function formatContextBlock(block: Message['content'][number], index: number): string {
+  const label = `block ${index + 1}`
+  if (block.type === 'text') return block.text ? String(block.text) : ''
+  if (block.type === 'thinking') {
+    if (!block.thinking || !String(block.thinking).trim()) return ''
+    return [
+      `### ${label}: captured thinking`,
+      contextFence('thinking', String(block.thinking)),
+    ].join('\n')
+  }
+  if (block.type === 'tool_use') {
+    return [
+      `### ${label}: tool call ${block.name ? `(${block.name})` : ''}`,
+      contextFence('json', contextJson(block.input ?? block.text ?? block.content ?? '')),
+    ].join('\n')
+  }
+  if (block.type === 'tool_result') {
+    const refs = Array.isArray(block.attachmentIds) && block.attachmentIds.length
+      ? `\n\nattachments: ${block.attachmentIds.join(', ')}`
+      : ''
+    return [
+      `### ${label}: tool result ${block.name ? `(${block.name})` : ''}`,
+      contextFence('', contextJson(block.text ?? block.content ?? '')),
+      refs.trim(),
+    ].filter(Boolean).join('\n')
+  }
+  if (block.type === 'image') {
+    return `[image attachment: ${block.attachmentName || block.attachmentId || 'pre-capture image'}${block.mediaType ? `, ${block.mediaType}` : ''}]`
+  }
+  if (block.type === 'file') {
+    return `[file attachment: ${block.attachmentName || block.attachmentId || 'pre-capture file'}${block.mediaType ? `, ${block.mediaType}` : ''}]`
+  }
+  return contextFence('json', contextJson(block.content ?? block.text ?? block))
+}
+
+function formatContextMessage(message: Message, index: number): string {
+  const meta = [
+    contextMetaLine('timestamp', message.timestamp),
+    contextMetaLine('model', message.model),
+    contextMetaLine('source_event_type', message.sourceEventType),
+    contextMetaLine('app_version', message.appVersion),
+    contextMetaLine('stop_reason', message.stopReason),
+    contextMetaLine('duration_ms', message.durationMs),
+    contextMetaLine('cost_usd', message.cost),
+    contextMetaLine('usage', message.usage),
+    contextMetaLine('permission_mode', message.permissionMode),
+    contextMetaLine('raw_ref', message.rawRef),
+  ].filter(Boolean)
+  const blocks = (message.content || [])
+    .map((block, blockIndex) => formatContextBlock(block, blockIndex))
+    .filter(block => block.trim())
+  return [
+    `## ${index + 1}. ${message.role}`,
+    meta.length ? meta.join('\n') : '',
+    blocks.join('\n\n'),
+  ].filter(Boolean).join('\n\n')
+}
+
+function formatContextPackForClipboard(session: Session, messages: Message[], throughIndex: number): string {
+  const title = titleForSession(session) || session.title || session.cwd || session.id
+  const header = [
+    '# DataMoat vault-native context pack',
+    '',
+    'Generated from captured encrypted vault records, not from visible browser selection or the rendered DOM.',
+    'DataMoat can only include information that was present in the local captured records or imported backup.',
+    '',
+    '## Session',
+    `- source: ${session.source}`,
+    `- session_uid: ${session.uid}`,
+    `- title_or_cwd: ${title}`,
+    `- model: ${session.model}`,
+    `- app_version: ${session.appVersion}`,
+    `- original_path: ${session.originalPath}`,
+    `- exported_messages: ${messages.length}`,
+    `- through_message_index: ${throughIndex}`,
+    '',
+  ]
+  return `${header.join('\n')}${messages.map(formatContextMessage).join('\n\n')}\n`
+}
 
 async function readMessagesForUI(session: Session, options: ReadMessagesForUIOptions = {}): Promise<Message[]> {
   const limit = typeof options.limit === 'number' ? Math.max(0, Math.floor(options.limit)) : 0
@@ -2970,22 +3531,37 @@ async function searchSessionsForUI(
 
 function searchSessionLanes(sessions: Session[], concurrency: number): SearchSessionJob[][] {
   const workerCount = Math.max(1, Math.min(Math.floor(concurrency), sessions.length || 1))
+  const jobs = interleavedSearchSessionJobs(sessions)
   if (sessions.length <= workerCount) {
-    return sessions.map((session, order) => [{ session, order }])
+    return jobs.map(job => [job])
   }
-  const laneSize = Math.ceil(sessions.length / workerCount)
-  return Array.from({ length: workerCount }, (_unused, lane) => {
-    const start = lane * laneSize
-    const end = Math.min(sessions.length - 1, start + laneSize - 1)
-    const jobs: SearchSessionJob[] = []
-    for (let offset = 0; start + offset <= end - offset; offset += 1) {
-      const left = start + offset
-      const right = end - offset
-      jobs.push({ session: sessions[left], order: left })
-      if (right !== left) jobs.push({ session: sessions[right], order: right })
+  const lanes: SearchSessionJob[][] = Array.from({ length: workerCount }, () => [])
+  jobs.forEach((job, index) => {
+    lanes[index % workerCount].push(job)
+  })
+  return lanes.filter(lane => lane.length > 0)
+}
+
+function interleavedSearchSessionJobs(sessions: Session[]): SearchSessionJob[] {
+  const buckets = new Map<Source, SearchSessionJob[]>()
+  sessions.forEach((session, order) => {
+    const list = buckets.get(session.source) || []
+    list.push({ session, order })
+    buckets.set(session.source, list)
+  })
+  const sources = SEARCH_SOURCE_FILTERS.filter(source => buckets.has(source))
+  const jobs: SearchSessionJob[] = []
+  let added = true
+  while (added) {
+    added = false
+    for (const source of sources) {
+      const job = buckets.get(source)?.shift()
+      if (!job) continue
+      jobs.push(job)
+      added = true
     }
-    return jobs
-  }).filter(lane => lane.length > 0)
+  }
+  return jobs
 }
 
 async function findSearchHitForUI(
@@ -3095,7 +3671,8 @@ function findSearchHitsInMessage(msg: Message, matcher: SearchMatcher): Array<Om
   const hits: Array<Omit<SearchResultForUI, 'id' | 'messageIndex' | 'messageId'>> = []
   for (let blockIndex = 0; blockIndex < msg.content.length; blockIndex += 1) {
     const block = msg.content[blockIndex]
-    const text = block.text || block.thinking || stringifySearchableBlock(block)
+    const text = searchableBlockDisplayText(block)
+    if (!text) continue
     hits.push(...searchHitsFromText(text, matcher, blockIndex))
   }
   return hits
@@ -3388,7 +3965,11 @@ function visibleMessageText(message: Message): string {
 }
 
 function messageHasThinkingBlock(message: Message): boolean {
-  return Array.isArray(message.content) && message.content.some(block => block.type === 'thinking')
+  return Array.isArray(message.content) && message.content.some(block =>
+    block.type === 'thinking'
+    && typeof block.thinking === 'string'
+    && block.thinking.trim().length > 0
+  )
 }
 
 async function backfillThinkingMessagesForUI(session: Session, messages: Message[]): Promise<Message[]> {
@@ -3449,7 +4030,7 @@ function extractThinkingMessageFromRawRecord(source: Source, raw: unknown): Mess
 
 function thinkingMessageSignature(message: Message): string {
   const thinking = message.content
-    .filter(block => block.type === 'thinking')
+    .filter(block => block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim())
     .map(block => block.thinking || '')
   return JSON.stringify({
     timestamp: message.timestamp,
@@ -3482,19 +4063,30 @@ function normalizeClaudeAppCwdForUI(session: Session): string {
   }
 }
 
-function stringifySearchableBlock(block: Message['content'][number]): string {
-  const parts = [
-    block.name,
-    typeof block.input === 'string' ? block.input : safeJson(block.input),
-    typeof block.content === 'string' ? block.content : safeJson(block.content),
-  ].filter(Boolean)
-  return parts.join('\n')
+function searchableBlockDisplayText(block: Message['content'][number]): string {
+  if (block.type === 'text') return block.text || ''
+  if (block.type === 'thinking') return block.thinking || ''
+  if (block.type === 'tool_use') return prettySearchValue(block.input ?? block.text ?? '')
+  if (block.type === 'tool_result') return prettySearchValue(block.text ?? block.content ?? '')
+  if (block.type === 'other') return prettySearchValue(block.content ?? block.text ?? '')
+  if (block.type === 'file') return block.attachmentName || block.mediaType || ''
+  return ''
 }
 
 function safeJson(value: unknown): string {
   if (value === undefined || value === null) return ''
   try {
     return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function prettySearchValue(value: unknown): string {
+  if (value === undefined || value === null) return ''
+  if (typeof value === 'string') return value
+  try {
+    return JSON.stringify(value, null, 2)
   } catch {
     return String(value)
   }
@@ -3543,13 +4135,22 @@ function setupPageHTML(): string {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg: #0b0f14; --surface: rgba(15,22,31,0.94); --surface-2: #111a24; --border: #223041;
-    --accent: #f2b24d; --accent2: #2bc46d; --text: #e8edf3;
+    --accent: #74b6a5; --accent2: #8abf9b; --text: #e8edf3;
     --muted: #8d98a8; --danger: #f05d54; --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace; --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  }
+  @keyframes dmSetupPulse {
+    0% { box-shadow: 0 0 0 0 rgba(116,182,165,0.28); }
+    42% { box-shadow: 0 0 0 4px rgba(116,182,165,0.14); }
+    100% { box-shadow: 0 0 0 0 rgba(116,182,165,0); }
+  }
+  @keyframes dmSetupNudge {
+    0%, 100% { transform: translateX(0); }
+    38% { transform: translateX(4px); }
   }
   html, body {
     height: 100%;
     background:
-      radial-gradient(circle at top, rgba(50,198,133,0.08), transparent 28%),
+      radial-gradient(circle at top, rgba(116,182,165,0.08), transparent 28%),
       radial-gradient(circle at 18% 8%, rgba(242,178,77,0.08), transparent 26%),
       linear-gradient(180deg, #0b0f14 0%, #0f141c 100%);
     color: var(--text);
@@ -3564,7 +4165,7 @@ function setupPageHTML(): string {
     padding: 14px 16px;
     overflow: hidden;
   }
-  .logo { font-family: var(--mono); font-size: 11px; letter-spacing: 4px; color: #23c6a9; text-transform: uppercase; margin-bottom: 14px; }
+  .logo { font-family: var(--mono); font-size: 11px; letter-spacing: 4px; color: #74b6a5; text-transform: uppercase; margin-bottom: 14px; }
   .logo span { color: var(--muted); }
   .language-row {
     width: 100%;
@@ -3595,7 +4196,7 @@ function setupPageHTML(): string {
     cursor: pointer;
   }
   .language-btn.active {
-    background: #53d7d2;
+    background: #74b6a5;
     color: #071112;
   }
   .card {
@@ -3613,6 +4214,33 @@ function setupPageHTML(): string {
   .card-header { padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,0.07); display: flex; align-items: center; gap: 12px; }
   .card-header h1 { font-size: 18px; font-weight: 500; letter-spacing: 0; }
   .step-badge { background: rgba(242,178,77,0.14); color: var(--accent); font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 5px 10px; border-radius: 999px; letter-spacing: 1px; border: 1px solid rgba(242,178,77,0.28); }
+  .setup-status-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 42px;
+    padding: 10px 20px;
+    border-bottom: 1px solid rgba(116,182,165,0.14);
+    background: rgba(116,182,165,0.07);
+    color: rgba(255,255,255,0.68);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .setup-status-strip.dm-react {
+    animation: dmSetupPulse 760ms ease-out;
+  }
+  .setup-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 4px rgba(116,182,165,0.10);
+    flex: 0 0 auto;
+  }
+  .setup-status-strip strong {
+    color: var(--accent);
+    font-weight: 650;
+  }
   .card-body {
     flex: 1 1 auto;
     min-height: 0;
@@ -3636,12 +4264,15 @@ function setupPageHTML(): string {
   .word-text { font-size: 12px; color: var(--accent); font-weight: 500; }
   .warning-box { background: rgba(240,93,84,0.08); border: 1px solid rgba(240,93,84,0.28); border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.6; color: #f4b0aa; }
   .warning-box strong { color: var(--danger); }
-  .info-box { background: rgba(43,196,109,0.08); border: 1px solid rgba(43,196,109,0.24); border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.6; color: #aee0bd; }
+  .info-box { background: rgba(116,182,165,0.08); border: 1px solid rgba(116,182,165,0.24); border-radius: 12px; padding: 12px 14px; font-size: 12px; line-height: 1.6; color: #8abf9b; }
   .info-box strong { color: #6fe39a; }
   .bootstrap-capture-box {
     border-color: rgba(0,214,186,0.42);
-    background: linear-gradient(180deg, rgba(0,214,186,0.13), rgba(43,196,109,0.08));
+    background: linear-gradient(180deg, rgba(116,182,165,0.13), rgba(116,182,165,0.08));
     color: #c9f5ea;
+  }
+  .bootstrap-capture-box.dm-react {
+    animation: dmSetupNudge 680ms ease-out, dmSetupPulse 760ms ease-out;
   }
   .bootstrap-capture-box strong {
     display: block;
@@ -3670,7 +4301,7 @@ function setupPageHTML(): string {
   .btn[data-off="1"] { opacity: 0.35; cursor: not-allowed; }
   .btn-primary { background: var(--accent); color: #111; font-weight: 600; box-shadow: 0 12px 30px rgba(242,178,77,0.16); }
   .btn-primary:hover:not([data-off="1"]) { opacity: 0.92; transform: translateY(-1px); }
-  .btn-success { background: var(--accent2); color: #08110d; font-weight: 600; box-shadow: 0 12px 30px rgba(43,196,109,0.16); }
+  .btn-success { background: var(--accent2); color: #08110d; font-weight: 600; box-shadow: 0 12px 30px rgba(116,182,165,0.16); }
   .btn-success:hover:not([data-off="1"]) { opacity: 0.92; transform: translateY(-1px); }
   .btn-ghost { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.22); color: #edf2f7; font-size: 11px; letter-spacing: 0.04em; }
   .btn-ghost:hover { border-color: rgba(255,255,255,0.48); color: #fff; }
@@ -3718,7 +4349,7 @@ function setupPageHTML(): string {
     font-size: 20px;
     font-weight: 750;
     letter-spacing: 0;
-    color: #0f9d76;
+    color: #74b6a5;
     text-transform: none;
   }
   .activate-subtitle {
@@ -3749,11 +4380,11 @@ function setupPageHTML(): string {
     color: rgba(255,255,255,0.86);
   }
   .activate-rail-item.active .activate-rail-dot {
-    background: #0f9d76;
-    box-shadow: 0 0 0 5px rgba(15,157,118,0.14);
+    background: #74b6a5;
+    box-shadow: 0 0 0 5px rgba(116,182,165,0.14);
   }
   .activate-rail-item.done .activate-rail-dot {
-    background: #2ea043;
+    background: #8abf9b;
   }
   .activate-main {
     min-width: 0;
@@ -3790,7 +4421,7 @@ function setupPageHTML(): string {
   }
   .activate-percent {
     flex: 0 0 auto;
-    color: #0f9d76;
+    color: #74b6a5;
     font-size: 22px;
     font-weight: 650;
     letter-spacing: 0;
@@ -3807,7 +4438,7 @@ function setupPageHTML(): string {
   .progress-fill {
     height: 100%;
     width: 0%;
-    background: #0f9d76;
+    background: #74b6a5;
     border-radius: 999px;
     transition: width linear;
     box-shadow: none;
@@ -3828,7 +4459,7 @@ function setupPageHTML(): string {
     overflow-wrap: anywhere;
     transition: color 0.5s;
   }
-  .activate-label.bright { color: #0f9d76; }
+  .activate-label.bright { color: #74b6a5; }
   .activate-detail {
     min-height: 40px;
     font-size: 13px;
@@ -3851,14 +4482,14 @@ function setupPageHTML(): string {
     font-size: 12px;
   }
   .activate-pill strong {
-    color: #0f9d76;
+    color: #74b6a5;
   }
   .activate-done {
     position: absolute;
     right: 24px;
     bottom: 22px;
     font-size: 18px;
-    color: #0f9d76;
+    color: #74b6a5;
     opacity: 0;
     transition: opacity 0.6s;
   }
@@ -3906,10 +4537,10 @@ function setupPageHTML(): string {
     background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));
   }
   .transfer-setup-card {
-    border: 1px solid rgba(43,196,109,0.22);
+    border: 1px solid rgba(116,182,165,0.22);
     border-radius: 14px;
     padding: 14px;
-    background: linear-gradient(180deg, rgba(43,196,109,0.10), rgba(255,255,255,0.02));
+    background: linear-gradient(180deg, rgba(116,182,165,0.10), rgba(255,255,255,0.02));
     display: grid;
     gap: 10px;
   }
@@ -3935,10 +4566,10 @@ function setupPageHTML(): string {
     letter-spacing: 1px;
     text-transform: uppercase;
     color: var(--accent2);
-    border: 1px solid rgba(43,196,109,0.36);
+    border: 1px solid rgba(116,182,165,0.36);
     border-radius: 999px;
     padding: 5px 9px;
-    background: rgba(43,196,109,0.12);
+    background: rgba(116,182,165,0.12);
   }
   .transfer-setup-copy { color: #b7c5d3; font-size: 12px; line-height: 1.55; }
   .transfer-setup-fields { display: grid; gap: 8px; }
@@ -3976,6 +4607,11 @@ function setupPageHTML(): string {
   }
   .transfer-auth-pane[hidden] { display: none; }
   .method-card:hover:not(.disabled) { transform: translateY(-1px); }
+  .method-card.dm-react,
+  .transfer-setup-card.dm-react,
+  .transfer-setup-entry.dm-react {
+    animation: dmSetupPulse 760ms ease-out;
+  }
   .method-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
   .method-body { flex: 1; }
   .method-card.selected.password {
@@ -3985,8 +4621,8 @@ function setupPageHTML(): string {
   }
   .method-card.selected.touchid {
     border-color: var(--accent2);
-    box-shadow: 0 0 0 1px rgba(63,185,80,0.25), 0 0 24px rgba(63,185,80,0.08);
-    background: linear-gradient(180deg, rgba(63,185,80,0.12), rgba(63,185,80,0.04));
+    box-shadow: 0 0 0 1px rgba(138,191,155,0.25), 0 0 24px rgba(138,191,155,0.08);
+    background: linear-gradient(180deg, rgba(138,191,155,0.12), rgba(138,191,155,0.04));
   }
   .method-card.disabled { opacity: 0.35; cursor: not-allowed; }
   .method-card.locked { cursor: default; }
@@ -4028,8 +4664,8 @@ function setupPageHTML(): string {
     text-transform: uppercase;
     color: var(--muted);
   }
-  .method-switch.password.enabled .method-switch-track { border-color: rgba(43,196,109,0.48); background: rgba(43,196,109,0.22); }
-  .method-switch.touchid.enabled .method-switch-track { border-color: rgba(43,196,109,0.48); background: rgba(43,196,109,0.22); }
+  .method-switch.password.enabled .method-switch-track { border-color: rgba(111,227,154,0.62); background: rgba(111,227,154,0.26); }
+  .method-switch.touchid.enabled .method-switch-track { border-color: rgba(111,227,154,0.62); background: rgba(111,227,154,0.26); }
   .method-switch.enabled .method-switch-thumb { transform: translateX(24px); }
   .method-switch.password.enabled .method-switch-label { color: var(--accent2); }
   .method-switch.touchid.enabled .method-switch-label { color: var(--accent2); }
@@ -4096,7 +4732,7 @@ function setupPageHTML(): string {
     font-weight: 650;
     letter-spacing: 0;
     text-transform: none;
-    color: #0f9d76;
+    color: #74b6a5;
   }
   .logo span,
   .activate-logo span {
@@ -4159,16 +4795,16 @@ function setupPageHTML(): string {
   .word-text,
   .secret-box,
   .totp-input {
-    color: #0f9d76;
+    color: #74b6a5;
   }
   .step-badge,
   .step-tab.active {
-    border-color: rgba(15,157,118,0.36);
-    background: rgba(15,157,118,0.14);
+    border-color: rgba(116,182,165,0.36);
+    background: rgba(116,182,165,0.14);
   }
   .step-tab.done {
-    color: #2ea043;
-    border-bottom-color: #2ea043;
+    color: #8abf9b;
+    border-bottom-color: #8abf9b;
   }
   .language-switch {
     background: #202020;
@@ -4178,7 +4814,7 @@ function setupPageHTML(): string {
     color: rgba(255,255,255,0.64);
   }
   .language-btn.active {
-    background: rgba(15,157,118,0.18);
+    background: rgba(116,182,165,0.18);
     color: rgba(255,255,255,0.88);
   }
   .card-header,
@@ -4195,7 +4831,7 @@ function setupPageHTML(): string {
   }
   .pw-input:focus,
   .totp-input:focus {
-    border-color: rgba(15,157,118,0.58);
+    border-color: rgba(116,182,165,0.58);
   }
   .btn {
     font-family: var(--sans);
@@ -4205,8 +4841,8 @@ function setupPageHTML(): string {
   }
   .btn-primary,
   .btn-success {
-    background: rgba(15,157,118,0.18);
-    border: 1px solid rgba(15,157,118,0.38);
+    background: rgba(116,182,165,0.18);
+    border: 1px solid rgba(116,182,165,0.38);
     color: rgba(255,255,255,0.88);
     box-shadow: none;
   }
@@ -4217,8 +4853,8 @@ function setupPageHTML(): string {
     color: rgba(255,255,255,0.78);
   }
   .transfer-auth-tab.active {
-    border-color: rgba(15,157,118,0.4);
-    background: rgba(15,157,118,0.15);
+    border-color: rgba(116,182,165,0.4);
+    background: rgba(116,182,165,0.15);
     color: rgba(255,255,255,0.88);
   }
   .warning-box {
@@ -4231,35 +4867,35 @@ function setupPageHTML(): string {
   .info-box,
   .bootstrap-capture-box,
   .transfer-setup-card {
-    background: rgba(15,157,118,0.12);
-    border-color: rgba(15,157,118,0.28);
+    background: rgba(116,182,165,0.12);
+    border-color: rgba(116,182,165,0.28);
     color: rgba(255,255,255,0.78);
   }
   .method-card.selected.password,
   .method-card.selected.touchid {
-    border-color: rgba(15,157,118,0.42);
-    background: rgba(15,157,118,0.12);
-    box-shadow: inset 0 0 0 1px rgba(15,157,118,0.08);
+    border-color: rgba(116,182,165,0.42);
+    background: rgba(116,182,165,0.12);
+    box-shadow: inset 0 0 0 1px rgba(116,182,165,0.08);
   }
   .method-switch.password.enabled .method-switch-track,
   .method-switch.touchid.enabled .method-switch-track {
-    border-color: rgba(15,157,118,0.48);
-    background: rgba(15,157,118,0.22);
+    border-color: rgba(111,227,154,0.62);
+    background: rgba(111,227,154,0.26);
   }
   .method-switch.password.enabled .method-switch-label,
   .method-switch.touchid.enabled .method-switch-label,
   .activate-label.bright,
   .activate-percent,
   .activate-done {
-    color: #0f9d76;
+    color: #6fe39a;
   }
   .method-switch.locked .method-switch-label {
-    color: #0f9d76;
-    border-color: rgba(15,157,118,0.28);
-    background: rgba(15,157,118,0.12);
+    color: #74b6a5;
+    border-color: rgba(116,182,165,0.28);
+    background: rgba(116,182,165,0.12);
   }
   .progress-fill {
-    background: #0f9d76;
+    background: #74b6a5;
     box-shadow: none;
   }
   strong { color: rgba(255,255,255,0.88); font-weight: 650; }
@@ -4272,6 +4908,10 @@ function setupPageHTML(): string {
   <div class="card-header">
     <div class="step-badge" id="step-badge">STEP 1 / 4</div>
     <h1 id="card-title">Choose unlock methods</h1>
+  </div>
+  <div class="setup-status-strip" id="setup-status-strip">
+    <span class="setup-status-dot" aria-hidden="true"></span>
+    <span><strong id="setup-status-title">Local setup active</strong> <span id="setup-status-detail">Choose unlock and recovery on this desktop.</span></span>
   </div>
   <div class="setup-banner-row" id="bootstrap-capture-banner" style="display:none;">
     <div class="info-box bootstrap-capture-box" id="bootstrap-capture-copy">
@@ -4587,6 +5227,16 @@ function renderMnemonicLoading() {
   grid.innerHTML = '<div class="word-cell" style="grid-column: span 4; justify-content: center; color: var(--muted); font-size: 11px;">' + esc(setupTr('generating')) + '</div>';
 }
 
+function dmSetupReact(element, className = 'dm-react', duration = 760) {
+  if (!element) return;
+  element.classList.remove(className);
+  void element.offsetWidth;
+  element.classList.add(className);
+  window.setTimeout(() => {
+    if (element.isConnected) element.classList.remove(className);
+  }, duration);
+}
+
 let _setupInitAttempt = 0;
 let _setupInitRetryTimer = null;
 let _setupInitRunning = false;
@@ -4616,8 +5266,14 @@ function renderBootstrapCaptureBanner(summary) {
   const detail = files > 0
     ? String(files) + setupTr('captureFiles')
     : setupTr('captureWaiting');
+  const previousDetail = copy.dataset.captureDetail || '';
   banner.style.display = '';
   copy.innerHTML = '<strong>' + esc(remoteNoScreen ? setupTr('noScreenTitle') : setupTr('captureTitle')) + '</strong><span>' + esc(detail) + '</span>';
+  if (detail !== previousDetail) {
+    copy.dataset.captureDetail = detail;
+    dmSetupReact(copy);
+    dmSetupReact(document.getElementById('setup-status-strip'));
+  }
 }
 
 function startBootstrapCaptureRefresh(initialSummary) {
@@ -4707,6 +5363,8 @@ const setupText = {
     captureTitle: 'Capture-before-setup is running',
     captureFiles: ' files are already protected before setup. Finish setup here to import them into the vault.',
     captureWaiting: 'Capture is armed and waiting for supported local records before setup. Finish setup on this desktop.',
+    setupStatusTitle: 'Local setup active',
+    setupStatusDetail: 'Choose unlock and recovery on this desktop.',
     chooseOne: 'Choose at least one unlock method.',
     enterPassword: 'Enter a password or turn off password unlock.',
     passwordRules: 'Password must include 8+ chars, uppercase, lowercase, and a number.',
@@ -4787,6 +5445,8 @@ const setupText = {
     captureTitle: '设置前捕获正在运行',
     captureFiles: ' 个文件已在设置前受保护。请在这里完成设置并导入保险库。',
     captureWaiting: '捕获已准备好，等待设置前的本机记录。请在这台电脑完成设置。',
+    setupStatusTitle: '本机设置已启动',
+    setupStatusDetail: '请在这台电脑上完成解锁与恢复设置。',
     chooseOne: '请至少选择一个解锁方式。',
     enterPassword: '请输入密码，或关闭密码解锁。',
     passwordRules: '密码必须有 8+ 字符、大写、小写和数字。',
@@ -4867,6 +5527,8 @@ const setupText = {
     captureTitle: 'セットアップ前キャプチャ実行中',
     captureFiles: ' 件のファイルはセットアップ前に保護済みです。ここでセットアップを完了し vault に取り込みます。',
     captureWaiting: 'キャプチャは準備済みです。セットアップ前のローカル記録を待っています。この端末でセットアップを完了してください。',
+    setupStatusTitle: 'ローカルセットアップ実行中',
+    setupStatusDetail: 'この端末で解除方法と復旧方法を設定します。',
     chooseOne: '解除方法を少なくとも1つ選択してください。',
     enterPassword: 'パスワードを入力するか、パスワード解除をオフにしてください。',
     passwordRules: 'パスワードには8文字以上、大文字、小文字、数字が必要です。',
@@ -4940,6 +5602,8 @@ function applySetupLanguage() {
     btn.classList.toggle('active', btn.dataset.language === setupLanguage);
   });
   setupSetText('setup-logo-text', 'logo');
+  setupSetText('setup-status-title', 'setupStatusTitle');
+  setupSetText('setup-status-detail', 'setupStatusDetail');
   setupSetText('tab1', 'tab1');
   setupSetText('tab2', 'tab2');
   setupSetText('tab3', 'tab3');
@@ -5383,7 +6047,7 @@ async function init() {
     scheduleTouchIdRefresh();
   } catch (error) {
     scheduleMnemonicInitRetry(error);
-    setTouchIdAvailability(false, '', true);
+    setTouchIdAvailability(false, '', false);
     renderMethodCards();
   } finally {
     _setupInitRunning = false;
@@ -5518,6 +6182,7 @@ function toggleMethod(kind) {
   if (kind === 'password') _passwordEnabled = !_passwordEnabled;
   else _touchIdEnabled = !_touchIdEnabled;
   renderMethodCards();
+  dmSetupReact(document.getElementById(kind === 'password' ? 'method-password' : 'method-touchid'));
   updatePwUI();
 }
 
@@ -5539,10 +6204,10 @@ function pwScore(p) {
 function updatePwUI() {
   const p = pwInput.value, c = pwConfirm.value;
   const score = pwScore(p);
-  const colors = ['#f85149','#f85149','#e8a020','#e8a020','#3fb950','#3fb950'];
+  const colors = ['#f85149','#f85149','#e8a020','#e8a020','#8abf9b','#8abf9b'];
   const bar = document.getElementById('pw-strength');
   bar.style.width = (score * 20) + '%';
-  bar.style.background = colors[score] || '#3fb950';
+  bar.style.background = colors[score] || '#8abf9b';
   // Show missing requirements
   const reqs = [];
   if (p.length < 8) reqs.push('8+ chars');
@@ -5597,6 +6262,7 @@ function setStep(n) {
   document.getElementById('step-badge').textContent = setupTr('stepBadge') + n + setupTr('of') + TOTAL;
   const titles = ['step1', 'step2', 'step3', 'step4'];
   document.getElementById('card-title').textContent = setupTr(titles[n-1]);
+  dmSetupReact(document.getElementById('setup-status-strip'));
 }
 
 function validateStep1(showErrors) {
@@ -5903,12 +6569,17 @@ function unlockPageHTML(): string {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg: #07090d; --surface: #0d1117; --border: #1e2530;
-    --accent: #e8a020; --accent2: #3fb950; --text: #c9d1d9;
+    --accent: #74b6a5; --accent2: #8abf9b; --text: #c9d1d9;
     --muted: #586069; --danger: #f85149; --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+  }
+  @keyframes dmUnlockPulse {
+    0% { box-shadow: 0 0 0 0 rgba(116,182,165,0.28); }
+    42% { box-shadow: 0 0 0 4px rgba(116,182,165,0.14); }
+    100% { box-shadow: 0 0 0 0 rgba(116,182,165,0); }
   }
   html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); }
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
-  .logo { font-size: 11px; letter-spacing: 4px; color: #00c8a0; text-transform: uppercase; margin-bottom: 40px; }
+  .logo { font-size: 11px; letter-spacing: 4px; color: #74b6a5; text-transform: uppercase; margin-bottom: 40px; }
   .logo span { color: var(--muted); }
   .language-switch {
     display: inline-flex;
@@ -5933,12 +6604,20 @@ function unlockPageHTML(): string {
     cursor: pointer;
   }
   .language-btn.active {
-    background: #53d7d2;
+    background: #74b6a5;
     color: #071112;
   }
   .lock-icon { font-size: 40px; margin-bottom: 20px; filter: grayscale(0.3); animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 0.7; } 50% { opacity: 1; } }
-  .card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .card { width: 100%; max-width: 380px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; transition: border-color 0.16s ease, background 0.16s ease; }
+  .card.dm-unlock-success {
+    border-color: rgba(116,182,165,0.46);
+    background: #101817;
+    animation: dmUnlockPulse 760ms ease-out;
+  }
+  .card.dm-unlock-error {
+    border-color: rgba(248,81,73,0.46);
+  }
   .card-header { padding: 20px 24px; border-bottom: 1px solid var(--border); }
   .card-header h1 { font-size: 14px; font-weight: 500; letter-spacing: 1px; }
   .card-header p { font-size: 11px; color: var(--muted); margin-top: 6px; }
@@ -5989,7 +6668,7 @@ function unlockPageHTML(): string {
     display: flex; align-items: center; justify-content: center; gap: 12px;
     transition: background 0.15s, box-shadow 0.15s;
   }
-  .btn-touchid:hover { background: rgba(63,185,80,0.07); box-shadow: 0 0 16px rgba(63,185,80,0.15); }
+  .btn-touchid:hover { background: rgba(116,182,165,0.07); box-shadow: 0 0 16px rgba(116,182,165,0.15); }
   .btn-touchid.waiting { opacity: 0.7; cursor: default; }
   .btn-touchid svg { flex-shrink: 0; }
   .method-note { font-size: 10px; color: var(--muted); line-height: 1.6; text-align: center; margin-top: 8px; }
@@ -6014,7 +6693,7 @@ function unlockPageHTML(): string {
     font-weight: 650;
     letter-spacing: 0;
     text-transform: none;
-    color: #0f9d76;
+    color: #74b6a5;
     margin-bottom: 22px;
   }
   .logo span {
@@ -6049,7 +6728,7 @@ function unlockPageHTML(): string {
     color: rgba(255,255,255,0.64);
   }
   .language-btn.active {
-    background: rgba(15,157,118,0.18);
+    background: rgba(116,182,165,0.18);
     color: rgba(255,255,255,0.88);
   }
   .lock-icon {
@@ -6058,10 +6737,10 @@ function unlockPageHTML(): string {
     display: grid;
     place-items: center;
     margin-bottom: 18px;
-    border: 1px solid rgba(15,157,118,0.3);
+    border: 1px solid rgba(116,182,165,0.3);
     border-radius: 8px;
-    background: rgba(15,157,118,0.12);
-    color: #0f9d76;
+    background: rgba(116,182,165,0.12);
+    color: #74b6a5;
     font-size: 0;
     filter: none;
     animation: none;
@@ -6109,21 +6788,21 @@ function unlockPageHTML(): string {
   .pw-input:focus,
   .totp-big:focus,
   .recovery-input:focus {
-    border-color: rgba(15,157,118,0.58);
+    border-color: rgba(116,182,165,0.58);
   }
   .btn {
     border-radius: 6px;
   }
   .btn-primary,
   .btn-touchid {
-    background: rgba(15,157,118,0.18);
-    border: 1px solid rgba(15,157,118,0.38);
+    background: rgba(116,182,165,0.18);
+    border: 1px solid rgba(116,182,165,0.38);
     color: rgba(255,255,255,0.88);
   }
   .btn-primary:hover:not(:disabled),
   .btn-touchid:hover {
     opacity: 1;
-    background: rgba(15,157,118,0.23);
+    background: rgba(116,182,165,0.23);
     box-shadow: none;
   }
   .error-msg {
@@ -6234,7 +6913,7 @@ const unlockText = {
     sub: 'Use a local unlock method',
     touchButton: 'Touch ID + Secure Enclave',
     touchHint: 'Click the Touch ID button when you want to unlock with Touch ID. If authenticator login is enabled, you will enter the 6-digit code after Touch ID.',
-    touchAutoHint: 'Touch ID opens automatically when this screen appears. You can also click the Touch ID button again or use your password.',
+    touchAutoHint: 'Click the Touch ID button when you want to unlock with Touch ID. You can also use your password.',
     orPassword: 'or use password',
     passwordLabel: 'Master password',
     passwordPlaceholder: 'Enter your password',
@@ -6263,7 +6942,7 @@ const unlockText = {
     sub: '使用本机解锁方式',
     touchButton: 'Touch ID + Secure Enclave',
     touchHint: '需要用 Touch ID 解锁时，请点击 Touch ID 按钮。如果已启用验证器登录，Touch ID 之后还需要输入 6 位数验证码。',
-    touchAutoHint: '打开此页面时会自动弹出 Touch ID。你也可以再次点击 Touch ID 按钮，或改用密码。',
+    touchAutoHint: '需要用 Touch ID 解锁时，请点击 Touch ID 按钮。你也可以改用密码。',
     orPassword: '或使用密码',
     passwordLabel: '主密码',
     passwordPlaceholder: '输入你的密码',
@@ -6292,7 +6971,7 @@ const unlockText = {
     sub: 'ローカル解除方法を使用',
     touchButton: 'Touch ID + Secure Enclave',
     touchHint: 'Touch ID で解除する時はボタンをクリックしてください。認証アプリログインが有効な場合、Touch ID 後に6桁コードを入力します。',
-    touchAutoHint: 'この画面を開くと Touch ID が自動で表示されます。ボタンを再クリックするか、パスワードも使えます。',
+    touchAutoHint: 'Touch ID で解除する時はボタンをクリックしてください。パスワードも使えます。',
     orPassword: 'またはパスワード',
     passwordLabel: 'マスターパスワード',
     passwordPlaceholder: 'パスワードを入力',
@@ -6415,10 +7094,8 @@ async function saveUnlockLanguage(language) {
   applyUnlockLanguage();
 }
 let unlockOptions = { passwordEnabled: true, touchIdEnabled: false, totpEnrolled: false };
-const TOUCHID_HINT_DEFAULT = () => unlockTr('touchAutoHint');
+const TOUCHID_HINT_DEFAULT = () => unlockTr('touchHint');
 let touchIdUnlockInFlight = false;
-let touchIdAutoPrompted = false;
-let touchIdAutoPromptTimer = null;
 
 function showTotpStep() {
   document.getElementById('password-section').style.display = 'none';
@@ -6465,22 +7142,6 @@ function showTouchIdRefreshRequired(message) {
   }
 }
 
-function maybeAutoTouchIdUnlock() {
-  if (touchIdAutoPromptTimer) window.clearTimeout(touchIdAutoPromptTimer);
-  touchIdAutoPromptTimer = null;
-  if (touchIdAutoPrompted || touchIdUnlockInFlight) return;
-  if (!unlockOptions.touchIdEnabled || unlockOptions.touchIdRefreshRequired) return;
-  if (document.visibilityState === 'hidden') return;
-  touchIdAutoPromptTimer = window.setTimeout(() => {
-    touchIdAutoPromptTimer = null;
-    if (touchIdAutoPrompted || touchIdUnlockInFlight) return;
-    if (!unlockOptions.touchIdEnabled || unlockOptions.touchIdRefreshRequired) return;
-    if (document.visibilityState === 'hidden') return;
-    touchIdAutoPrompted = true;
-    void touchIDUnlock('auto');
-  }, 650);
-}
-
 async function loadUnlockOptions() {
   try {
     const r = await apiFetch('/api/auth/options');
@@ -6500,24 +7161,30 @@ async function loadUnlockOptions() {
       showTouchIdRefreshRequired(unlockTr('refreshNote'));
       return;
     }
-    maybeAutoTouchIdUnlock();
   } catch {}
 }
 async function initUnlockPage() {
   await loadUnlockPreferences();
   await loadUnlockOptions();
+  maybeAutoTouchIdOnColdOpen();
+}
+
+function maybeAutoTouchIdOnColdOpen() {
+  // First open of the app (this window has never unlocked) auto-pops the Touch ID
+  // sheet so the user can just touch the sensor. After an in-app re-lock we leave
+  // it as a manual button (no surprise prompt). Skipped when Touch ID is not the
+  // active method or needs a password refresh first.
+  let unlockedThisWindow = false;
+  try { unlockedThisWindow = sessionStorage.getItem('dm_unlocked_window') === '1'; } catch {}
+  if (unlockedThisWindow) return;
+  if (!unlockOptions || !unlockOptions.touchIdEnabled || unlockOptions.touchIdRefreshRequired) return;
+  setTimeout(() => { void touchIDUnlock('auto-cold-open'); }, 250);
 }
 document.querySelectorAll('#unlock-language-switch [data-language]').forEach(btn => {
   btn.addEventListener('click', () => { void saveUnlockLanguage(btn.dataset.language); });
 });
 applyUnlockLanguage();
 void initUnlockPage();
-
-document.addEventListener('visibilitychange', () => {
-  maybeAutoTouchIdUnlock();
-});
-window.addEventListener('focus', () => maybeAutoTouchIdUnlock());
-window.addEventListener('pageshow', () => maybeAutoTouchIdUnlock());
 
 function rememberPostUnlockState(payload) {
   if (payload && typeof payload.captureWarning === 'string' && payload.captureWarning.trim()) {
@@ -6532,11 +7199,32 @@ function rememberPostUnlockState(payload) {
   }
 }
 
+async function finishUnlock(payload) {
+  rememberPostUnlockState(payload);
+  // Mark that this window has completed an unlock. A later in-app re-lock returns
+  // to /unlock in the SAME window (sessionStorage persists), so we suppress the
+  // cold-open Touch ID auto-prompt then. A fresh app launch is a new window with
+  // empty sessionStorage, so the auto-prompt fires.
+  try { sessionStorage.setItem('dm_unlocked_window', '1'); } catch {}
+  const card = document.querySelector('.card');
+  if (card) {
+    card.classList.remove('dm-unlock-error');
+    card.classList.add('dm-unlock-success');
+  }
+  await new Promise(resolve => setTimeout(resolve, 180));
+  window.location.replace('/?refresh=' + Date.now());
+}
+
+function markUnlockError() {
+  const card = document.querySelector('.card');
+  if (!card) return;
+  card.classList.remove('dm-unlock-error');
+  void card.offsetWidth;
+  card.classList.add('dm-unlock-error');
+}
+
 async function touchIDUnlock(_source = 'manual') {
   if (touchIdUnlockInFlight) return;
-  if (touchIdAutoPromptTimer) window.clearTimeout(touchIdAutoPromptTimer);
-  touchIdAutoPromptTimer = null;
-  touchIdAutoPrompted = true;
   const btn = document.getElementById('btn-touchid');
   const err = document.getElementById('touchid-error');
   touchIdUnlockInFlight = true;
@@ -6547,7 +7235,7 @@ async function touchIDUnlock(_source = 'manual') {
   try {
     const r = await apiFetch('/api/auth/touchid', { method: 'POST' });
     const d = await r.json();
-    if (d.ok) { rememberPostUnlockState(d); window.location.replace('/?refresh=' + Date.now()); return; }
+    if (d.ok) { await finishUnlock(d); return; }
     if (d.needsTotp) {
       showTotpStep();
       btn.classList.remove('waiting');
@@ -6560,21 +7248,13 @@ async function touchIDUnlock(_source = 'manual') {
       touchIdUnlockInFlight = false;
       return;
     }
-    if (_source === 'auto') {
-      restoreTouchIdHint();
-      err.textContent = '';
-    } else {
-      err.textContent = d.error || unlockTr('touchFailed');
-      restoreTouchIdHint();
-    }
+    err.textContent = d.error || unlockTr('touchFailed');
+    markUnlockError();
+    restoreTouchIdHint();
   } catch {
-    if (_source === 'auto') {
-      restoreTouchIdHint();
-      err.textContent = '';
-    } else {
-      err.textContent = unlockTr('touchFailed');
-      restoreTouchIdHint();
-    }
+    err.textContent = unlockTr('touchFailed');
+    markUnlockError();
+    restoreTouchIdHint();
   }
   btn.classList.remove('waiting');
   btn.innerHTML = TOUCHID_SVG + unlockTr('touchButton');
@@ -6602,7 +7282,7 @@ async function unlock() {
       body: JSON.stringify({ password }),
     });
     const d = await r.json();
-    if (d.ok) { rememberPostUnlockState(d); window.location.replace('/?refresh=' + Date.now()); return; }
+    if (d.ok) { await finishUnlock(d); return; }
     if (d.needsTotp) {
       // Password ok, need TOTP step
       showTotpStep();
@@ -6610,11 +7290,13 @@ async function unlock() {
       return;
     }
     pwInput.classList.add('error');
+    markUnlockError();
     document.getElementById('pw-error').textContent = d.error || 'Wrong password';
     pwInput.value = '';
     setTimeout(() => pwInput.classList.remove('error'), 600);
   } catch {
     document.getElementById('pw-error').textContent = 'DataMoat is reconnecting. Try again in a moment.';
+    markUnlockError();
   }
   btnUnlock.disabled = false; btnUnlock.textContent = unlockTr('unlock');
 }
@@ -6653,7 +7335,7 @@ async function restartPasswordAuthForTotp(totpToken) {
     body: JSON.stringify({ password }),
   });
   const d = await r.json();
-  if (d.ok) { rememberPostUnlockState(d); window.location.replace('/?refresh=' + Date.now()); return true; }
+  if (d.ok) { await finishUnlock(d); return true; }
   if (d.needsTotp) {
     showTotpStep();
     totpInput.value = totpToken;
@@ -6674,12 +7356,13 @@ async function verifyTOTP(options = {}) {
     body: JSON.stringify({ totpToken }),
   });
   const d = await r.json();
-  if (d.ok) { rememberPostUnlockState(d); window.location.replace('/?refresh=' + Date.now()); return; }
+  if (d.ok) { await finishUnlock(d); return; }
   if (d.restartAuth && allowRestart) {
     await restartPasswordAuthForTotp(totpToken);
     return;
   }
   totpInput.classList.add('error');
+  markUnlockError();
   document.getElementById('totp-error').textContent = d.error || 'Invalid code';
   btnTotp.disabled = false; btnTotp.textContent = unlockTr('verify');
   totpInput.value = '';
@@ -6716,13 +7399,14 @@ async function unlockWithRecovery() {
       body: JSON.stringify({ mnemonic: val }),
     });
     const d = await r.json();
-    if (d.ok) { rememberPostUnlockState(d); window.location.replace('/?refresh=' + Date.now()); return; }
+    if (d.ok) { await finishUnlock(d); return; }
     error.textContent = d.error || 'Invalid recovery phrase';
   } catch (err) {
     error.textContent = err instanceof Error && err.message
       ? err.message
       : 'Recovery unlock failed';
   }
+  markUnlockError();
   btn.disabled = false;
   btn.textContent = unlockTr('recover');
 }
@@ -6849,7 +7533,7 @@ function markdownPageHTML(title: string, markdown: string, version: string): str
 <title>DataMoat — ${title}</title>
 <style>
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  :root{--bg:#191919;--surface:#202020;--surface2:#252525;--border:#2f2f2f;--accent:#0f9d76;--accent2:#0f9d76;--warn:#d9730d;--text:rgba(255,255,255,0.82);--muted:rgba(255,255,255,0.48);--mono:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif;--sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif}
+  :root{--bg:#191919;--surface:#202020;--surface2:#252525;--border:#2f2f2f;--accent:#74b6a5;--accent2:#8abf9b;--warn:#d9730d;--text:rgba(255,255,255,0.82);--muted:rgba(255,255,255,0.48);--mono:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif;--sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif}
   html,body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.7}
   .topbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:14px;z-index:10}
   .topbar a{font-family:var(--sans);font-size:13px;letter-spacing:0;color:var(--muted);text-decoration:none}
@@ -6882,7 +7566,7 @@ function markdownPageHTML(title: string, markdown: string, version: string): str
   .md-shield{display:inline-flex;align-items:center;border-radius:4px;overflow:hidden;border:1px solid var(--border);font-family:var(--sans);font-size:11px;line-height:1;box-shadow:none}
   .md-shield-label{padding:5px 8px;background:var(--surface2);color:var(--text)}
   .md-shield-value{padding:5px 8px;color:#ffffff}
-  .md-shield-link:hover .md-shield{box-shadow:0 0 0 1px rgba(43,196,109,0.35)}
+  .md-shield-link:hover .md-shield{box-shadow:0 0 0 1px rgba(116,182,165,0.35)}
   .gap{height:8px}
 </style>
 </head>

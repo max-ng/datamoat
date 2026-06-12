@@ -1,12 +1,16 @@
 import * as path from 'path'
 import { Message, ContentBlock, TokenUsage } from '../types'
 
-export const CLAUDE_EXTRACTOR_VERSION = 1
-export const CLAUDE_EXTRACTOR_COMPATIBILITY_VERSION = 1
+export const CLAUDE_EXTRACTOR_VERSION = 3
+export const CLAUDE_EXTRACTOR_COMPATIBILITY_VERSION = 3
 
 export function claudeParserCompatibilityKey(source: 'claude-cli' | 'claude-app', appVersion: string | undefined): string {
   const family = source === 'claude-app' ? 'audit-jsonl' : 'project-jsonl'
   return `${source}:${family}:${CLAUDE_EXTRACTOR_COMPATIBILITY_VERSION}`
+}
+
+export function isClaudeSyntheticModel(model: string | undefined): boolean {
+  return typeof model === 'string' && model.trim() === '<synthetic>'
 }
 
 export interface RawImageData {
@@ -23,7 +27,7 @@ export interface RawImageData {
 // is dropped silently.
 const CLAUDE_KNOWN_FIELDS = new Set([
   'type', 'uuid', 'sessionId', 'session_id', 'version', 'claude_code_version',
-  'timestamp', '_audit_timestamp', '_audit_hmac', 'message', 'model', 'cwd',
+  'timestamp', '_audit_timestamp', '_audit_hmac', 'message', 'content', 'model', 'cwd',
   'aiTitle',
   'parent_tool_use_id', 'client_platform',
   // result-event fields we map to typed columns
@@ -92,7 +96,7 @@ export function extractClaudeLine(raw: string): { sessionId: string; appVersion:
       timestamp,
       content,
       usage,
-      hasThinking: content.some(b => b.type === 'thinking'),
+      hasThinking: hasNonEmptyThinking(content),
       appVersion: appVersion || undefined,
       sourceEventType: type,
       model: (msg.model as string) || undefined,
@@ -133,6 +137,25 @@ export function extractClaudeLine(raw: string): { sessionId: string; appVersion:
     if (extras) message.unknownAttrs = extras
 
     return { sessionId, appVersion, rawImages, message }
+  }
+
+  if (type === 'system') {
+    const parsedContent = parseClaudeSystemContent(obj)
+    if (parsedContent.blocks.length === 0) return null
+
+    const message: Message = {
+      id: (obj.uuid as string) || crypto.randomUUID(),
+      role: 'system',
+      timestamp,
+      content: parsedContent.blocks,
+      hasThinking: hasNonEmptyThinking(parsedContent.blocks),
+      appVersion: appVersion || undefined,
+      sourceEventType: typeof obj.subtype === 'string' && obj.subtype ? `${type}.${obj.subtype}` : type,
+    }
+    readClaudeStateOfWorld(obj, message)
+    const extras = collectUnknownAttrs(obj)
+    if (extras) message.unknownAttrs = extras
+    return { sessionId, appVersion, rawImages: parsedContent.images, message }
   }
 
   // `result` events — previously dropped. Carry per-turn cost, duration, stop
@@ -192,13 +215,17 @@ export function extractClaudeModel(raw: string): { model: string; cwd: string; a
   // CLI: model is in message.model on assistant events
   const msg = obj.message as Record<string, unknown> | undefined
   if (msg?.model) {
-    return { model: msg.model as string, cwd: (obj.cwd as string) || '', appVersion: '' }
+    const model = msg.model as string
+    if (isClaudeSyntheticModel(model)) return null
+    return { model, cwd: (obj.cwd as string) || '', appVersion: '' }
   }
 
   // audit.jsonl: model is on the `system` event directly
   if (obj.type === 'system' && obj.model) {
+    const model = obj.model as string
+    if (isClaudeSyntheticModel(model)) return null
     return {
-      model: obj.model as string,
+      model,
       cwd: (obj.cwd as string) || '',
       appVersion: (obj.claude_code_version as string) || '',
     }
@@ -209,15 +236,27 @@ export function extractClaudeModel(raw: string): { model: string; cwd: string; a
 function parseClaudeContent(rawContent: unknown[]): { blocks: ContentBlock[]; images: RawImageData[] } {
   if (!Array.isArray(rawContent)) return { blocks: [], images: [] }
   const images: RawImageData[] = []
-  const blocks: ContentBlock[] = rawContent.map((block, idx) => {
-    if (typeof block !== 'object' || !block) return { type: 'other' as const }
+  const blocks: ContentBlock[] = []
+  for (const block of rawContent) {
+    const blockIndex = blocks.length
+    if (typeof block !== 'object' || !block) {
+      blocks.push({ type: 'other' as const })
+      continue
+    }
     const b = block as Record<string, unknown>
     if (b.type === 'thinking') {
       const thinking = typeof b.thinking === 'string' ? b.thinking.trim() : ''
-      return { type: 'thinking' as const, thinking }
+      if (thinking) blocks.push({ type: 'thinking' as const, thinking })
+      continue
     }
-    if (b.type === 'text') return { type: 'text' as const, text: b.text as string || '' }
-    if (b.type === 'tool_use') return { type: 'tool_use' as const, name: b.name as string, input: b.input }
+    if (b.type === 'text') {
+      blocks.push({ type: 'text' as const, text: b.text as string || '' })
+      continue
+    }
+    if (b.type === 'tool_use') {
+      blocks.push({ type: 'tool_use' as const, name: b.name as string, input: b.input })
+      continue
+    }
     if (b.type === 'tool_result') {
       // tool_result content may itself contain image blocks — extract them
       const inner = b.content
@@ -228,7 +267,7 @@ function parseClaudeContent(rawContent: unknown[]): { blocks: ContentBlock[]; im
             const src = iblock.source as Record<string, unknown> | undefined
             if (src?.type === 'base64' && typeof src.data === 'string') {
               images.push({
-                blockIndex: idx,
+                blockIndex,
                 innerIndex: iidx,
                 base64Data: src.data,
                 mediaType: (src.media_type as string) || 'image/png',
@@ -238,19 +277,21 @@ function parseClaudeContent(rawContent: unknown[]): { blocks: ContentBlock[]; im
           }
         })
       }
-      return { type: 'tool_result' as const, content: b.content }
+      blocks.push({ type: 'tool_result' as const, content: b.content })
+      continue
     }
     if (b.type === 'image') {
       const src = b.source as Record<string, unknown> | undefined
       if (src?.type === 'base64' && typeof src.data === 'string') {
         images.push({
-          blockIndex: idx,
+          blockIndex,
           base64Data: src.data,
           mediaType: (src.media_type as string) || 'image/png',
           blockType: 'image',
         })
       }
-      return { type: 'image' as const, mediaType: (src?.media_type as string) || 'image/png' }
+      blocks.push({ type: 'image' as const, mediaType: (src?.media_type as string) || 'image/png' })
+      continue
     }
     if (b.type === 'document') {
       const src = b.source as Record<string, unknown> | undefined
@@ -258,22 +299,45 @@ function parseClaudeContent(rawContent: unknown[]): { blocks: ContentBlock[]; im
       const attachmentName = (b.title as string) || (b.name as string) || undefined
       if (src?.type === 'base64' && typeof src.data === 'string') {
         images.push({
-          blockIndex: idx,
+          blockIndex,
           base64Data: src.data,
           mediaType,
           blockType: 'file',
           attachmentName,
         })
       }
-      return {
+      blocks.push({
         type: 'file' as const,
         mediaType,
         attachmentName,
-      }
+      })
+      continue
     }
-    return { type: 'other' as const }
-  })
+    blocks.push({ type: 'other' as const })
+  }
   return { blocks, images }
+}
+
+function parseClaudeSystemContent(obj: Record<string, unknown>): { blocks: ContentBlock[]; images: RawImageData[] } {
+  const content = obj.content
+  if (typeof content === 'string') {
+    const text = content.trim()
+    if (text) return { blocks: [{ type: 'text', text }], images: [] }
+  }
+  if (Array.isArray(content)) {
+    const parsed = parseClaudeContent(content)
+    if (parsed.blocks.length > 0) return parsed
+  } else if (content && typeof content === 'object') {
+    return { blocks: [{ type: 'other', content }], images: [] }
+  }
+
+  const error = typeof obj.error === 'string' ? obj.error.trim() : ''
+  if (error) return { blocks: [{ type: 'text', text: error }], images: [] }
+  return { blocks: [], images: [] }
+}
+
+function hasNonEmptyThinking(content: ContentBlock[]): boolean {
+  return content.some(block => block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim().length > 0)
 }
 
 function parseClaudeUsage(raw: Record<string, number> | undefined): TokenUsage | undefined {

@@ -26,7 +26,7 @@ import { appendMessages, getVaultSessionId, loadSessions, makeRawPath, saveSessi
 import { writeAuditEvent, writeLog } from './logging'
 import type { RawRecord, Session } from './types'
 import { decryptLinesForSession } from './vault-helper'
-import { appendRawRecordArchiveLines, verifySourceArchive } from './source-archive'
+import { appendRawRecordArchiveLines, cleanupAllSourceArchivePending, verifySourceArchive } from './source-archive'
 
 const MANIFEST_BASENAME = '.datamoat-transfer.json'
 const STATE_MANIFEST_BASENAME = 'transfer-export-manifest.json'
@@ -183,6 +183,14 @@ export function transferManifestPath(root = DATAMOAT_ROOT): string {
 
 export function transferStateManifestPath(root = DATAMOAT_ROOT): string {
   return path.join(root, 'state', STATE_MANIFEST_BASENAME)
+}
+
+export function transferExportManifestReady(root = DATAMOAT_ROOT): boolean {
+  const resolvedRoot = path.resolve(root)
+  const manifest = safeJson<TransferManifest>(transferManifestPath(resolvedRoot))
+    ?? safeJson<TransferManifest>(transferStateManifestPath(resolvedRoot))
+  return manifest?.format === TRANSFER_MANIFEST_FORMAT
+    && path.resolve(manifest.rootPath || '') === resolvedRoot
 }
 
 export function inspectTransferRoot(root = DATAMOAT_ROOT): TransferCounts {
@@ -423,6 +431,7 @@ export async function prepareTransferRawArchives(options: { root?: string } = {}
   for (const session of sessions) {
     if (Math.max(0, Number(session.messageCount || 0)) === 0) await appendMessages(session, [])
   }
+  await cleanupAllSourceArchivePending(sessionId)
   updateTransferPreparationStatus({
     phase: 'raw-archives',
     running: true,
@@ -586,6 +595,9 @@ export async function transferExportStatus(options: { sessionCount?: number; roo
 export async function openTransferFolder(root = DATAMOAT_ROOT): Promise<{ ok: boolean; path: string; error?: string }> {
   const resolved = path.resolve(root)
   if (!fs.existsSync(resolved)) return { ok: false, path: resolved, error: 'DataMoat folder does not exist yet' }
+  if (resolved === DATAMOAT_ROOT && !transferExportManifestReady(resolved)) {
+    return { ok: false, path: resolved, error: 'Check the DataMoat folder first, then open it for copying.' }
+  }
   const command = process.platform === 'darwin'
     ? 'open'
     : process.platform === 'win32'

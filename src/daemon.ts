@@ -44,6 +44,7 @@ async function main() {
     running: true,
     pid: process.pid,
     startedAt: new Date().toISOString(),
+    stoppedAt: null,
     locked: true,
     captureRunning: false,
   })
@@ -65,19 +66,30 @@ async function main() {
   const { port, url } = await startUIServer()
   fs.writeFileSync(PID_FILE, String(process.pid))
   fs.writeFileSync(path.join(STATE_DIR, 'port'), String(port))
-  updateHealth('daemon', { running: true, pid: process.pid, port, url })
+  updateHealth('daemon', { running: true, pid: process.pid, port, url, stoppedAt: null })
   writeLog('info', 'daemon', 'ui_ready', { port })
   let captureStarted = false
-  try {
-    // Daemon startup must keep the unlock API stable. Parser reparse can be
-    // heavy on real vaults, so it must not run before the user can unlock.
-    captureStarted = await startBackgroundCapture({ parserReparse: 'skip' })
-  } catch (error) {
-    writeLog('warn', 'daemon', 'background_capture_start_failed_nonfatal', { error })
+  if (isSetupDone()) {
+    try {
+      // Daemon startup must keep the unlock API stable. Parser reparse can be
+      // heavy on real vaults, so it must not run before the user can unlock.
+      captureStarted = await startBackgroundCapture({ parserReparse: 'skip' })
+    } catch (error) {
+      writeLog('warn', 'daemon', 'background_capture_start_failed_nonfatal', { error })
+      updateHealth('capture', {
+        running: false,
+        lastErrorAt: new Date().toISOString(),
+        lastError: error instanceof Error ? error.message : String(error),
+      })
+    }
+  } else {
     updateHealth('capture', {
       running: false,
-      lastErrorAt: new Date().toISOString(),
-      lastError: error instanceof Error ? error.message : String(error),
+      configured: false,
+      lastSkippedAt: new Date().toISOString(),
+      lastSkippedReason: 'setup_incomplete',
+      lastErrorAt: null,
+      lastError: null,
     })
   }
   await startBootstrapCaptureBeforeSetup(captureStarted)

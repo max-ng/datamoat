@@ -3,7 +3,7 @@ import * as path from 'path'
 import * as crypto from 'crypto'
 import { Source, WatchedSource, Session, Message, OffsetState, RawRecord } from './types'
 import { ALL_SOURCES, GLOB_PATTERNS, HEALTH_FILE, STATE_DIR, resolveWatchPaths } from './config'
-import { clearCaptureSession, hasVaultSession, loadOffsets, saveOffsets, upsertSession, appendMessages, appendRawRecords, makeVaultPath, saveAttachment, loadSessions, getCaptureSessionId, getVaultSessionId } from './store'
+import { clearCaptureSession, hasVaultSession, loadOffsets, saveOffsets, upsertSession, appendMessages, appendRawRecords, makeVaultPath, saveAttachment, loadSessions, getCaptureSessionId, getVaultSessionId, readSessionMessages } from './store'
 import {
   appendBootstrapCapture,
   clearBootstrapCaptureData,
@@ -14,15 +14,17 @@ import {
   markBootstrapEntryImported,
   updateBootstrapEntryImportCursor,
 } from './bootstrap-capture'
-import { extractClaudeLine, extractClaudeModel } from './extractors/claude'
+import { extractClaudeLine, extractClaudeModel, isClaudeSyntheticModel } from './extractors/claude'
 import { extractCodexLine, sessionIdFromPath as codexSessionIdFromPath } from './extractors/codex'
 import { extractOpenclawLine } from './extractors/openclaw'
 import { extractCursorLine, sessionIdFromPath as cursorSessionIdFromPath } from './extractors/cursor'
 import { detectInstallContext } from './install-context'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from './logging'
-import { buildSessionUid, sourceAccountFromPath } from './session-identity'
+import { buildSessionUid, sourceAccountFromPath, claudeForkGroupKey, claudeForkGroupKeyForSession, pickCanonicalForkUid } from './session-identity'
+import { normalizedMessageKey } from './message-key'
 import { queueReferencedAttachmentBackupForRawRecords } from './referenced-attachments'
 import { appendSourceArchiveChunk } from './source-archive'
+import { codexSessionTitle, cursorSessionTitle } from './session-titles'
 
 function log(event: string, fields: Record<string, unknown> = {}): void {
   writeLog('info', 'watcher', event, fields)
@@ -98,6 +100,8 @@ const CLAUDE_EVENT_TYPES = [
   'tool_use_summary',
   'queue-operation',
   'last-prompt',
+  'custom-title',
+  'mode',
   'permission-mode',
   'attachment',
   'file-history-snapshot',
@@ -116,6 +120,8 @@ const CLAUDE_TOPLEVEL_KEYS = [
   '_audit_hmac',
   'message',
   'aiTitle',
+  'customTitle',
+  'mode',
   'content',
   'operation',
   'model',
@@ -359,6 +365,7 @@ interface FileState {
   sessionId: string
   source: Source
   sourceClient?: string
+  title?: string
   appVersion: string
   model: string
   modelProvider: string
@@ -370,6 +377,10 @@ interface FileState {
 }
 
 const fileStates = new Map<string, FileState>()
+// Content-keys already stored in a canonical Claude session, so a resumed/forked
+// file routed into it appends only its genuinely new tail. Keyed by canonical uid,
+// seeded lazily from the stored session the first time a fork is routed.
+const canonicalKnownKeys = new Map<string, Set<string>>()
 type WatchHandle = {
   close(): Promise<void> | void
 }
@@ -1003,6 +1014,7 @@ function defaultState(source: Source): FileState {
     sessionId: '',
     source,
     sourceClient: undefined,
+    title: undefined,
     appVersion: '',
     model: 'unknown',
     modelProvider: source.startsWith('codex') ? 'openai' : source === 'openclaw' || source === 'cursor' ? 'openai/anthropic' : 'anthropic',
@@ -1036,6 +1048,7 @@ async function hydrateState(filePath: string, source: Source, offsets: OffsetSta
     if (existing) {
       state.sessionId = existing.id
       state.sourceClient = existing.sourceClient
+      state.title = existing.title
       state.appVersion = existing.appVersion
       state.model = existing.model
       state.modelProvider = existing.modelProvider
@@ -1049,11 +1062,28 @@ async function hydrateState(filePath: string, source: Source, offsets: OffsetSta
     /* non-fatal */
   }
 
+  if ((source === 'claude-cli' || source === 'claude-app') && isClaudeSyntheticModel(state.model)) {
+    state.model = 'unknown'
+  }
+
   if (source === 'codex-cli' && (!state.appVersion || state.model === 'unknown' || !state.cwd)) {
     hydrateCodexStateFromHeader(filePath, state)
   }
 
+  refreshStateTitle(filePath, source, state)
+
   return state
+}
+
+function refreshStateTitle(filePath: string, source: Source, state: FileState): void {
+  if (!state.sessionId) return
+  if (source === 'codex-cli') {
+    const title = codexSessionTitle(filePath, state.sessionId)
+    if (title) state.title = title
+  } else if (source === 'cursor') {
+    const title = cursorSessionTitle(state.sessionId)
+    if (title) state.title = title
+  }
 }
 
 function hydrateCodexStateFromHeader(filePath: string, state: FileState): void {
@@ -1533,12 +1563,11 @@ async function processFile(
       })
     }
 
-    const rawSessionUid = buildSessionUid({
-      source,
-      sourceAccount: sourceAccountFromPath(source, filePath),
-      sessionId: rawSessionId,
-      originalPath: filePath,
-    })
+    // Resolve the canonical session up front so a Claude resume/fork file's raw,
+    // source-archive, and parsed data all land under one uid instead of spawning
+    // a duplicate session per replayed file.
+    const captureTarget = await resolveCanonicalCaptureTarget(source, filePath, rawSessionId)
+    const rawSessionUid = captureTarget.uid
     try {
       const archiveSessionId = getCaptureSessionId() ?? getVaultSessionId()
       if (!archiveSessionId) throw new Error('vault capture session missing')
@@ -1563,7 +1592,7 @@ async function processFile(
       return  // leave offset unchanged so we retry
     }
 
-    wroteToVault = await persistMessages(filePath, source, state, newMessages, skippedLines)
+    wroteToVault = await persistMessages(filePath, source, state, newMessages, skippedLines, captureTarget)
 
     if (newMessages.length > 0 && !wroteToVault) {
       writeLog('warn', 'watcher', 'messages_not_saved_missing_session', {
@@ -1651,21 +1680,119 @@ async function processFile(
   }
 }
 
+interface CanonicalCaptureTarget {
+  uid: string
+  routed: boolean
+  baseSession?: Session
+}
+
+// Resolve the vault session a file's data belongs to. For Claude resume/fork
+// files (same internal sessionId across multiple source files) this returns the
+// canonical session's uid so the replayed copy collapses into one session instead
+// of spawning a new duplicate. Returns the file's own uid for every other case.
+async function resolveCanonicalCaptureTarget(
+  source: Source,
+  filePath: string,
+  sessionId: string,
+): Promise<CanonicalCaptureTarget> {
+  const sourceAccount = sourceAccountFromPath(source, filePath)
+  const fileUid = buildSessionUid({ source, sourceAccount, sessionId, originalPath: filePath })
+  const groupKey = claudeForkGroupKey(source, sourceAccount, sessionId)
+  if (!groupKey) return { uid: fileUid, routed: false }
+  const sessions = await loadSessionsForRouting()
+  const idents = sessions
+    .filter(s => claudeForkGroupKeyForSession(s) === groupKey)
+    .map(s => ({ uid: s.uid, id: s.id, originalPath: s.originalPath }))
+  const others = idents.filter(m => m.uid !== fileUid)
+  if (others.length === 0) return { uid: fileUid, routed: false }
+  const uid = pickCanonicalForkUid([...idents, { uid: fileUid, id: sessionId, originalPath: filePath }])
+  if (uid === fileUid) return { uid: fileUid, routed: false }
+  return { uid, routed: true, baseSession: sessions.find(s => s.uid === uid) }
+}
+
+// loadSessions decrypts the whole session index through the vault helper.
+// Canonical routing runs on every claude file batch, so an uncached call per
+// batch makes first-unlock backlog processing crawl. Routing only needs an
+// eventually-fresh view (a brand-new sibling fork is merged later by
+// maintenance anyway), so a short TTL cache is safe.
+const ROUTING_SESSIONS_TTL_MS = 5_000
+let routingSessionsCache: { at: number; sessions: Session[] } | null = null
+async function loadSessionsForRouting(): Promise<Session[]> {
+  const now = Date.now()
+  if (routingSessionsCache && now - routingSessionsCache.at < ROUTING_SESSIONS_TTL_MS) {
+    return routingSessionsCache.sessions
+  }
+  const sessions = await loadSessions()
+  routingSessionsCache = { at: now, sessions }
+  return sessions
+}
+
+async function knownKeysForCanonical(uid: string, baseSession: Session | undefined): Promise<Set<string>> {
+  let keys = canonicalKnownKeys.get(uid)
+  if (keys) return keys
+  keys = new Set<string>()
+  if (baseSession) {
+    const existing = await readSessionMessages(baseSession)
+    for (const message of existing) keys.add(normalizedMessageKey(message))
+  }
+  canonicalKnownKeys.set(uid, keys)
+  return keys
+}
+
 async function persistMessages(
   filePath: string,
   source: Source,
   state: FileState,
   newMessages: Message[],
   skippedLines: number,
+  target: CanonicalCaptureTarget,
 ): Promise<boolean> {
   if (!state.sessionId || newMessages.length === 0) return false
   const sourceAccount = sourceAccountFromPath(source, filePath)
-  const uid = buildSessionUid({
-    source,
-    sourceAccount,
-    sessionId: state.sessionId,
-    originalPath: filePath,
-  })
+  const uid = target.uid
+
+  // Resume/fork file routed into an existing canonical session: append only the
+  // turns not already stored, and grow the canonical session's metadata.
+  if (target.routed && target.baseSession) {
+    const base = target.baseSession
+    const keys = await knownKeysForCanonical(uid, base)
+    const toAppend: Message[] = []
+    for (const message of newMessages) {
+      const key = normalizedMessageKey(message)
+      if (keys.has(key)) continue
+      keys.add(key)
+      toAppend.push(message)
+    }
+    const lastTimestamp = state.lastTimestamp > (base.lastTimestamp || '') ? state.lastTimestamp : base.lastTimestamp
+    const merged: Session = {
+      ...base,
+      lastTimestamp,
+      messageCount: base.messageCount + toAppend.length,
+      hasThinking: base.hasThinking || state.hasThinking,
+    }
+    if (toAppend.length > 0) await appendMessages(merged, toAppend)
+    await upsertSession(merged)
+    base.messageCount = merged.messageCount
+    base.lastTimestamp = merged.lastTimestamp
+    base.hasThinking = merged.hasThinking
+    log('messages_saved', { source, count: toAppend.length, session: state.sessionId.slice(0, 8), merged: true })
+    writeAuditEvent('watcher', 'messages_saved', {
+      source,
+      count: toAppend.length,
+      session: state.sessionId.slice(0, 8),
+      file: path.basename(filePath),
+      mergedIntoCanonical: true,
+    })
+    updateHealth(`watcher:${source}`, {
+      lastCaptureAt: new Date().toISOString(),
+      lastSession: state.sessionId.slice(0, 8),
+      lastCaptureCount: toAppend.length,
+      lastSkippedLines: skippedLines,
+      mode: 'vault',
+    })
+    return true
+  }
+
   const session: Session = {
     uid,
     id: state.sessionId,
@@ -1675,6 +1802,7 @@ async function persistMessages(
     appVersion: state.appVersion,
     model: state.model,
     modelProvider: state.modelProvider,
+    title: state.title,
     firstTimestamp: state.firstTimestamp,
     lastTimestamp: state.lastTimestamp,
     cwd: state.cwd,
@@ -1748,6 +1876,7 @@ async function processLine(
     const result = extractCodexLine(line)
     if (!result) return
     if (result.sessionId && !state.sessionId) state.sessionId = result.sessionId
+    refreshStateTitle(filePath, source, state)
     if (result.sourceClient && !state.sourceClient) state.sourceClient = result.sourceClient
     if (result.appVersion && !state.appVersion) state.appVersion = result.appVersion
     if (result.model) state.model = result.model
@@ -1782,6 +1911,7 @@ async function processLine(
     const result = extractCursorLine(line, filePath)
     if (!result) return
     if (result.sessionId && !state.sessionId) state.sessionId = result.sessionId
+    refreshStateTitle(filePath, source, state)
     if (result.sourceClient && !state.sourceClient) state.sourceClient = result.sourceClient
     if (result.appVersion && !state.appVersion) state.appVersion = result.appVersion
     if (result.model) state.model = result.model
@@ -1966,12 +2096,8 @@ export async function importBootstrapCaptureIntoVault(
 
         const rawSessionId = state.sessionId || entry.sessionId || fallbackRawSessionId(entry.source, entry.originalPath)
         const usedFallbackRawSession = !state.sessionId && !entry.sessionId
-        const rawSessionUid = buildSessionUid({
-          source: entry.source,
-          sourceAccount: sourceAccountFromPath(entry.source, entry.originalPath),
-          sessionId: rawSessionId,
-          originalPath: entry.originalPath,
-        })
+        const captureTarget = await resolveCanonicalCaptureTarget(entry.source, entry.originalPath, rawSessionId)
+        const rawSessionUid = captureTarget.uid
 
         try {
           await appendRawRecords(entry.source, rawSessionUid, bufferedRawRecords)
@@ -1993,7 +2119,7 @@ export async function importBootstrapCaptureIntoVault(
           throw err
         }
 
-        const wroteToVault = await persistMessages(entry.originalPath, entry.source, state, bufferedMessages, skippedLines)
+        const wroteToVault = await persistMessages(entry.originalPath, entry.source, state, bufferedMessages, skippedLines, captureTarget)
         if (bufferedMessages.length > 0 && !wroteToVault) {
           writeLog('warn', 'watcher', 'bootstrap_messages_missing_session', {
             source: entry.source,

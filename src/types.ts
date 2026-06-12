@@ -106,6 +106,7 @@ export interface Session {
   source: Source
   sourceClient?: string
   sourceAccount?: string
+  title?: string
   appVersion: string
   model: string
   modelProvider: string

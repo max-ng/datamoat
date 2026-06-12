@@ -66,6 +66,49 @@ export function buildSessionUid(params: {
     .slice(0, 24)
 }
 
+// Claude Code creates a NEW session file (new filename) every time a session is
+// resumed or forked, but the resumed file replays the whole prior transcript and
+// keeps the ORIGINAL internal sessionId. Because buildSessionUid mixes in the file
+// path, each such file otherwise becomes a separate vault session holding a
+// near-duplicate copy of the same conversation. Group those copies by their shared
+// (source, account, sessionId) so capture can route them into one canonical session
+// and maintenance can merge existing duplicates.
+export function claudeForkGroupKey(
+  source: Source,
+  sourceAccount: string | undefined,
+  sessionId: string,
+): string | null {
+  if (source !== 'claude-cli' && source !== 'claude-app') return null
+  if (!sessionId) return null
+  return `${source}\0${sourceAccount ?? ''}\0${sessionId}`
+}
+
+export function claudeForkGroupKeyForSession(session: Session): string | null {
+  return claudeForkGroupKey(session.source, session.sourceAccount, session.id)
+}
+
+export interface ForkMemberIdentity {
+  uid: string
+  id: string
+  originalPath: string
+}
+
+// A resumed/forked group's canonical member is the original "root" file — the one
+// whose filename equals the internal sessionId. Resume/fork files get fresh
+// filenames, so only the root matches. When no root file is present (e.g. it was
+// deleted or compacted away), fall back to the lexicographically smallest uid so
+// both capture and maintenance always agree on the same target.
+export function pickCanonicalForkUid<T extends ForkMemberIdentity>(members: T[]): string {
+  let root: T | null = null
+  let smallest: T | null = null
+  for (const member of members) {
+    if (!smallest || member.uid < smallest.uid) smallest = member
+    const base = path.basename(member.originalPath, '.jsonl')
+    if (base && base === member.id && (!root || member.uid < root.uid)) root = member
+  }
+  return (root ?? smallest)?.uid ?? members[0]?.uid ?? ''
+}
+
 export function normalizeSessionIdentity(session: Session): Session {
   const sourceAccount = session.sourceAccount ?? sourceAccountFromPath(session.source, session.originalPath)
   const uid = session.uid ?? buildSessionUid({

@@ -14,18 +14,18 @@
     --text:      rgba(255,255,255,0.82);
     --muted:     rgba(255,255,255,0.44);
     --muted2:    rgba(255,255,255,0.62);
-    --accent:    #0f9d76;
-    --accent2:   #2ea043;
-    --warn:      #d9730d;
-    --claude:    #d9730d;
-    --codex:     #2383e2;
-    --openclaw:  #9b6bdf;
-    --cursor:    #cb912f;
-    --chatgpt:   #0f9d76;
-    --app:       #0f9d76;
-    --think-bg:  rgba(15, 157, 118, 0.1);
-    --think-border: rgba(15, 157, 118, 0.28);
-    --think-text:   #4fb99f;
+    --accent:    #74b6a5;
+    --accent2:   #8abf9b;
+    --warn:      #c78a4a;
+    --claude:    #c08c66;
+    --codex:     #7ea0c4;
+    --openclaw:  #a28abb;
+    --cursor:    #b79a6a;
+    --chatgpt:   #74b6a5;
+    --app:       #74b6a5;
+    --think-bg:  rgba(116, 182, 165, 0.08);
+    --think-border: rgba(116, 182, 165, 0.22);
+    --think-text:   #78b8a6;
     --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     --font-mono: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
   }
@@ -36,7 +36,11 @@
     0%, 100% { opacity: 0.22; }
     45% { opacity: 1; }
   }
-
+  @keyframes dmFeelPulse {
+    0% { box-shadow: 0 0 0 0 rgba(116, 182, 165, 0.26); }
+    42% { box-shadow: 0 0 0 4px rgba(116, 182, 165, 0.14); }
+    100% { box-shadow: 0 0 0 0 rgba(116, 182, 165, 0); }
+  }
   body {
     background: var(--bg);
     color: var(--text);
@@ -110,7 +114,7 @@
   #search {
     width: 100%;
     height: 32px;
-    background: var(--surface);
+    background: #171a1d;
     border: 1px solid transparent;
     border-radius: 6px;
     color: var(--text);
@@ -118,9 +122,21 @@
     font-size: 13px;
     padding: 6px 12px 6px 34px;
     outline: none;
-    transition: background 0.12s, border-color 0.12s;
+    transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
   }
-  #search:focus { border-color: var(--border2); background: #242424; }
+  #search:focus {
+    border-color: #4a545c;
+    background: #1b2024;
+    box-shadow: 0 0 0 3px rgba(116, 134, 145, 0.1);
+  }
+  .search-wrap.search-active #search {
+    border-color: rgba(116, 182, 165, 0.38);
+    background: #1b2024;
+    box-shadow: 0 0 0 3px rgba(116, 182, 165, 0.08);
+  }
+  .search-wrap.dm-react #search {
+    animation: dmFeelPulse 760ms ease-out;
+  }
   #search::placeholder { color: var(--muted); }
 
   .filters {
@@ -159,6 +175,10 @@
     color: var(--text);
     background: var(--surface2);
     border-color: transparent;
+  }
+  .filter-btn.dm-react {
+    border-color: rgba(116, 182, 165, 0.28);
+    animation: dmFeelPulse 760ms ease-out;
   }
 
   .stat {
@@ -607,6 +627,7 @@
     scrollbar-width: none;
   }
   .session-tabs::-webkit-scrollbar { display: none; }
+  .session-tabs.drag-splitting { cursor: grabbing; }
   .session-tab {
     max-width: 260px;
     min-width: 120px;
@@ -620,6 +641,11 @@
     color: var(--muted2);
     padding: 0 6px 0 10px;
     cursor: pointer;
+  }
+  .session-tab.dragging { opacity: 0.58; }
+  .session-tab.split-open {
+    color: var(--accent);
+    border-color: rgba(116, 182, 165, 0.28);
   }
   .session-tab:hover {
     background: var(--surface2);
@@ -675,6 +701,118 @@
   .session-list::-webkit-scrollbar-track { background: transparent; }
   .session-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
+  .panel-mode-bar {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 8px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-mode-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    border: 1px solid transparent;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.12s ease, color 0.12s ease;
+  }
+  .panel-mode-btn:hover { background: var(--surface2); color: var(--text); }
+  .panel-mode-btn.active { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+  .panel-mode-btn svg { width: 15px; height: 15px; }
+
+  .folder-group-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 8px 2px;
+    padding: 5px 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: .02em;
+    user-select: none;
+  }
+  .folder-group-header:hover { background: var(--surface2); color: var(--text); }
+  .folder-group-arrow { font-size: 9px; transition: transform 0.12s ease; }
+  .folder-group-header.collapsed .folder-group-arrow { transform: rotate(-90deg); }
+  .folder-group-count { margin-left: auto; opacity: .6; }
+  .folder-group-items .session-item { margin-left: 18px; }
+
+  .anno-msg-item .anno-msg-snippet {
+    color: var(--text);
+    font-size: 11.5px;
+    line-height: 1.45;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .anno-msg-item .anno-msg-meta {
+    display: flex;
+    gap: 6px;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 10.5px;
+  }
+  .anno-empty {
+    padding: 22px 16px;
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+  }
+  .session-bookmark-flag { margin-left: auto; color: var(--accent, #d6a15f); flex-shrink: 0; }
+  .session-bookmark-flag svg { width: 11px; height: 11px; display: block; }
+
+  .msg-anno-bar {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: auto;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .message:hover .msg-anno-bar,
+  .msg-anno-bar.has-active { opacity: 1; }
+  .anno-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 20px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0;
+  }
+  .anno-btn:hover { background: var(--surface2); color: var(--text); }
+  .anno-btn.active { color: var(--accent, #d6a15f); }
+  .anno-btn.up.active { color: #74b6a5; }
+  .anno-btn.down.active { color: #c97a6d; }
+  .anno-btn svg { width: 13px; height: 13px; }
+  .conv-bookmark-btn svg { width: 13px; height: 13px; display: block; }
+  .conv-bookmark-btn.active { color: var(--accent, #d6a15f); }
+  .message-role .msg-anno-bar { margin-left: auto; }
+
+  .anno-jump-flash {
+    animation: annoJumpFlash 1.6s ease;
+  }
+  @keyframes annoJumpFlash {
+    0% { background: rgba(214, 161, 95, 0.18); }
+    100% { background: transparent; }
+  }
+
   .session-item {
     margin: 2px 8px;
     padding: 8px 10px;
@@ -695,6 +833,14 @@
   .session-item.active {
     background: #303030;
     box-shadow: none;
+  }
+  .session-item.search-result {
+    border-color: rgba(214, 161, 95, 0.34);
+    background: rgba(214, 161, 95, 0.06);
+  }
+  .session-item.dm-react {
+    border-color: rgba(116, 182, 165, 0.34);
+    background: rgba(116, 182, 165, 0.07);
   }
   .session-item.active::before {
     content: '';
@@ -790,6 +936,20 @@
   }
 
   /* ── Conversation view ── */
+  .conversation-shell {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    overflow: hidden;
+  }
+  .conversation-shell.split-active .conversation {
+    flex-basis: 50%;
+    width: 50%;
+  }
+  .conversation-shell.split-active #conversation {
+    border-right: 1px solid var(--border);
+  }
   .conversation {
     flex: 1;
     overflow-y: auto;
@@ -799,6 +959,47 @@
     overscroll-behavior: contain;
     scrollbar-gutter: stable;
     scrollbar-color: var(--border2) transparent;
+  }
+  #conversation-split {
+    background: var(--bg);
+  }
+  #conversation-split[hidden] {
+    display: none;
+  }
+  .conversation-split-close {
+    height: 28px;
+    min-width: 28px;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.02);
+    color: var(--muted2);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 18px;
+    line-height: 1;
+  }
+  .conversation-split-close:hover {
+    color: var(--text);
+    border-color: var(--border3);
+    background: rgba(255,255,255,0.06);
+  }
+  .split-drop-indicator {
+    position: absolute;
+    inset: 0 0 0 50%;
+    z-index: 60;
+    pointer-events: none;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    border-left: 1px solid rgba(116, 182, 165, 0.42);
+    background: rgba(116, 182, 165, 0.10);
+    color: rgba(255,255,255,0.78);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    backdrop-filter: blur(2px);
+  }
+  .split-drop-indicator.show {
+    display: flex;
   }
   .conversation::-webkit-scrollbar { width: 10px; }
   .conversation::-webkit-scrollbar-track { background: transparent; }
@@ -823,27 +1024,58 @@
     box-shadow: 0 0 0 1px rgba(17,17,17,0.55);
     scroll-margin-top: 180px;
   }
+  .conversation-bottom-hint {
+    position: fixed;
+    left: 50%;
+    bottom: 22px;
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, 8px);
+    transition: opacity 180ms ease, transform 180ms ease;
+    padding: 6px 11px;
+    border: 1px solid rgba(116, 182, 165, 0.26);
+    border-radius: 999px;
+    background: rgba(18, 24, 27, 0.92);
+    color: rgba(255,255,255,0.68);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    white-space: nowrap;
+    backdrop-filter: blur(12px);
+  }
+  .conversation-bottom-hint.show {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
   .session-search-nav {
     display: flex;
     align-items: center;
     gap: 8px;
+    min-width: 0;
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--muted);
   }
+  .session-search-nav > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .session-search-tools {
-    margin: 12px 0 0;
+    margin: 0;
     display: flex;
     align-items: center;
     gap: 10px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
   .session-search-input {
     width: min(360px, 100%);
     height: 28px;
-    border: 1px solid var(--border2);
+    border: 1px solid #30363d;
     border-radius: 6px;
-    background: #080e14;
+    background: #14181c;
     color: var(--text);
     padding: 0 9px;
     font-family: var(--font-mono);
@@ -851,23 +1083,29 @@
     outline: none;
   }
   .session-search-input:focus {
-    border-color: var(--accent);
+    border-color: #56656e;
+    box-shadow: 0 0 0 3px rgba(116, 134, 145, 0.12);
+  }
+  .session-search-input.search-active {
+    border-color: rgba(116, 182, 165, 0.44);
+    box-shadow: 0 0 0 3px rgba(116, 182, 165, 0.10);
   }
   .search-nav-btn {
     width: 26px;
     height: 24px;
-    border: 1px solid var(--border2);
+    border: 1px solid #343b42;
     border-radius: 5px;
-    background: #0d141c;
-    color: var(--text);
+    background: #151a1f;
+    color: var(--muted2);
     cursor: pointer;
     transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
   }
   .search-nav-btn:not(:disabled):hover {
-    border-color: var(--accent2);
-    background: #101923;
+    color: var(--text);
+    border-color: #56656e;
+    background: #1b2228;
     transform: translateY(-1px);
-    box-shadow: 0 0 16px rgba(0, 136, 255, 0.18);
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
   }
   .search-nav-btn:not(:disabled):active {
     transform: translateY(1px) scale(0.96);
@@ -922,19 +1160,144 @@
   .conv-header.is-hidden .conv-header-toggle-zone {
     height: 100%;
   }
+  .conv-header.is-hidden .conv-title-row,
   .conv-header.is-hidden .conv-title,
+  .conv-header.is-hidden .conv-meta-row,
   .conv-header.is-hidden .conv-badges,
-  .conv-header.is-hidden .session-search-tools {
+  .conv-header.is-hidden .conv-actions,
+  .conv-header.is-hidden .session-search-tools,
+  .conv-header.is-hidden .session-search-nav {
     display: none;
+  }
+  .conv-title-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+    margin-bottom: 8px;
   }
   .conv-title {
     font-family: var(--font-mono);
     font-size: 13px;
     color: var(--text);
-    margin-bottom: 8px;
-    word-break: break-all;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    word-break: normal;
   }
-  .conv-badges { display: flex; gap: 8px; flex-wrap: wrap; }
+  .conv-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .conv-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .conv-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: nowrap;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .copy-inline-status {
+    min-width: 0;
+    max-width: 240px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    opacity: 0;
+    transform: translateY(2px);
+    transition: opacity 160ms ease, transform 160ms ease;
+  }
+  .copy-inline-status.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .conv-title-row .session-search-tools {
+    margin-left: auto;
+    justify-content: flex-end;
+    flex: 0 1 420px;
+    min-width: 220px;
+  }
+  .conv-title-row .session-search-input {
+    width: min(360px, 34vw);
+  }
+  .conv-meta-row .session-search-nav {
+    margin-left: auto;
+    justify-content: flex-end;
+    flex: 0 1 520px;
+    max-width: min(520px, 48vw);
+  }
+  .conv-action-btn {
+    border: 1px solid #343b42;
+    border-radius: 5px;
+    background: #151a1f;
+    color: var(--muted2);
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .conv-action-btn:hover {
+    color: var(--text);
+    border-color: #56656e;
+    background: #1b2228;
+  }
+  .conv-action-btn.copied {
+    color: #0d1714;
+    border-color: transparent;
+    background: var(--accent);
+  }
+  .conv-action-btn:disabled {
+    cursor: default;
+    opacity: 0.46;
+  }
+  .icon-action-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .icon-action-btn::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    z-index: 30;
+    max-width: 280px;
+    padding: 6px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border2);
+    background: #101418;
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 11px;
+    line-height: 1.35;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-2px);
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+  .icon-action-btn:hover::after,
+  .icon-action-btn:focus-visible::after {
+    opacity: 1;
+    transform: translateY(0);
+  }
   .badge {
     font-family: var(--font-mono);
     font-size: 10px;
@@ -944,12 +1307,12 @@
     color: var(--muted);
   }
   .badge.source { }
-  .badge.claude-cli  { color: var(--claude); border-color: rgba(217,115,13,0.3); background: rgba(217,115,13,0.12); }
-  .badge.codex-cli   { color: var(--codex); border-color: rgba(35,131,226,0.3); background: rgba(35,131,226,0.12); }
-  .badge.claude-app  { color: var(--app); border-color: rgba(15,157,118,0.3); background: rgba(15,157,118,0.12); }
-  .badge.openclaw    { color: var(--openclaw); border-color: rgba(155,107,223,0.3); background: rgba(155,107,223,0.12); }
-  .badge.cursor      { color: var(--cursor); border-color: rgba(203,145,47,0.3); background: rgba(203,145,47,0.12); }
-  .badge.chatgpt-export { color: var(--chatgpt); border-color: rgba(15,157,118,0.3); background: rgba(15,157,118,0.12); }
+  .badge.claude-cli  { color: var(--claude); border-color: rgba(192,140,102,0.24); background: rgba(192,140,102,0.09); }
+  .badge.codex-cli   { color: var(--codex); border-color: rgba(126,160,196,0.24); background: rgba(126,160,196,0.09); }
+  .badge.claude-app  { color: var(--app); border-color: rgba(116,182,165,0.24); background: rgba(116,182,165,0.09); }
+  .badge.openclaw    { color: var(--openclaw); border-color: rgba(162,138,187,0.24); background: rgba(162,138,187,0.09); }
+  .badge.cursor      { color: var(--cursor); border-color: rgba(183,154,106,0.24); background: rgba(183,154,106,0.09); }
+  .badge.chatgpt-export { color: var(--chatgpt); border-color: rgba(116,182,165,0.24); background: rgba(116,182,165,0.09); }
   .conversation-map {
     margin: 0 0 18px;
     border: 1px solid rgba(0, 200, 160, 0.28);
@@ -1049,9 +1412,9 @@
   }
   .session-skills {
     margin-top: 12px;
-    border: 1px solid var(--border);
+    border: 1px solid var(--border2);
     border-radius: 6px;
-    background: #0a1016;
+    background: var(--surface);
     overflow: hidden;
     font-family: var(--font-mono);
   }
@@ -1074,7 +1437,7 @@
     display: inline-block;
   }
   .session-skills[open] > summary::before { transform: rotate(90deg); }
-  .session-skills > summary:hover { background: #11161f; }
+  .session-skills > summary:hover { background: rgba(255,255,255,0.025); }
   .session-skills-title {
     color: var(--text);
     font-weight: 600;
@@ -1085,7 +1448,7 @@
     font-size: 10px;
   }
   .session-skills-body {
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--border2);
     padding: 8px 10px 10px;
     display: grid;
     gap: 8px;
@@ -1206,7 +1569,38 @@
     color: var(--muted);
     font-weight: 300;
   }
-
+  .message-action-btn {
+    border: 1px solid #343b42;
+    border-radius: 5px;
+    background: #151a1f;
+    color: var(--muted);
+    width: 24px;
+    height: 22px;
+    padding: 0;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: pointer;
+  }
+  .message-action-btn:hover:not(:disabled) {
+    color: var(--text);
+    border-color: #56656e;
+    background: #1b2228;
+  }
+  .message-action-btn:disabled {
+    cursor: default;
+    opacity: 0.55;
+  }
+  .message-action-btn::after {
+    top: calc(100% + 6px);
+    right: 0;
+  }
+  .message-action-btn.copied {
+    color: var(--accent);
+    border-color: rgba(116, 182, 165, 0.56);
+  }
   .thinking-block {
     background: var(--think-bg);
     border: 1px solid var(--think-border);
@@ -1397,6 +1791,71 @@
     border-radius: 3px;
     color: var(--accent);
   }
+  .text-block.readable {
+    white-space: normal;
+  }
+  .text-block.readable p,
+  .text-block.readable ul,
+  .text-block.readable ol,
+  .text-block.readable blockquote,
+  .text-block.readable table {
+    margin: 8px 0;
+  }
+  .text-block.readable h1,
+  .text-block.readable h2,
+  .text-block.readable h3,
+  .text-block.readable h4 {
+    margin: 12px 0 6px;
+    font-size: 15px;
+    line-height: 1.45;
+    color: #e6edf7;
+  }
+  .text-block.readable ul,
+  .text-block.readable ol {
+    padding-left: 22px;
+  }
+  .text-block.readable li {
+    margin: 4px 0;
+  }
+  .text-block.readable blockquote {
+    padding-left: 12px;
+    border-left: 2px solid var(--border2);
+    color: var(--muted);
+  }
+  .text-block.readable pre.markdown-code {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border2);
+    background: #080d12;
+    color: #d8e3f0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .text-block.readable pre.markdown-code code {
+    border: 0;
+    background: transparent;
+    padding: 0;
+    color: inherit;
+  }
+  .markdown-table-wrap {
+    overflow-x: auto;
+  }
+  .text-block.readable table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .text-block.readable th,
+  .text-block.readable td {
+    border: 1px solid var(--border2);
+    padding: 6px 8px;
+    vertical-align: top;
+  }
+  .text-block.readable th {
+    color: #dbe5f5;
+    background: #0a1016;
+  }
 
   .tool-block {
     background: var(--surface);
@@ -1444,6 +1903,108 @@
     opacity: 0.6;
     cursor: wait;
   }
+  .attachment-open-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    width: min(100%, 620px);
+    min-height: 78px;
+    margin: 8px 0;
+    padding: 14px 16px;
+    text-align: left;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #0d1218;
+    color: var(--text);
+    cursor: pointer;
+    font-family: var(--font-sans);
+  }
+  .attachment-open-card:hover:not(:disabled) {
+    border-color: rgba(116, 182, 165, 0.55);
+    background: #10171e;
+  }
+  .attachment-open-card:disabled {
+    opacity: 0.65;
+    cursor: wait;
+  }
+  .attachment-open-card-main {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .attachment-open-card-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 650;
+  }
+  .attachment-open-card-meta {
+    color: var(--muted2);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .attachment-open-card-action {
+    flex: 0 0 auto;
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .attachment-video-card {
+    align-items: stretch;
+    padding: 0;
+    overflow: hidden;
+  }
+  .attachment-video-thumb {
+    position: relative;
+    flex: 0 0 220px;
+    min-height: 124px;
+    background: #070b10;
+    border-right: 1px solid var(--border);
+    display: block;
+  }
+  .attachment-video-thumb video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    min-height: 124px;
+    object-fit: cover;
+    pointer-events: none;
+  }
+  .attachment-video-open {
+    position: absolute;
+    inset: auto 10px 10px 10px;
+    display: inline-flex;
+    justify-content: center;
+    border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 6px;
+    background: rgba(0,0,0,0.58);
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 650;
+    padding: 5px 8px;
+  }
+  .attachment-video-card .attachment-open-card-main {
+    padding: 14px 16px;
+    justify-content: center;
+  }
+  .attachment-video-card .attachment-open-card-action {
+    align-self: center;
+    padding-right: 16px;
+  }
+  .inline-data-image-preview {
+    margin: 8px 0;
+  }
+  .inline-data-image-preview img {
+    max-width: 100%;
+    max-height: 480px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    display: block;
+  }
   .detail-block {
     margin: 8px 0;
     border: 1px solid var(--border);
@@ -1462,6 +2023,19 @@
   }
   .detail-block summary::-webkit-details-marker { display: none; }
   .detail-block summary:hover { background: #101821; }
+  .detail-block.raw-image-output:not([open]) {
+    border-color: rgba(116, 182, 165, 0.22);
+  }
+  .detail-block.raw-image-output:not([open]) summary {
+    color: var(--muted2);
+  }
+  .detail-block.raw-image-output:not([open]) summary::after {
+    content: 'base64 hidden';
+    float: right;
+    color: var(--muted);
+    font-family: var(--font-sans);
+    font-size: 10px;
+  }
   .detail-pre {
     margin: 0;
     padding: 10px 12px 12px;
@@ -1821,6 +2395,10 @@
   }
   .referenced-backup-card {
     gap: 12px;
+  }
+  .referenced-backup-card.dm-react,
+  .settings-card.dm-react {
+    animation: dmFeelPulse 820ms ease-out;
   }
   .referenced-backup-head {
     display: flex;
@@ -2459,6 +3037,27 @@
     background: #191919;
   }
   @media (max-width: 820px) {
+    .conv-title-row {
+      flex-wrap: wrap;
+    }
+    .conv-title {
+      flex-basis: 100%;
+    }
+    .conv-title-row .session-search-tools {
+      flex: 1 1 100%;
+      justify-content: flex-start;
+      margin-left: 0;
+      min-width: 0;
+    }
+    .conv-title-row .session-search-input {
+      width: 100%;
+    }
+    .conv-meta-row .session-search-nav {
+      margin-left: 0;
+      max-width: 100%;
+      flex: 1 1 100%;
+      justify-content: flex-start;
+    }
     .settings-shell {
       grid-template-columns: 1fr;
       min-height: auto;
@@ -2559,6 +3158,7 @@
     <button id="notice-action-btn" class="notice-action" type="button" hidden></button>
   </div>
 </div>
+<div id="conversation-bottom-hint" class="conversation-bottom-hint" role="status" aria-live="polite">End of conversation</div>
 
 <div id="recovery-reset-backdrop" class="recovery-reset-backdrop" hidden>
   <div class="recovery-reset-panel" role="dialog" aria-modal="true" aria-labelledby="recovery-reset-title">
@@ -2623,10 +3223,14 @@
   </div>
   <div class="workspace-main">
     <div class="session-tabs" id="session-tabs" role="tablist" hidden></div>
-    <div class="conversation" id="conversation">
-      <div class="no-session no-session-overview">
-        <div id="weekly-strip" class="weekly-strip" aria-label="Weekly work summary"></div>
+    <div class="conversation-shell" id="conversation-shell">
+      <div class="conversation" id="conversation">
+        <div class="no-session no-session-overview">
+          <div id="weekly-strip" class="weekly-strip" aria-label="Weekly work summary"></div>
+        </div>
       </div>
+      <div class="conversation" id="conversation-split" hidden></div>
+      <div class="split-drop-indicator" id="split-drop-indicator">Drop tab here to split right</div>
     </div>
   </div>
 </div>
@@ -2664,6 +3268,15 @@
                   </div>
                 </div>
               </div>
+            </div>
+            <div class="settings-card wide" id="message-format-settings-card">
+              <button id="readable-format-toggle" class="switch-row enabled" type="button" role="switch" aria-checked="true">
+                <span class="switch-track"><span class="switch-knob"></span></span>
+                <span class="switch-copy">
+                  <span class="switch-title">Readable message formatting</span>
+                  <span class="switch-subtitle">Render captured Markdown-like text for easier reading. Turn off to show exact plain text layout.</span>
+                </span>
+              </button>
             </div>
             <div class="settings-card wide referenced-backup-card" id="referenced-attachments-card">
               <div class="referenced-backup-head">
@@ -2881,13 +3494,32 @@ let openSessionTabs = []
 let activeMeta = null
 let activeLoadSeq = 0
 let filterSrc = 'all'
+// Left-panel view mode: 'list' (flat list, default) | 'folders' | 'bookmarks' | 'up' | 'down'
+let panelMode = localStorage.getItem('dm-panel-mode') || 'list'
+if (panelMode === 'search') panelMode = 'list'
+// Folder view starts with every folder collapsed so all folders are visible at
+// once; only explicitly opened folders are remembered.
+let expandedFolders = new Set(JSON.parse(localStorage.getItem('dm-expanded-folders') || '[]'))
+// Annotation caches. annoSummary feeds the list views; activeAnnotations holds
+// the open conversation's per-message state keyed by message uuid.
+let annoSummary = { sessions: {}, messages: [] }
+let activeAnnotations = { bookmark: false, labels: [], messages: {}, orphanCount: 0 }
+let annoSummaryLoaded = false
+let pendingAnnotationJump = null
 let searchQ = ''
 let contentMatches = {}  // sessionId -> full-text search hit
 let activeSearchTarget = null
 let activeSearchNav = null
+let searchAutoLoadHoldUntil = 0
+let searchScrollRetryTimer = null
+let searchScrollCancelled = false
 let sessionSearchQ = ''
 let sessionSearchTimer = null
 let sessionSearchSeq = 0
+let splitSessionId = null
+let splitLoadSeq = 0
+let draggedTabSessionId = null
+let suppressSearchHighlight = false
 let searchTimer = null
 let contentSearchAbort = null
 let contentSearchPending = false
@@ -2909,6 +3541,7 @@ let referencedAttachmentStatus = null
 let referencedAttachmentBusy = false
 let referencedAttachmentPollTimer = null
 let referencedAttachmentPollTail = 0
+let referencedAttachmentRefreshedProtectedFiles = 0
 let transferExportData = null
 let transferImportData = null
 let transferBusy = false
@@ -2941,6 +3574,9 @@ let activeMessages = []
 let activePageInfo = null
 let activeBranchData = null
 let loadingMoreMessages = false
+let jumpingToLatest = false
+let conversationBottomHintTimer = null
+let conversationWasAtBottom = false
 let weeklyAnalytics = null
 let weeklyAnalyticsLoading = false
 let weeklyAnalyticsError = ''
@@ -2950,6 +3586,9 @@ let weeklyAnalyticsSessionSignature = ''
 let overviewAnimatedNumberKeys = new Set()
 let overviewForceNumberReplay = false
 let overviewLanguageReplayTimer = null
+let sessionReactIds = new Set()
+let sourceReactIds = new Set()
+let copyInlineTimer = null
 const WEEKLY_ANALYTICS_REFRESH_MS = 5 * 60 * 1000
 const WEEKLY_ANALYTICS_CACHE_KEY = 'dm_weekly_analytics_v1'
 const WEEKLY_ANALYTICS_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000
@@ -3011,6 +3650,8 @@ const appText = {
     noticeDismiss: 'dismiss',
     languageTitle: 'Language',
     languageSubtitle: 'Choose the app language for setup, unlock, and settings.',
+    readableFormatting: 'Readable message formatting',
+    readableFormattingCopy: 'Render captured Markdown-like text for easier reading. Turn off to show exact plain text layout.',
     settingsPanelGeneral: 'General',
     settingsPanelUpdates: 'Updates',
     settingsPanelFiles: 'File backup',
@@ -3108,11 +3749,20 @@ const appText = {
     duplicates: 'duplicates',
     newAssets: 'new assets',
     chooseFolder: 'Choose folder',
-    chooseCheckExport: '1. Choose & Check Export',
-    checkAgain: 'Check Again (No Import)',
-    importVault: '2. Import into Vault',
-    openFolder: 'Open DataMoat folder',
-  },
+	    chooseCheckExport: '1. Choose & Check Export',
+	    checkAgain: 'Check Again (No Import)',
+	    importVault: '2. Import into Vault',
+	    openFolder: 'Open DataMoat folder',
+	    sessionSearchPlaceholder: 'search this conversation...',
+	    searchingThisConversation: 'searching this conversation...',
+	    matchesFor: 'matches for "{query}"',
+	    copyAllContextTip: 'Copy full context pack',
+	    jumpLatestTip: 'Jump to latest message',
+	    copyThroughContextTip: 'Copy context through this message',
+	    copiedThroughNotice: 'Copied {count} messages as a context pack.',
+	    copiedAllNotice: 'Copied all {count} messages as a context pack.',
+	    endOfConversation: 'End of conversation',
+	  },
   'zh-CN': {
     searchPlaceholder: '搜索对话...',
     settings: '设置',
@@ -3218,11 +3868,20 @@ const appText = {
     duplicates: '重复项',
     newAssets: '新资源',
     chooseFolder: '选择文件夹',
-    chooseCheckExport: '1. 选择并检查 Export',
-    checkAgain: '再次检查（不导入）',
-    importVault: '2. 导入 Vault',
-    openFolder: '打开 DataMoat 文件夹',
-  },
+	    chooseCheckExport: '1. 选择并检查 Export',
+	    checkAgain: '再次检查（不导入）',
+	    importVault: '2. 导入 Vault',
+	    openFolder: '打开 DataMoat 文件夹',
+	    sessionSearchPlaceholder: '搜索这个对话...',
+	    searchingThisConversation: '正在搜索这个对话...',
+	    matchesFor: '“{query}”的匹配项',
+	    copyAllContextTip: '复制完整上下文包',
+	    jumpLatestTip: '跳到最新消息',
+	    copyThroughContextTip: '复制到这条消息为止的上下文',
+	    copiedThroughNotice: '已复制 {count} 条消息为上下文包。',
+	    copiedAllNotice: '已复制全部 {count} 条消息为上下文包。',
+	    endOfConversation: '对话已到底',
+	  },
   ja: {
     searchPlaceholder: '会話を検索...',
     settings: '設定',
@@ -3328,11 +3987,20 @@ const appText = {
     duplicates: '重複',
     newAssets: '新規アセット',
     chooseFolder: 'フォルダを選択',
-    chooseCheckExport: '1. Export を選択して確認',
-    checkAgain: '再確認（インポートなし）',
-    importVault: '2. Vault にインポート',
-    openFolder: 'DataMoat フォルダを開く',
-  },
+	    chooseCheckExport: '1. Export を選択して確認',
+	    checkAgain: '再確認（インポートなし）',
+	    importVault: '2. Vault にインポート',
+	    openFolder: 'DataMoat フォルダを開く',
+	    sessionSearchPlaceholder: 'この会話を検索...',
+	    searchingThisConversation: 'この会話を検索中...',
+	    matchesFor: '「{query}」の一致',
+	    copyAllContextTip: 'コンテキストパック全体をコピー',
+	    jumpLatestTip: '最新メッセージへ移動',
+	    copyThroughContextTip: 'このメッセージまでのコンテキストをコピー',
+	    copiedThroughNotice: '{count} 件のメッセージをコンテキストパックとしてコピーしました。',
+	    copiedAllNotice: '全 {count} 件のメッセージをコンテキストパックとしてコピーしました。',
+	    endOfConversation: '会話の最後です',
+	  },
 }
 const appTextSettingsExtra = {
   en: {
@@ -3930,6 +4598,7 @@ Object.assign(appText['zh-TW'], {
   overviewCalculating: '計算中…',
 })
 let appLanguage = 'en'
+let readableMessageFormatting = true
 function normalizeAppLanguage(value) {
   const code = String(value || '').replace('_', '-').toLowerCase()
   if (code.startsWith('zh') || code.startsWith('yue')) {
@@ -4056,6 +4725,11 @@ function applyAppLanguage(options = {}) {
   })
   const search = document.getElementById('search')
   if (search) search.placeholder = appTr('searchPlaceholder')
+  document.querySelectorAll('input[data-session-search]').forEach(input => {
+    input.placeholder = appTr('sessionSearchPlaceholder')
+  })
+  const bottomHint = document.getElementById('conversation-bottom-hint')
+  if (bottomHint) bottomHint.textContent = appTr('endOfConversation')
   const settingsBtn = document.getElementById('open-settings-btn')
   if (settingsBtn) settingsBtn.setAttribute('aria-label', appTr('settings'))
   const closeSettingsBtn = document.getElementById('close-settings-btn')
@@ -4066,6 +4740,8 @@ function applyAppLanguage(options = {}) {
   setAppText('settings-title', 'settings')
   setAppText('language-settings-title', 'languageTitle')
   setAppText('language-settings-subtitle', 'languageSubtitle')
+  document.querySelector('#readable-format-toggle .switch-title') && (document.querySelector('#readable-format-toggle .switch-title').textContent = appTr('readableFormatting'))
+  document.querySelector('#readable-format-toggle .switch-subtitle') && (document.querySelector('#readable-format-toggle .switch-subtitle').textContent = appTr('readableFormattingCopy'))
   setAppText('settings-nav-general', 'settingsPanelGeneral')
   setAppText('settings-nav-updates', 'settingsPanelUpdates')
   setAppText('settings-nav-files', 'settingsPanelFiles')
@@ -4139,6 +4815,12 @@ function rerenderLocalizedSettingsPanels() {
   renderTransferImportPanel()
   renderChatGptImportPanel()
 }
+function applyReadableMessageFormattingState() {
+  const button = document.getElementById('readable-format-toggle')
+  if (!button) return
+  button.classList.toggle('enabled', !!readableMessageFormatting)
+  button.setAttribute('aria-checked', readableMessageFormatting ? 'true' : 'false')
+}
 async function loadAppPreferences() {
   try {
     const data = await jsonOrThrow(await apiFetch('/api/preferences'))
@@ -4147,8 +4829,10 @@ async function loadAppPreferences() {
     } else {
       appLanguage = normalizeAppLanguage(data?.language || detectAppLanguage())
     }
+    readableMessageFormatting = data?.readableMessageFormatting !== false
   } catch {}
   applyAppLanguage()
+  applyReadableMessageFormattingState()
   rerenderLocalizedSettingsPanels()
 }
 async function saveAppLanguage(language) {
@@ -4170,6 +4854,27 @@ async function saveAppLanguage(language) {
     }
   } catch {}
   rerenderLocalizedSettingsPanels()
+}
+async function toggleReadableMessageFormatting() {
+  readableMessageFormatting = !readableMessageFormatting
+  applyReadableMessageFormattingState()
+  if (activeSessionData && activeMessages) {
+    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+  }
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ readableMessageFormatting }),
+    }))
+    readableMessageFormatting = data?.readableMessageFormatting !== false
+    applyReadableMessageFormattingState()
+    if (activeSessionData && activeMessages) {
+      renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+    }
+  } catch {
+    applyReadableMessageFormattingState()
+  }
 }
 
 async function jsonOrThrow(res) {
@@ -4233,6 +4938,45 @@ function dismissNotice() {
   actionBtn.textContent = ''
   noticeActionHandler = null
   activeNoticeKey = ''
+}
+
+function feelPulseElement(element, className = 'dm-react', duration = 820) {
+  if (!element) return
+  element.classList.remove(className)
+  void element.offsetWidth
+  element.classList.add(className)
+  window.setTimeout(() => {
+    if (element.isConnected) element.classList.remove(className)
+  }, duration)
+}
+
+function feelPulseSelector(selector, className = 'dm-react', duration = 820) {
+  document.querySelectorAll(selector).forEach(element => feelPulseElement(element, className, duration))
+}
+
+function markSourceReaction(source) {
+  const safeSource = String(source || '').replace(/"/g, '\\"')
+  if (!safeSource) return
+  feelPulseSelector(`.filter-btn[data-src="${safeSource}"]`)
+  feelPulseSelector('.filter-btn[data-src="all"]')
+}
+
+function showCopyInlineStatus(message) {
+  const status = document.querySelector('.copy-inline-status')
+  if (!status) return
+  status.textContent = message
+  status.classList.add('show')
+  window.clearTimeout(copyInlineTimer)
+  copyInlineTimer = window.setTimeout(() => {
+    if (!status.isConnected) return
+    status.classList.remove('show')
+    status.textContent = ''
+  }, 1800)
+}
+
+function markMessageFocusFromButton(button) {
+  const message = button?.closest?.('.message')
+  if (message) feelPulseElement(message, 'dm-focus', 820)
 }
 
 function touchIdNoticeStorageKey(noticeKey) {
@@ -4517,14 +5261,29 @@ async function sendActivityPing(force = false) {
 async function loadSessions() {
   await relockOnReload()
   const nextSessions = await fetchSessionsSnapshot()
+  const previousIds = new Set(sessions.map(session => session.uid || session.id))
+  const canReactToNewSessions = sessions.length > 0
+  const newSessions = canReactToNewSessions
+    ? nextSessions.filter(session => !previousIds.has(session.uid || session.id))
+    : []
   restoreWeeklyAnalyticsCache(sessionAnalyticsSignature(nextSessions))
   const weeklyChanged = invalidateWeeklyAnalyticsIfSessionsChanged(nextSessions)
+  sessionReactIds = new Set(newSessions.map(session => session.uid || session.id))
+  sourceReactIds = new Set(newSessions.map(session => session.source).filter(Boolean))
   sessions = nextSessions
   renderList()
+  sourceReactIds.forEach(source => markSourceReaction(source))
+  if (sessionReactIds.size > 0) {
+    window.setTimeout(() => {
+      sessionReactIds = new Set()
+      sourceReactIds = new Set()
+    }, 1200)
+  }
   renderSessionTabs()
   renderOverview()
   renderBackupPathsPanel()
   renderSkillsBackupPanel()
+  if (!annoSummaryLoaded) void loadAnnotationSummary()
   void loadSkillsBackupStatus().finally(() => renderSkillsBackupPanel())
   scheduleWeeklyAnalyticsLoad(weeklyChanged ? 250 : 900, { force: weeklyChanged })
   void refreshUpdatePanel()
@@ -4723,6 +5482,254 @@ async function checkTouchIdUpgradeOffer() {
   }
 }
 
+// ---- Annotations: bookmarks (sessions + messages), votes (messages) --------
+
+const ANNO_ICONS = {
+  folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>',
+  folderOpen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v1"/><path d="M4 19h13.4a2 2 0 0 0 1.9-1.4l1.6-5A2 2 0 0 0 19 10H7.5a2 2 0 0 0-1.9 1.4L3 19a0 0 0 0 0 1 0Z"/></svg>',
+  bookmark: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.5L6 21Z"/></svg>',
+  bookmarkFill: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.5L6 21Z"/></svg>',
+  up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4v-9Zm3 9h7.5a2 2 0 0 0 2-1.7l1-6A2 2 0 0 0 18.5 10H14V5.5A2.5 2.5 0 0 0 11.5 3L10 9.5Z"/></svg>',
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13V4h3v9Zm-3-9H6.5a2 2 0 0 0-2 1.7l-1 6A2 2 0 0 0 5.5 14H10v4.5A2.5 2.5 0 0 0 12.5 21L14 14.5Z"/></svg>',
+}
+
+async function loadAnnotationSummary() {
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/annotations/summary'))
+    annoSummary = { sessions: data.sessions || {}, messages: data.messages || [] }
+    annoSummaryLoaded = true
+    renderList()
+  } catch {
+    // Annotations are an overlay; list rendering must never depend on them.
+  }
+}
+
+async function loadActiveAnnotations(sessionId) {
+  try {
+    const data = await jsonOrThrow(await apiFetch(`/api/session/${encodeURIComponent(sessionId)}/annotations`))
+    if (activeId !== sessionId) return
+    activeAnnotations = data
+    applyAnnotationStateToConversation()
+  } catch {
+    // Keep previous state; buttons still work via POST round-trips.
+  }
+}
+
+function messageAnnotationState(uuid) {
+  return activeAnnotations.messages?.[uuid] || { bookmark: false, vote: null, labels: [] }
+}
+
+// Sync button highlight state for the open conversation without re-rendering
+// (re-render would fight the user's scroll position).
+function applyAnnotationStateToConversation() {
+  document.querySelectorAll('#conversation .msg-anno-bar[data-anno-uuid]').forEach(bar => {
+    const state = messageAnnotationState(bar.dataset.annoUuid)
+    bar.classList.toggle('has-active', !!(state.bookmark || state.vote))
+    bar.querySelector('.anno-btn.bm')?.classList.toggle('active', state.bookmark)
+    bar.querySelector('.anno-btn.up')?.classList.toggle('active', state.vote === 'up')
+    bar.querySelector('.anno-btn.down')?.classList.toggle('active', state.vote === 'down')
+    const bm = bar.querySelector('.anno-btn.bm')
+    if (bm) bm.innerHTML = state.bookmark ? ANNO_ICONS.bookmarkFill : ANNO_ICONS.bookmark
+  })
+  const sessionBtn = document.querySelector('#conversation .conv-bookmark-btn')
+  if (sessionBtn) {
+    sessionBtn.classList.toggle('active', !!activeAnnotations.bookmark)
+    sessionBtn.innerHTML = activeAnnotations.bookmark ? ANNO_ICONS.bookmarkFill : ANNO_ICONS.bookmark
+  }
+}
+
+async function sendAnnotate(sessionId, body) {
+  const res = await apiFetch(`/api/session/${encodeURIComponent(sessionId)}/annotate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const data = await jsonOrThrow(res)
+  if (activeId === sessionId) {
+    activeAnnotations = data
+    applyAnnotationStateToConversation()
+  }
+  void loadAnnotationSummary()
+  return data
+}
+
+function toggleSessionBookmark(sessionId) {
+  const current = sessionId === activeId
+    ? !!activeAnnotations.bookmark
+    : !!annoSummary.sessions?.[sessionId]?.bookmark
+  // Optimistic flip; POST response is authoritative.
+  if (sessionId === activeId) {
+    activeAnnotations.bookmark = !current
+    applyAnnotationStateToConversation()
+  }
+  void sendAnnotate(sessionId, { scope: 'session', kind: 'bookmark', action: current ? 'clear' : 'set' })
+}
+
+function toggleMessageAnnotation(sessionId, uuid, kind) {
+  const state = messageAnnotationState(uuid)
+  let body
+  if (kind === 'bookmark') {
+    body = { scope: 'message', messageUuid: uuid, kind: 'bookmark', action: state.bookmark ? 'clear' : 'set' }
+    state.bookmark = !state.bookmark
+  } else {
+    const vote = kind // 'up' | 'down'
+    const clearing = state.vote === vote
+    body = clearing
+      ? { scope: 'message', messageUuid: uuid, kind: 'vote', action: 'clear' }
+      : { scope: 'message', messageUuid: uuid, kind: 'vote', action: 'set', value: vote }
+    state.vote = clearing ? null : vote
+  }
+  activeAnnotations.messages = { ...(activeAnnotations.messages || {}), [uuid]: state }
+  applyAnnotationStateToConversation()
+  void sendAnnotate(sessionId, body)
+}
+
+function setPanelMode(mode) {
+  // Clicking the already-active icon returns to the default flat list.
+  panelMode = panelMode === mode ? 'list' : mode
+  localStorage.setItem('dm-panel-mode', panelMode)
+  if ((panelMode === 'bookmarks' || panelMode === 'up' || panelMode === 'down') && !annoSummaryLoaded) {
+    void loadAnnotationSummary()
+  }
+  renderList()
+}
+
+function toggleFolderCollapsed(folderKey) {
+  if (expandedFolders.has(folderKey)) expandedFolders.delete(folderKey)
+  else expandedFolders.add(folderKey)
+  localStorage.setItem('dm-expanded-folders', JSON.stringify([...expandedFolders]))
+  renderList()
+}
+
+function renderPanelModeBar() {
+  const modes = [
+    ['folders', panelMode === 'folders' ? 'folderOpen' : 'folder', 'Folder view (click again for flat list)'],
+    ['bookmarks', 'bookmark', 'Bookmarked sessions & messages'],
+    ['up', 'up', 'Messages voted up'],
+    ['down', 'down', 'Messages voted down'],
+  ]
+  return `<div class="panel-mode-bar" role="tablist" aria-label="Session list view">
+    ${modes.map(([mode, icon, label]) => `
+      <button class="panel-mode-btn${panelMode === mode ? ' active' : ''}" type="button" data-panel-mode="${mode}"
+        role="tab" aria-selected="${panelMode === mode ? 'true' : 'false'}" title="${escAttr(label)}" aria-label="${escAttr(label)}">
+        ${ANNO_ICONS[icon]}
+      </button>`).join('')}
+  </div>`
+}
+
+function renderSessionListItem(s) {
+  const sessionKey = s.uid || s.id
+  const hit = contentMatches[sessionKey]
+  const excerpt = typeof hit === 'string' ? hit : hit?.excerpt
+  const itemClasses = [
+    'session-item',
+    sessionKey === activeId ? 'active' : '',
+    searchQ && hit ? 'search-result' : '',
+    sessionReactIds.has(sessionKey) ? 'dm-react' : '',
+  ].filter(Boolean).join(' ')
+  const safeSessionId = escAttr(sessionKey)
+  const safeModel = esc(s.model)
+  const safeCwd = esc(sessionDisplayTitle(s, s.id.slice(0,16)+'…'))
+  const sourceLabel = sessionSourceLabel(s)
+  const safeSourceLabel = esc(s.sourceAccount ? `${sourceLabel} · ${s.sourceAccount}` : sourceLabel)
+  const safeSourceAccount = s.sourceAccount
+    ? `<div class="session-account"><span class="session-account-label">account</span><span class="session-account-value">${esc(s.sourceAccount)}</span></div>`
+    : ''
+  const bookmarked = !!annoSummary.sessions?.[sessionKey]?.bookmark
+  return `
+  <div class="${itemClasses}" data-session-id="${safeSessionId}" tabindex="0" role="button" aria-label="Open session ${safeSessionId}">
+    <div class="session-header">
+      <span class="source-dot ${s.source}"></span>
+      <span class="session-model">${safeModel}</span>
+      ${s.hasThinking ? '<span class="thinking-badge">thinking</span>' : ''}
+      ${s.graph?.branchCount ? `<span class="thinking-badge">${fmtNumber(s.graph.branchCount)} branches</span>` : ''}
+      ${bookmarked ? `<span class="session-bookmark-flag" title="Bookmarked">${ANNO_ICONS.bookmarkFill}</span>` : ''}
+    </div>
+    <div class="session-cwd">${safeCwd}</div>
+    ${safeSourceAccount}
+    ${excerpt ? `<div class="search-excerpt">${esc(excerpt)}</div>` : ''}
+    <div class="session-meta">
+      <span>${safeSourceLabel}</span>
+      <span>${s.messageCount} msgs · ${reltime(s.lastTimestamp)}</span>
+    </div>
+  </div>`
+}
+
+function renderAnnotatedMessageItem(entry) {
+  const session = sessions.find(s => (s.uid || s.id) === entry.sessionUid)
+  if (!session) return ''
+  const title = sessionDisplayTitle(session, session.id)
+  const voteBadge = entry.vote === 'up' ? ANNO_ICONS.up : entry.vote === 'down' ? ANNO_ICONS.down : ''
+  return `
+  <div class="session-item anno-msg-item" data-session-id="${escAttr(entry.sessionUid)}" data-message-index="${escAttr(String(entry.messageIndex))}" tabindex="0" role="button" aria-label="Open message in ${escAttr(title)}">
+    <div class="session-header">
+      <span class="source-dot ${esc(session.source)}"></span>
+      <span class="session-model">${esc(entry.role)}</span>
+      <span class="session-bookmark-flag">${entry.bookmark ? ANNO_ICONS.bookmarkFill : voteBadge}</span>
+    </div>
+    <div class="anno-msg-snippet">${esc(entry.snippet || '')}</div>
+    <div class="anno-msg-meta">
+      <span>${esc(title)}</span>
+      <span style="margin-left:auto">${reltime(entry.timestamp)}</span>
+    </div>
+  </div>`
+}
+
+function folderKeyForSession(s) {
+  return String(s.cwd || '').trim() || '(no folder)'
+}
+
+function renderFolderView(filtered) {
+  const groups = new Map()
+  for (const s of filtered) {
+    const key = folderKeyForSession(s)
+    const group = groups.get(key) || []
+    group.push(s)
+    groups.set(key, group)
+  }
+  const sorted = [...groups.entries()].sort((a, b) => {
+    const aTime = Date.parse(a[1][0]?.lastTimestamp || '') || 0
+    const bTime = Date.parse(b[1][0]?.lastTimestamp || '') || 0
+    return bTime - aTime
+  })
+  return sorted.map(([key, group]) => {
+    // Collapsed by default: only folders the user explicitly opened expand.
+    const collapsed = !expandedFolders.has(key)
+    const label = key === '(no folder)' ? key : shortPath(key)
+    return `
+    <div class="folder-group">
+      <div class="folder-group-header${collapsed ? ' collapsed' : ''}" data-folder-key="${escAttr(key)}" role="button" tabindex="0" title="${escAttr(key)}">
+        <span class="folder-group-arrow">▼</span>
+        <span>${esc(label)}</span>
+        <span class="folder-group-count">${group.length}</span>
+      </div>
+      ${collapsed ? '' : `<div class="folder-group-items">${group.map(renderSessionListItem).join('')}</div>`}
+    </div>`
+  }).join('')
+}
+
+function renderAnnotationView(filtered) {
+  const allowedUids = new Set(filtered.map(s => s.uid || s.id))
+  const parts = []
+  if (panelMode === 'bookmarks') {
+    const bookmarkedSessions = filtered.filter(s => annoSummary.sessions?.[s.uid || s.id]?.bookmark)
+    parts.push(...bookmarkedSessions.map(renderSessionListItem))
+  }
+  const entries = (annoSummary.messages || []).filter(entry => {
+    if (!allowedUids.has(entry.sessionUid)) return false
+    if (panelMode === 'bookmarks') return entry.bookmark
+    if (panelMode === 'up') return entry.vote === 'up'
+    if (panelMode === 'down') return entry.vote === 'down'
+    return false
+  })
+  parts.push(...entries.map(renderAnnotatedMessageItem))
+  if (parts.filter(Boolean).length === 0) {
+    const label = panelMode === 'bookmarks' ? 'No bookmarks yet' : panelMode === 'up' ? 'No messages voted up yet' : 'No messages voted down yet'
+    return `<div class="anno-empty">${label}</div>`
+  }
+  return parts.join('')
+}
+
 function renderList() {
   const list = document.getElementById('session-list')
   const preservedScrollTop = list.scrollTop
@@ -4751,14 +5758,18 @@ function renderList() {
   document.getElementById('stat').innerHTML =
     `<strong>${filteredCount}</strong> / ${sessions.length} sessions`
 
-  if (filtered.length === 0) {
+  const modeBar = renderPanelModeBar()
+  let body
+  if (panelMode === 'bookmarks' || panelMode === 'up' || panelMode === 'down') {
+    body = renderAnnotationView(filtered)
+  } else if (filtered.length === 0) {
     const emptyTitle = searchQ
       ? (contentSearchPending ? 'searching content…' : 'no results')
       : 'no results'
     const emptySub = searchQ && !contentSearchPending
       ? `No conversations matched "${esc(searchQ)}".`
       : ''
-    list.innerHTML = contentSearchPending
+    body = contentSearchPending
       ? `<div class="empty searching-empty">
         <div class="empty-title scan-title">searching content<span class="scan-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></div>
       </div>`
@@ -4767,45 +5778,27 @@ function renderList() {
         <div class="empty-title">${emptyTitle}</div>
         ${emptySub ? `<div class="empty-sub">${emptySub}</div>` : ''}
       </div>`
+  } else if (panelMode === 'folders') {
+    body = renderFolderView(filtered)
   } else {
-    list.innerHTML = filtered.map(s => {
-      const sessionKey = s.uid || s.id
-      const hit = contentMatches[sessionKey]
-      const excerpt = typeof hit === 'string' ? hit : hit?.excerpt
-      const safeSessionId = escAttr(sessionKey)
-      const safeModel = esc(s.model)
-      const safeCwd = esc(s.cwd ? shortPath(s.cwd) : s.id.slice(0,16)+'…')
-      const safeSource = esc(s.source)
-      const sourceLabel = sessionSourceLabel(s)
-      const safeSourceLabel = esc(s.sourceAccount ? `${sourceLabel} · ${s.sourceAccount}` : sourceLabel)
-      const safeSourceAccount = s.sourceAccount
-        ? `<div class="session-account"><span class="session-account-label">account</span><span class="session-account-value">${esc(s.sourceAccount)}</span></div>`
-        : ''
-      return `
-      <div class="session-item ${sessionKey === activeId ? 'active' : ''}" data-session-id="${safeSessionId}" tabindex="0" role="button" aria-label="Open session ${safeSessionId}">
-        <div class="session-header">
-          <span class="source-dot ${s.source}"></span>
-          <span class="session-model">${safeModel}</span>
-          ${s.hasThinking ? '<span class="thinking-badge">thinking</span>' : ''}
-          ${s.graph?.branchCount ? `<span class="thinking-badge">${fmtNumber(s.graph.branchCount)} branches</span>` : ''}
-        </div>
-        <div class="session-cwd">${safeCwd}</div>
-        ${safeSourceAccount}
-        ${excerpt ? `<div class="search-excerpt">${esc(excerpt)}</div>` : ''}
-        <div class="session-meta">
-          <span>${safeSourceLabel}</span>
-          <span>${s.messageCount} msgs · ${reltime(s.lastTimestamp)}</span>
-        </div>
-      </div>`
-    }).join('')
+    body = filtered.map(renderSessionListItem).join('')
   }
+  list.innerHTML = modeBar + body
   list.scrollTop = preservedScrollTop
 }
 
 function tabTitleForSession(sessionId) {
   const session = sessions.find(s => (s.uid || s.id) === sessionId)
   if (!session) return sessionId
-  return shortPath(session.cwd || session.model || session.id || sessionId)
+  return sessionDisplayTitle(session, sessionId)
+}
+
+function sessionDisplayTitle(session, fallback = '') {
+  const title = String(session?.title || '').trim()
+  if (title) return title
+  const cwd = String(session?.cwd || '').trim()
+  if (cwd) return shortPath(cwd)
+  return String(session?.model || session?.id || fallback || '')
 }
 
 function ensureSessionTab(sessionId) {
@@ -4818,12 +5811,23 @@ function renderSessionTabs() {
   if (!tabs) return
   const knownIds = new Set(sessions.map(s => s.uid || s.id))
   openSessionTabs = openSessionTabs.filter(id => knownIds.size === 0 || knownIds.has(id))
+  if (splitSessionId && knownIds.size > 0 && !knownIds.has(splitSessionId)) {
+    splitSessionId = null
+    splitLoadSeq += 1
+    const shell = document.getElementById('conversation-shell')
+    const pane = document.getElementById('conversation-split')
+    shell?.classList.remove('split-active')
+    if (pane) {
+      pane.hidden = true
+      pane.innerHTML = ''
+    }
+  }
   tabs.hidden = openSessionTabs.length === 0
   tabs.innerHTML = openSessionTabs.map(id => {
     const safeId = escAttr(id)
-    return `<button class="session-tab ${id === activeId ? 'active' : ''}" type="button" role="tab" aria-selected="${id === activeId ? 'true' : 'false'}" data-tab-id="${safeId}">
+    return `<button class="session-tab ${id === activeId ? 'active' : ''}${id === splitSessionId ? ' split-open' : ''}" type="button" role="tab" aria-selected="${id === activeId ? 'true' : 'false'}" draggable="true" data-tab-id="${safeId}">
       <span class="session-tab-title">${esc(tabTitleForSession(id))}</span>
-      <span class="session-tab-close" role="button" tabindex="-1" aria-label="Close tab" data-tab-close="${safeId}">×</span>
+      <span class="session-tab-close" role="button" tabindex="-1" aria-label="Close tab" draggable="false" data-tab-close="${safeId}">×</span>
     </button>`
   }).join('')
 }
@@ -4849,6 +5853,7 @@ function clearActiveSession() {
   sessionSearchQ = ''
   clearTimeout(sessionSearchTimer)
   sessionSearchSeq += 1
+  closeSplitPane()
   renderList()
   renderSessionTabs()
   renderNoSession()
@@ -4858,6 +5863,7 @@ function closeSessionTab(sessionId) {
   const index = openSessionTabs.indexOf(sessionId)
   if (index === -1) return
   openSessionTabs.splice(index, 1)
+  if (splitSessionId === sessionId) closeSplitPane()
   if (activeId !== sessionId) {
     renderSessionTabs()
     return
@@ -4892,6 +5898,7 @@ function sessionMatchesSearchMetadata(session, query) {
   const q = String(query || '').toLowerCase()
   if (!q) return false
   return String(session.model || '').toLowerCase().includes(q) ||
+         String(session.title || '').toLowerCase().includes(q) ||
          String(session.cwd || '').toLowerCase().includes(q) ||
          String(session.id || session.uid || '').toLowerCase().includes(q)
 }
@@ -5366,14 +6373,15 @@ async function selectSession(id, options = {}) {
   const seq = ++activeLoadSeq
   const summary = sessions.find(s => (s.uid || s.id) === id)
   const shouldPage = (summary?.messageCount || 0) > LARGE_SESSION_MESSAGE_THRESHOLD
-  const searchMessageIndex = Number(searchHit?.messageIndex)
+  const jumpToMessageIndex = Number(options.jumpToMessageIndex)
+  const searchMessageIndex = Number.isFinite(jumpToMessageIndex) ? jumpToMessageIndex : Number(searchHit?.messageIndex)
   const offset = shouldPage && Number.isFinite(searchMessageIndex)
     ? Math.max(0, Math.floor(searchMessageIndex) - SEARCH_CONTEXT_BEFORE)
     : 0
   const limit = shouldPage ? SESSION_PAGE_SIZE : 0
   const url = limit > 0
-    ? `/api/session/${id}?offset=${offset}&limit=${limit}`
-    : `/api/session/${id}`
+    ? `/api/session/${encodeURIComponent(id)}?offset=${offset}&limit=${limit}`
+    : `/api/session/${encodeURIComponent(id)}`
   const res = await apiFetch(url)
   const { session, messages, hasMore, totalMessages, nextOffset, limit: responseLimit } = await res.json()
   if (seq !== activeLoadSeq || activeId !== id) return
@@ -5381,9 +6389,10 @@ async function selectSession(id, options = {}) {
   activeMessages = messages
   activePageInfo = {
     paginated: shouldPage,
+    hasPrevious: shouldPage && offset > 0,
     hasMore: !!hasMore,
     totalMessages: totalMessages || session.messageCount || messages.length,
-    nextOffset: nextOffset || messages.length,
+    nextOffset: nextOffset || offset + messages.length,
     limit: responseLimit || 0,
     offset,
   }
@@ -5395,10 +6404,17 @@ async function selectSession(id, options = {}) {
     loadedMessages: messages.length,
   }
 
+  activeAnnotations = { bookmark: false, labels: [], messages: {}, orphanCount: 0 }
   renderConversation(session, messages, { resetScroll: true, pageInfo: activePageInfo })
+  void loadActiveAnnotations(id)
   if (activeSearchTarget) {
-    requestAnimationFrame(scrollToSearchTarget)
+    cancelScheduledAnnotationJump()
+    scheduleScrollToSearchTarget()
     void loadSessionSearchMatches(id, activeSearchTarget.query, searchHit, seq)
+  } else if (Number.isFinite(jumpToMessageIndex)) {
+    scheduleAnnotationMessageJump(id, jumpToMessageIndex, seq)
+  } else {
+    cancelScheduledAnnotationJump()
   }
 }
 
@@ -5457,27 +6473,44 @@ function renderSearchNav() {
   const hits = Array.isArray(nav?.hits) ? nav.hits : []
   const current = hits.length && Number.isFinite(Number(nav?.currentIndex)) ? Number(nav.currentIndex) + 1 : 0
   const countLabel = loading
-    ? 'searching this conversation...'
+    ? appTr('searchingThisConversation')
     : `${current} / ${Number.isFinite(total) ? total : hits.length}`
   const disabled = loading || hits.length <= 1 ? ' disabled' : ''
   return `<div class="session-search-nav">
     <button class="search-nav-btn" type="button" data-search-nav="prev"${disabled} aria-label="Previous match">&lt;</button>
-    <span><span class="search-nav-count">${esc(countLabel)}</span> matches for "${esc(query)}"</span>
+    <span><span class="search-nav-count">${esc(countLabel)}</span> ${esc(appFmt('matchesFor', { query }))}</span>
     <button class="search-nav-btn" type="button" data-search-nav="next"${disabled} aria-label="Next match">&gt;</button>
   </div>`
 }
 
 function renderSessionSearchControls() {
   return `<div class="session-search-tools">
-    <input class="session-search-input" data-session-search type="text" placeholder="search this conversation..." autocomplete="off" value="${escAttr(sessionSearchQ)}">
-    ${renderSearchNav()}
+    <input class="session-search-input${sessionSearchQ.length >= 2 ? ' search-active' : ''}" data-session-search type="text" placeholder="${escAttr(appTr('sessionSearchPlaceholder'))}" autocomplete="off" value="${escAttr(sessionSearchQ)}">
+  </div>`
+}
+
+function renderConversationActions(session, pageInfo) {
+  if (activeBranchData) return ''
+  const total = Number(pageInfo?.totalMessages || session.messageCount || 0)
+  const copyDisabled = total <= 0
+  const copyLabel = appTr('copyAllContextTip')
+  const latestLabel = appTr('jumpLatestTip')
+  const sessionKey = session.uid || session.id
+  const bookmarked = sessionKey === activeId
+    ? !!activeAnnotations.bookmark
+    : !!annoSummary.sessions?.[sessionKey]?.bookmark
+  return `<div class="conv-actions">
+    <button class="conv-action-btn icon-action-btn conv-bookmark-btn${bookmarked ? ' active' : ''}" type="button" data-session-bookmark="${escAttr(sessionKey)}" data-tip="Bookmark session" title="Bookmark session" aria-label="Bookmark session">${bookmarked ? ANNO_ICONS.bookmarkFill : ANNO_ICONS.bookmark}</button>
+    <button class="conv-action-btn icon-action-btn" type="button" data-session-copy-full data-tip="${escAttr(copyLabel)}" title="${escAttr(copyLabel)}" aria-label="${escAttr(copyLabel)}"${copyDisabled ? ' disabled' : ''}>⧉</button>
+    <span class="copy-inline-status" role="status" aria-live="polite"></span>
+    <button class="conv-action-btn icon-action-btn" type="button" data-session-jump-latest data-tip="${escAttr(latestLabel)}" title="${escAttr(latestLabel)}" aria-label="${escAttr(latestLabel)}"${total <= 0 ? ' disabled' : ''}>↓</button>
   </div>`
 }
 
 function applyConversationHeaderHiddenState() {
-  const header = document.querySelector('.conv-header')
-  if (!header) return
-  header.classList.toggle('is-hidden', conversationHeaderHidden)
+  document.querySelectorAll('.conv-header').forEach(header => {
+    header.classList.toggle('is-hidden', conversationHeaderHidden)
+  })
 }
 
 function toggleConversationHeaderHidden() {
@@ -5486,46 +6519,79 @@ function toggleConversationHeaderHidden() {
   applyConversationHeaderHiddenState()
 }
 
-function renderConversation(session, messages, opts = {}) {
-  const conv = document.getElementById('conversation')
-  const resetScroll = !!opts.resetScroll
-  const prevScrollTop = conv.scrollTop
-  const prevScrollHeight = conv.scrollHeight
-  const nearBottom = prevScrollHeight - (conv.clientHeight + prevScrollTop) < 80
-
+function renderConversationMarkup(session, messages, opts = {}) {
   if (!messages || messages.length === 0) {
-    conv.innerHTML = '<div class="no-session"><div class="no-session-text">no messages found</div></div>'
-    if (resetScroll) conv.scrollTop = 0
-    return
+    return '<div class="no-session"><div class="no-session-text">no messages found</div></div>'
   }
 
   const srcClass = session.source
-  const safeTitle = esc(session.cwd || session.id)
+  const safeTitle = esc(sessionDisplayTitle(session, session.id))
   const safeSource = esc(session.source)
   const safeSourceAccount = session.sourceAccount ? `<span class="badge ${srcClass}">${esc(session.sourceAccount)}</span>` : ''
   const safeModel = esc(session.model)
   const safeVersion = esc(session.appVersion)
-  conv.innerHTML = `
+  const splitPane = opts.splitPane === true
+  const titleTools = splitPane
+    ? `<button class="conversation-split-close" type="button" data-close-split-pane aria-label="Close split pane">×</button>`
+    : `${renderSessionSearchControls()}${renderConversationActions(session, opts.pageInfo)}`
+  return `
     <div class="conv-header${conversationHeaderHidden ? ' is-hidden' : ''}">
       <button class="conv-header-toggle-zone" type="button" data-conv-header-toggle aria-label="Toggle conversation details"></button>
-      <div class="conv-title">${safeTitle}</div>
-      <div class="conv-badges">
-        <span class="badge ${srcClass}">${safeSource}</span>
-        ${safeSourceAccount}
-        <span class="badge">${safeModel}</span>
-        ${session.appVersion ? `<span class="badge">v${safeVersion}</span>` : ''}
-        <span class="badge">${session.messageCount} messages</span>
-        <span class="badge">${fmtDate(session.firstTimestamp)}</span>
+      <div class="conv-title-row">
+        <div class="conv-title">${safeTitle}</div>
+        ${titleTools}
       </div>
-      ${renderSessionSearchControls()}
+      <div class="conv-meta-row">
+        <div class="conv-badges">
+          <span class="badge ${srcClass}">${safeSource}</span>
+          ${safeSourceAccount}
+          <span class="badge">${safeModel}</span>
+          ${session.appVersion ? `<span class="badge">v${safeVersion}</span>` : ''}
+          <span class="badge">${session.messageCount} messages</span>
+          <span class="badge">${fmtDate(session.firstTimestamp)}</span>
+        </div>
+        ${splitPane ? '' : renderSearchNav()}
+      </div>
     </div>
-    ${renderBranchBanner()}
-    ${renderConversationMap(session)}
+    ${splitPane ? '' : renderBranchBanner()}
+    ${splitPane ? '' : renderConversationMap(session)}
     ${renderSessionSkillsPanel(session, messages)}
     ${messages.map((message, index) => renderMessage(message, (opts.pageInfo?.offset || 0) + index)).join('')}
   `
-  if (resetScroll) {
+}
+
+function renderConversation(session, messages, opts = {}) {
+  const conv = document.getElementById('conversation')
+  const resetScroll = !!opts.resetScroll
+  const scrollToBottom = !!opts.scrollToBottom
+  const smoothScrollToBottom = opts.scrollToBottom === 'smooth'
+  const prevScrollTop = conv.scrollTop
+  const prevScrollHeight = conv.scrollHeight
+  const nearBottom = prevScrollHeight - (conv.clientHeight + prevScrollTop) < 80
+
+  conv.innerHTML = renderConversationMarkup(session, messages, opts)
+
+  if (!messages || messages.length === 0) {
+    if (resetScroll) conv.scrollTop = 0
+    conversationWasAtBottom = false
+    return
+  }
+  if (smoothScrollToBottom) {
     conv.scrollTop = 0
+    requestAnimationFrame(() => {
+      conv.scrollTo({ top: conv.scrollHeight, behavior: 'smooth' })
+      window.setTimeout(() => showConversationBottomHint(true), 650)
+    })
+  } else if (scrollToBottom) {
+    conv.scrollTop = conv.scrollHeight
+    requestAnimationFrame(() => {
+      conv.scrollTop = conv.scrollHeight
+      showConversationBottomHint(true)
+    })
+  } else if (resetScroll) {
+    conv.scrollTop = 0
+    conversationWasAtBottom = false
+    hideConversationBottomHint()
     requestAnimationFrame(() => { conv.scrollTop = 0 })
   } else if (nearBottom) {
     conv.scrollTop = conv.scrollHeight
@@ -5535,9 +6601,144 @@ function renderConversation(session, messages, opts = {}) {
   requestAnimationFrame(() => maybeAutoLoadConversation(conv))
 }
 
+function closeSplitPane() {
+  splitSessionId = null
+  splitLoadSeq += 1
+  const shell = document.getElementById('conversation-shell')
+  const pane = document.getElementById('conversation-split')
+  shell?.classList.remove('split-active')
+  if (pane) {
+    pane.hidden = true
+    pane.innerHTML = ''
+  }
+  hideSplitDropIndicator()
+  renderSessionTabs()
+}
+
+function splitSessionUrl(sessionId) {
+  const summary = sessions.find(s => (s.uid || s.id) === sessionId)
+  const shouldPage = (summary?.messageCount || 0) > LARGE_SESSION_MESSAGE_THRESHOLD
+  if (!shouldPage) return `/api/session/${encodeURIComponent(sessionId)}`
+  return `/api/session/${encodeURIComponent(sessionId)}?offset=0&limit=${SESSION_PAGE_SIZE}`
+}
+
+async function openSplitSession(sessionId) {
+  if (!sessionId) return
+  ensureSessionTab(sessionId)
+  splitSessionId = sessionId
+  const seq = ++splitLoadSeq
+  const shell = document.getElementById('conversation-shell')
+  const pane = document.getElementById('conversation-split')
+  if (!shell || !pane) return
+  shell.classList.add('split-active')
+  pane.hidden = false
+  pane.scrollTop = 0
+  pane.innerHTML = '<div class="no-session"><div class="no-session-text">loading…</div></div>'
+  renderSessionTabs()
+  try {
+    const res = await apiFetch(splitSessionUrl(sessionId))
+    const { session, messages, totalMessages, limit, nextOffset, hasMore } = await res.json()
+    const sessionKey = session.uid || session.id
+    if (seq !== splitLoadSeq || splitSessionId !== sessionKey) return
+    const splitPageInfo = limit
+      ? {
+          paginated: true,
+          hasPrevious: false,
+          hasMore: !!hasMore,
+          totalMessages: totalMessages || session.messageCount || messages.length,
+          nextOffset: nextOffset || messages.length,
+          limit,
+          offset: 0,
+        }
+      : null
+    suppressSearchHighlight = true
+    try {
+      pane.innerHTML = renderConversationMarkup(session, messages || [], {
+        splitPane: true,
+        pageInfo: splitPageInfo,
+      })
+    } finally {
+      suppressSearchHighlight = false
+    }
+    pane.scrollTop = 0
+  } catch (error) {
+    if (seq !== splitLoadSeq || splitSessionId !== sessionId) return
+    pane.innerHTML = `<div class="no-session"><div class="no-session-text">${esc(error instanceof Error ? error.message : String(error))}</div></div>`
+  }
+}
+
+function isRightSplitDrop(clientX) {
+  const shell = document.getElementById('conversation-shell')
+  if (!shell) return false
+  const rect = shell.getBoundingClientRect()
+  return clientX >= rect.left + rect.width / 2 && clientX <= rect.right
+}
+
+function showSplitDropIndicator() {
+  document.getElementById('split-drop-indicator')?.classList.add('show')
+}
+
+function hideSplitDropIndicator() {
+  document.getElementById('split-drop-indicator')?.classList.remove('show')
+}
+
+function conversationIsAtBottom(el = document.getElementById('conversation')) {
+  if (!el) return false
+  return el.scrollHeight - (el.scrollTop + el.clientHeight) < 8
+}
+
+function placeConversationBottomHint() {
+  const hint = document.getElementById('conversation-bottom-hint')
+  const conv = document.getElementById('conversation')
+  if (!hint || !conv) return
+  const rect = conv.getBoundingClientRect()
+  hint.style.left = `${Math.round(rect.left + rect.width / 2)}px`
+  hint.style.bottom = `${Math.max(18, Math.round(window.innerHeight - rect.bottom + 18))}px`
+}
+
+function hideConversationBottomHint() {
+  const hint = document.getElementById('conversation-bottom-hint')
+  if (!hint) return
+  if (conversationBottomHintTimer) {
+    window.clearTimeout(conversationBottomHintTimer)
+    conversationBottomHintTimer = null
+  }
+  hint.classList.remove('show')
+}
+
+function showConversationBottomHint(force = false) {
+  const hint = document.getElementById('conversation-bottom-hint')
+  if (!hint || !activeId) return
+  conversationWasAtBottom = true
+  hint.textContent = appTr('endOfConversation')
+  placeConversationBottomHint()
+  if (force) {
+    hint.classList.remove('show')
+    void hint.offsetWidth
+  }
+  hint.classList.add('show')
+  if (conversationBottomHintTimer) window.clearTimeout(conversationBottomHintTimer)
+  conversationBottomHintTimer = window.setTimeout(() => {
+    hint.classList.remove('show')
+    conversationBottomHintTimer = null
+  }, 1450)
+}
+
+function updateConversationBottomState(el = document.getElementById('conversation')) {
+  const atBottom = conversationIsAtBottom(el)
+  if (atBottom && !conversationWasAtBottom) showConversationBottomHint(false)
+  if (!atBottom) hideConversationBottomHint()
+  conversationWasAtBottom = atBottom
+}
+
 function maybeAutoLoadConversation(el = document.getElementById('conversation')) {
-  if (!el || !activePageInfo?.hasMore || loadingMoreMessages) return
-  if (el.scrollHeight - (el.scrollTop + el.clientHeight) < 600) {
+  if (!el || !activePageInfo?.paginated || loadingMoreMessages || jumpingToLatest) return
+  if (Date.now() < searchAutoLoadHoldUntil) return
+  if (activePageInfo.hasPrevious && el.scrollTop < 600) {
+    void loadEarlierConversation()
+    return
+  }
+  if (activePageInfo.hasMore && el.scrollHeight - (el.scrollTop + el.clientHeight) < 600) {
     void loadMoreConversation()
   }
 }
@@ -5549,17 +6750,20 @@ async function loadMoreConversation() {
   const scrollHost = document.getElementById('conversation')
   const prevScrollTop = scrollHost.scrollTop
   try {
-    const res = await apiFetch(`/api/session/${activeId}?offset=${activePageInfo.nextOffset}&limit=${SESSION_PAGE_SIZE}`)
+    const res = await apiFetch(`/api/session/${encodeURIComponent(activeId)}?offset=${activePageInfo.nextOffset}&limit=${SESSION_PAGE_SIZE}`)
     const { session, messages, hasMore, totalMessages, nextOffset, limit } = await res.json()
     const sessionKey = session.uid || session.id
     if (seq !== activeLoadSeq || activeId !== sessionKey) return
     activeSessionData = session
     activeMessages = activeMessages.concat(messages)
+    const total = totalMessages || session.messageCount || activeMessages.length
+    const computedNextOffset = nextOffset || (activePageInfo.offset || 0) + activeMessages.length
     activePageInfo = {
       paginated: true,
+      hasPrevious: (activePageInfo.offset || 0) > 0,
       hasMore: !!hasMore,
-      totalMessages: totalMessages || session.messageCount || activeMessages.length,
-      nextOffset: nextOffset || activeMessages.length,
+      totalMessages: total,
+      nextOffset: computedNextOffset,
       limit: limit || SESSION_PAGE_SIZE,
       offset: activePageInfo.offset || 0,
     }
@@ -5574,6 +6778,119 @@ async function loadMoreConversation() {
     requestAnimationFrame(() => { scrollHost.scrollTop = prevScrollTop })
   } finally {
     loadingMoreMessages = false
+  }
+}
+
+async function loadEarlierConversation() {
+  if (!activeId || !activePageInfo?.hasPrevious || loadingMoreMessages) return
+  loadingMoreMessages = true
+  const seq = activeLoadSeq
+  const scrollHost = document.getElementById('conversation')
+  const prevScrollTop = scrollHost.scrollTop
+  const prevScrollHeight = scrollHost.scrollHeight
+  const currentOffset = Math.max(0, Number(activePageInfo.offset || 0))
+  const pageOffset = Math.max(0, currentOffset - SESSION_PAGE_SIZE)
+  const pageLimit = Math.max(1, currentOffset - pageOffset)
+  try {
+    const res = await apiFetch(`/api/session/${encodeURIComponent(activeId)}?offset=${pageOffset}&limit=${pageLimit}`)
+    const { session, messages, totalMessages, nextOffset, limit } = await res.json()
+    const sessionKey = session.uid || session.id
+    if (seq !== activeLoadSeq || activeId !== sessionKey) return
+    activeSessionData = session
+    activeMessages = messages.concat(activeMessages)
+    const total = totalMessages || session.messageCount || activeMessages.length
+    const loadedNextOffset = activePageInfo.nextOffset || nextOffset || pageOffset + activeMessages.length
+    activePageInfo = {
+      paginated: true,
+      hasPrevious: pageOffset > 0,
+      hasMore: loadedNextOffset < total,
+      totalMessages: total,
+      nextOffset: loadedNextOffset,
+      limit: limit || SESSION_PAGE_SIZE,
+      offset: pageOffset,
+    }
+    activeMeta = {
+      id: sessionKey,
+      lastTimestamp: session.lastTimestamp,
+      messageCount: session.messageCount,
+      paginated: true,
+      loadedMessages: activeMessages.length,
+    }
+    renderConversation(session, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+    requestAnimationFrame(() => {
+      scrollHost.scrollTop = scrollHost.scrollHeight - prevScrollHeight + prevScrollTop
+    })
+  } finally {
+    loadingMoreMessages = false
+  }
+}
+
+async function jumpActiveSessionToLatest(button) {
+  if (!activeId || jumpingToLatest) return
+  const total = Math.max(0, Number(activePageInfo?.totalMessages || activeSessionData?.messageCount || 0))
+  if (total === 0) return
+  const conv = document.getElementById('conversation')
+  if (!activePageInfo?.paginated) {
+    if (conv) {
+      conv.scrollTop = conv.scrollHeight
+      requestAnimationFrame(() => {
+        conv.scrollTop = conv.scrollHeight
+        showConversationBottomHint(true)
+      })
+    }
+    return
+  }
+  const nextOffset = Number(activePageInfo?.nextOffset || 0)
+  const atLatestPage = !!activePageInfo?.paginated && !activePageInfo.hasMore && nextOffset >= total
+  if (atLatestPage && activeMessages.length) {
+    if (conv) {
+      conv.scrollTop = conv.scrollHeight
+      requestAnimationFrame(() => {
+        conv.scrollTop = conv.scrollHeight
+        showConversationBottomHint(true)
+      })
+    }
+    return
+  }
+  jumpingToLatest = true
+  loadingMoreMessages = true
+  if (button) button.disabled = true
+  const seq = ++activeLoadSeq
+  const pageOffset = Math.max(0, total - SESSION_PAGE_SIZE)
+  try {
+    const res = await apiFetch(`/api/session/${encodeURIComponent(activeId)}?offset=${pageOffset}&limit=${SESSION_PAGE_SIZE}`)
+    const { session, messages, hasMore, totalMessages, nextOffset, limit } = await res.json()
+    const sessionKey = session.uid || session.id
+    if (seq !== activeLoadSeq || activeId !== sessionKey) return
+    activeSessionData = session
+    activeMessages = messages
+    const loadedTotal = totalMessages || session.messageCount || total
+    activePageInfo = {
+      paginated: true,
+      hasPrevious: pageOffset > 0,
+      hasMore: !!hasMore,
+      totalMessages: loadedTotal,
+      nextOffset: nextOffset || pageOffset + messages.length,
+      limit: limit || SESSION_PAGE_SIZE,
+      offset: pageOffset,
+    }
+    activeMeta = {
+      id: sessionKey,
+      lastTimestamp: session.lastTimestamp,
+      messageCount: session.messageCount,
+      paginated: true,
+      loadedMessages: activeMessages.length,
+    }
+    activeSearchTarget = null
+    activeSearchNav = null
+    sessionSearchQ = ''
+    renderConversation(session, messages, { scrollToBottom: true, pageInfo: activePageInfo })
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), { isError: true })
+  } finally {
+    jumpingToLatest = false
+    loadingMoreMessages = false
+    if (button?.isConnected) button.disabled = false
   }
 }
 
@@ -5643,7 +6960,7 @@ async function loadSessionSearchMatches(sessionId, query, initialHit, seq) {
       activeSearchTarget = searchTargetFromHit(sessionId, query, hits[activeSearchNav.currentIndex])
     }
     renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
-    requestAnimationFrame(scrollToSearchTarget)
+    scheduleScrollToSearchTarget()
   } catch (error) {
     if (seq !== activeLoadSeq || activeId !== sessionId) return
     activeSearchNav = activeSearchNav
@@ -5726,6 +7043,9 @@ async function runSessionSearch(sessionId, query, loadSeq, searchSeq) {
 
 function handleSessionSearchInput(value) {
   sessionSearchQ = String(value || '').trim()
+  document.querySelectorAll('.session-search-input').forEach(input => {
+    input.classList.toggle('search-active', sessionSearchQ.length >= 2)
+  })
   clearTimeout(sessionSearchTimer)
   const searchSeq = ++sessionSearchSeq
   if (!activeId || sessionSearchQ.length < 2) {
@@ -5752,7 +7072,7 @@ async function showSearchHitAt(index) {
   const targetIndex = Number(hit.messageIndex)
   if (!activePageInfo?.paginated || (targetIndex >= offset && targetIndex < loadedEnd)) {
     renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
-    requestAnimationFrame(scrollToSearchTarget)
+    scheduleScrollToSearchTarget()
     return
   }
 
@@ -5766,6 +7086,7 @@ async function showSearchHitAt(index) {
   activeMessages = messages
   activePageInfo = {
     paginated: true,
+    hasPrevious: pageOffset > 0,
     hasMore: !!hasMore,
     totalMessages: totalMessages || session.messageCount || messages.length,
     nextOffset: nextOffset || pageOffset + messages.length,
@@ -5780,7 +7101,7 @@ async function showSearchHitAt(index) {
     loadedMessages: messages.length,
   }
   renderConversation(session, messages, { resetScroll: true, pageInfo: activePageInfo })
-  requestAnimationFrame(scrollToSearchTarget)
+  scheduleScrollToSearchTarget()
 }
 
 function navigateSearchMatch(direction) {
@@ -5807,7 +7128,7 @@ function openSessionFromList(sessionId) {
 async function openAttachmentFile(button) {
   const attachmentId = button?.dataset?.attachmentOpenId || ''
   if (!attachmentId) return
-  const oldText = button.textContent
+  const oldHtml = button.innerHTML
   button.disabled = true
   button.textContent = 'Opening...'
   try {
@@ -5820,11 +7141,109 @@ async function openAttachmentFile(button) {
     showNotice(error instanceof Error ? error.message : String(error), { isError: true })
   } finally {
     button.disabled = false
-    button.textContent = oldText
+    button.innerHTML = oldHtml
   }
 }
 
-async function refreshActiveSessionIfChanged() {
+async function openLocalVideoFile(button) {
+  const filePath = button?.dataset?.localVideoOpenPath || ''
+  if (!filePath) return
+  const oldHtml = button.innerHTML
+  button.disabled = true
+  button.textContent = 'Opening...'
+  try {
+    await jsonOrThrow(await apiFetch('/api/local-video/open', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: filePath }),
+    }))
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), { isError: true })
+  } finally {
+    button.disabled = false
+    button.innerHTML = oldHtml
+  }
+}
+
+async function writeClipboardText(text) {
+  try { window.focus() } catch {}
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    } catch {
+      try {
+        await navigator.clipboard.writeText(text)
+        return
+      } catch {
+        // Some embedded browser surfaces reject async clipboard writes unless
+        // the document is focused. Keep the user gesture path working with the
+        // legacy textarea copy fallback.
+      }
+    }
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '0'
+  textarea.style.width = '1px'
+  textarea.style.height = '1px'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.focus({ preventScroll: true })
+  textarea.select()
+  textarea.setSelectionRange(0, textarea.value.length)
+  const ok = document.execCommand('copy')
+  document.body.removeChild(textarea)
+  if (!ok) throw new Error('clipboard copy failed')
+}
+
+async function copyContextThroughMessage(button) {
+  if (!activeId || !button) return
+  const through = Math.max(0, Number(button.dataset.copyContextThrough || 0))
+  button.disabled = true
+  try {
+	    const data = await jsonOrThrow(await apiFetch(`/api/session/${encodeURIComponent(activeId)}/context?through=${through}`))
+	    await writeClipboardText(String(data.text || ''))
+	    button.classList.add('copied')
+	    const copiedMessage = appFmt('copiedThroughNotice', { count: fmtNumber(data.messageCount || 0) })
+	    button.dataset.tip = copiedMessage
+	    button.title = copiedMessage
+	    markMessageFocusFromButton(button)
+	    showCopyInlineStatus(copiedMessage)
+    setTimeout(() => { if (button.isConnected) button.classList.remove('copied') }, 1600)
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), { isError: true })
+  } finally {
+    button.disabled = false
+  }
+}
+
+async function copyActiveSessionContext(button) {
+  if (!activeId || !button) return
+  const total = Math.max(0, Number(activePageInfo?.totalMessages || activeSessionData?.messageCount || activeMeta?.messageCount || 0))
+  if (total <= 0) return
+  button.disabled = true
+  try {
+    const through = total - 1
+	    const data = await jsonOrThrow(await apiFetch(`/api/session/${encodeURIComponent(activeId)}/context?through=${through}`))
+	    await writeClipboardText(String(data.text || ''))
+	    button.classList.add('copied')
+	    const copiedMessage = appFmt('copiedAllNotice', { count: fmtNumber(data.messageCount || 0) })
+	    button.dataset.tip = copiedMessage
+	    button.title = copiedMessage
+	    showCopyInlineStatus(copiedMessage)
+    setTimeout(() => { if (button.isConnected) button.classList.remove('copied') }, 1600)
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), { isError: true })
+  } finally {
+    button.disabled = false
+  }
+}
+
+async function refreshActiveSessionIfChanged(options = {}) {
   if (!activeId) return
   if (activeBranchData) return
   const current = sessions.find(s => (s.uid || s.id) === activeId)
@@ -5832,14 +7251,15 @@ async function refreshActiveSessionIfChanged() {
   const changed = !activeMeta ||
     activeMeta.lastTimestamp !== current.lastTimestamp ||
     activeMeta.messageCount !== current.messageCount
-  if (!changed) return
+  if (!changed && !options.force) return
 
   const seq = ++activeLoadSeq
   const shouldPage = activeMeta?.paginated || (current.messageCount || 0) > LARGE_SESSION_MESSAGE_THRESHOLD
+  const offset = shouldPage ? Math.max(0, Number(activePageInfo?.offset || 0)) : 0
   const limit = shouldPage ? Math.max(activeMessages.length || SESSION_PAGE_SIZE, SESSION_PAGE_SIZE) : 0
   const url = shouldPage
-    ? `/api/session/${activeId}?offset=0&limit=${limit}`
-    : `/api/session/${activeId}`
+    ? `/api/session/${encodeURIComponent(activeId)}?offset=${offset}&limit=${limit}`
+    : `/api/session/${encodeURIComponent(activeId)}`
   const res = await apiFetch(url)
   const { session, messages, hasMore, totalMessages, nextOffset, limit: responseLimit } = await res.json()
   const sessionKey = session.uid || session.id
@@ -5849,11 +7269,12 @@ async function refreshActiveSessionIfChanged() {
   activePageInfo = shouldPage
     ? {
         paginated: true,
+        hasPrevious: offset > 0,
         hasMore: !!hasMore,
         totalMessages: totalMessages || session.messageCount || messages.length,
-        nextOffset: nextOffset || messages.length,
+        nextOffset: nextOffset || offset + messages.length,
         limit: responseLimit || limit,
-        offset: 0,
+        offset,
       }
     : null
   activeMeta = {
@@ -5890,13 +7311,14 @@ function isInlineArray(arr) {
 }
 
 function searchHighlightTargetForBlock(messageIndex, blockIndex) {
+  if (suppressSearchHighlight) return null
   if (!activeSearchTarget) return null
   if (activeSearchTarget.messageIndex !== messageIndex) return null
   if (Number.isFinite(activeSearchTarget.blockIndex) && activeSearchTarget.blockIndex !== blockIndex) return null
   return activeSearchTarget
 }
 
-function renderSearchHighlightedInline(text, target) {
+function renderSearchHighlightedInline(text, target, baseOffset = 0) {
   const value = String(text ?? '')
   const q = String(target?.query || '').trim()
   if (!q) return esc(value)
@@ -5908,7 +7330,8 @@ function renderSearchHighlightedInline(text, target) {
     const idx = lower.indexOf(needle, cursor)
     if (idx === -1) break
     out += esc(value.slice(cursor, idx))
-    const isCurrent = Number(target?.matchStart) === idx && Number(target?.matchEnd) === idx + q.length
+    const absoluteStart = Number(baseOffset) + idx
+    const isCurrent = Number(target?.matchStart) === absoluteStart && Number(target?.matchEnd) === absoluteStart + q.length
     out += `<mark class="search-hit-mark${isCurrent ? ' current' : ''}">${esc(value.slice(idx, idx + q.length))}</mark>`
     cursor = idx + q.length
   }
@@ -5916,14 +7339,124 @@ function renderSearchHighlightedInline(text, target) {
   return out
 }
 
+function scheduleScrollToSearchTarget() {
+  cancelScheduledSearchScroll(false)
+  searchScrollCancelled = false
+  searchAutoLoadHoldUntil = Date.now() + 900
+  const delays = [90, 360]
+  const run = index => {
+    if (searchScrollCancelled || !activeSearchTarget || index >= delays.length) return
+    searchScrollRetryTimer = window.setTimeout(() => {
+      if (searchScrollCancelled) return
+      requestAnimationFrame(() => {
+        if (searchScrollCancelled) return
+        scrollToSearchTarget()
+        run(index + 1)
+      })
+    }, delays[index])
+  }
+  run(0)
+}
+
+function cancelScheduledSearchScroll(userInitiated = true) {
+  if (searchScrollRetryTimer) {
+    window.clearTimeout(searchScrollRetryTimer)
+    searchScrollRetryTimer = null
+  }
+  if (userInitiated) {
+    searchScrollCancelled = true
+    searchAutoLoadHoldUntil = 0
+  }
+}
+
+function visibleSearchHit(el) {
+  if (!el) return null
+  const rect = el.getBoundingClientRect()
+  return rect.width > 0 && rect.height > 0 ? el : null
+}
+
+function offsetTopInsideScrollHost(target, host) {
+  let top = 0
+  let node = target
+  while (node && node !== host && node instanceof HTMLElement) {
+    top += node.offsetTop || 0
+    node = node.offsetParent
+  }
+  if (node === host) return top
+  const hostRect = host.getBoundingClientRect()
+  const targetRect = target.getBoundingClientRect()
+  return host.scrollTop + targetRect.top - hostRect.top
+}
+
+function conversationStickyTopOffset(conv) {
+  const convRect = conv.getBoundingClientRect()
+  const headerRect = conv.querySelector('.conv-header')?.getBoundingClientRect()
+  return headerRect
+    ? Math.max(0, Math.min(headerRect.bottom - convRect.top, conv.clientHeight * 0.45))
+    : 0
+}
+
+function scrollConversationMessageForBookmark(messageIndex, opts = {}) {
+  const conv = document.getElementById('conversation')
+  const card = conv?.querySelector(`.message[data-message-index="${messageIndex}"]`)
+  if (!conv || !(card instanceof HTMLElement)) return null
+  const stickyOffset = conversationStickyTopOffset(conv)
+  const visibleHeight = Math.max(0, conv.clientHeight - stickyOffset - 36)
+  if (card.getBoundingClientRect().height > visibleHeight) {
+    const top = offsetTopInsideScrollHost(card, conv)
+    conv.scrollTo({ top: Math.max(0, top - stickyOffset - 18), behavior: 'auto' })
+  } else {
+    card.scrollIntoView({ block: 'center' })
+  }
+  if (opts.flash !== false) {
+    card.classList.add('anno-jump-flash')
+    window.setTimeout(() => card.classList.remove('anno-jump-flash'), 1700)
+  }
+  return card
+}
+
+function cancelScheduledAnnotationJump() {
+  if (!pendingAnnotationJump?.timers) return
+  pendingAnnotationJump.timers.forEach(timer => window.clearTimeout(timer))
+  pendingAnnotationJump = null
+}
+
+function scheduleAnnotationMessageJump(sessionId, messageIndex, seq) {
+  cancelScheduledAnnotationJump()
+  const targetMessageIndex = Math.floor(messageIndex)
+  const timers = []
+  pendingAnnotationJump = { sessionId, messageIndex: targetMessageIndex, seq, timers }
+  searchAutoLoadHoldUntil = Date.now() + 3200
+  const run = flash => {
+    requestAnimationFrame(() => {
+      if (!pendingAnnotationJump) return
+      if (pendingAnnotationJump.sessionId !== sessionId || pendingAnnotationJump.seq !== seq) return
+      if (activeId !== sessionId || activeLoadSeq !== seq) return
+      scrollConversationMessageForBookmark(targetMessageIndex, { flash })
+    })
+  }
+  run(true)
+  for (const delay of [120, 360, 900, 1700, 2900]) {
+    timers.push(window.setTimeout(() => run(false), delay))
+  }
+}
+
 function scrollToSearchTarget() {
   if (!activeSearchTarget) return
   const conv = document.getElementById('conversation')
   const message = conv?.querySelector(`[data-message-index="${activeSearchTarget.messageIndex}"]`)
-  const currentHit = message?.querySelector('.search-hit-mark.current')
-  const target = currentHit || message
-  if (!target) return
-  target.scrollIntoView({ block: 'center', inline: 'nearest' })
+  const currentHit = visibleSearchHit(message?.querySelector('.search-hit-mark.current'))
+  const firstHit = visibleSearchHit(message?.querySelector('.search-hit-mark'))
+  const target = currentHit || firstHit || message
+  if (!conv || !target) return
+  const convRect = conv.getBoundingClientRect()
+  const headerRect = conv.querySelector('.conv-header')?.getBoundingClientRect()
+  const stickyOffset = headerRect
+    ? Math.max(0, Math.min(headerRect.bottom - convRect.top, conv.clientHeight * 0.45))
+    : 96
+  const visibleTargetY = stickyOffset + Math.max(90, Math.floor((conv.clientHeight - stickyOffset) * 0.34))
+  const top = offsetTopInsideScrollHost(target, conv)
+  conv.scrollTo({ top: Math.max(0, top - visibleTargetY), behavior: 'auto' })
 }
 
 function displaySlice(text, max = DISPLAY_TEXT_MAX) {
@@ -5936,9 +7469,9 @@ function truncationNotice(total, shown = DISPLAY_TEXT_MAX) {
   return `<div style="margin-top:8px;color:var(--muted);font-size:12px">Showing first ${esc(String(shown))} of ${esc(String(total))} characters. Full content is preserved in the encrypted vault/raw backup.</div>`
 }
 
-function renderInlineDisplay(text, max = DISPLAY_TEXT_MAX, highlightQuery = '') {
+function renderInlineDisplay(text, max = DISPLAY_TEXT_MAX, highlightQuery = '', baseOffset = 0) {
   const sliced = displaySlice(text, max)
-  return `${renderSearchHighlightedInline(sliced.text, highlightQuery)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
+  return `${renderSearchHighlightedInline(sliced.text, highlightQuery, baseOffset)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
 }
 
 function normalizeReferencedDisplayPath(value) {
@@ -5952,11 +7485,13 @@ function normalizeReferencedDisplayPath(value) {
   return /^[A-Za-z]:\//.test(out) ? out.toLowerCase() : out
 }
 
-function renderInlineDisplayWithReferencedAttachments(text, referencedAttachments, max = DISPLAY_TEXT_MAX, highlightQuery = '') {
+function renderInlineDisplayWithReferencedAttachments(text, referencedAttachments, max = DISPLAY_TEXT_MAX, highlightQuery = '', baseOffset = 0) {
   const sliced = displaySlice(text, max)
   const attachments = Array.isArray(referencedAttachments) ? referencedAttachments : []
-  if (attachments.length === 0) return `${renderSearchHighlightedInline(sliced.text, highlightQuery)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
   const byPath = new Map(attachments.map(item => [normalizeReferencedDisplayPath(item.originalPath), item]))
+  if (attachments.length === 0) {
+    return `${renderSearchHighlightedInline(sliced.text, highlightQuery, baseOffset)}${plainLocalVideoPathPreviews(sliced.text, byPath)}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
+  }
   const imagePattern = /!\[([^\]]*)\]\(([^)]+)\)/g
   let out = ''
   let last = 0
@@ -5964,23 +7499,427 @@ function renderInlineDisplayWithReferencedAttachments(text, referencedAttachment
   while ((match = imagePattern.exec(sliced.text))) {
     const attachment = byPath.get(normalizeReferencedDisplayPath(match[2]))
     if (!attachment?.attachmentId) continue
-    out += renderSearchHighlightedInline(sliced.text.slice(last, match.index), highlightQuery)
-    const alt = match[1] || attachment.attachmentName || 'referenced image'
-    out += `<div class="attachment-block referenced-image"><img src="/api/attachment/${attachmentPath(attachment.attachmentId)}" alt="${escAttr(alt)}" style="max-width:100%;max-height:480px;border-radius:4px;border:1px solid var(--border);display:block;margin:8px 0"></div>`
+    out += renderSearchHighlightedInline(sliced.text.slice(last, match.index), highlightQuery, baseOffset + last)
+    const alt = match[1] || attachment.attachmentName || 'referenced attachment'
+    out += renderAttachmentPreview(attachment, alt)
     last = match.index + match[0].length
   }
-  out += renderSearchHighlightedInline(sliced.text.slice(last), highlightQuery)
+  out += renderSearchHighlightedInline(sliced.text.slice(last), highlightQuery, baseOffset + last)
+  out += plainReferencedAttachmentPreviews(sliced.text, byPath)
+  out += plainLocalVideoPathPreviews(sliced.text, byPath)
   return `${out}${sliced.truncated ? truncationNotice(sliced.total, max) : ''}`
 }
 
+function referencedAttachmentByPath(referencedAttachments) {
+  const attachments = Array.isArray(referencedAttachments) ? referencedAttachments : []
+  return new Map(attachments.map(item => [normalizeReferencedDisplayPath(item.originalPath), item]))
+}
+
+function renderReadableInline(text, highlightQuery = '', baseOffset = 0) {
+  const value = String(text ?? '')
+  let out = ''
+  let cursor = 0
+  const codePattern = /`([^`]+)`/g
+  let match
+  while ((match = codePattern.exec(value))) {
+    out += renderSearchHighlightedInline(value.slice(cursor, match.index), highlightQuery, baseOffset + cursor)
+    out += `<code>${renderSearchHighlightedInline(match[1], highlightQuery, baseOffset + match.index + 1)}</code>`
+    cursor = match.index + match[0].length
+  }
+  out += renderSearchHighlightedInline(value.slice(cursor), highlightQuery, baseOffset + cursor)
+  return out
+}
+
+function markdownImageHtml(line, attachmentByPath) {
+  const match = String(line || '').trim().match(/^!\[([^\]]*)\]\(([^)]+)\)$/)
+  if (!match) return ''
+  const attachment = attachmentByPath.get(normalizeReferencedDisplayPath(match[2]))
+  if (!attachment?.attachmentId) return ''
+  const alt = match[1] || attachment.attachmentName || 'referenced attachment'
+  return renderAttachmentPreview(attachment, alt)
+}
+
+function renderAttachmentPreview(attachment, alt = 'attachment') {
+  if (!attachment?.attachmentId) return ''
+  const mediaType = String(attachment.mediaType || '').toLowerCase()
+  const src = `/api/attachment/${attachmentPath(attachment.attachmentId)}`
+  if (mediaType.startsWith('image/')) {
+    return `<div class="attachment-block referenced-image"><img src="${src}" alt="${escAttr(alt)}" style="max-width:100%;max-height:480px;border-radius:4px;border:1px solid var(--border);display:block;margin:8px 0"></div>`
+  }
+  if (mediaType.startsWith('video/')) {
+    return renderAttachmentVideoCard(attachment, alt)
+  }
+  return ''
+}
+
+function renderAttachmentOpenCard(attachment, alt = 'attachment', kind = 'file') {
+  if (!attachment?.attachmentId) return ''
+  const title = attachment.attachmentName || alt || 'attachment'
+  const mediaType = String(attachment.mediaType || kind || 'file')
+  const label = kind === 'video' ? 'Open with default app' : 'Open file'
+  return `<button class="attachment-open-card" type="button" data-attachment-open-id="${escAttr(attachment.attachmentId)}" data-attachment-name="${escAttr(attachment.attachmentName || title)}">
+    <span class="attachment-open-card-main">
+      <span class="attachment-open-card-title">${esc(title)}</span>
+      <span class="attachment-open-card-meta">${esc(mediaType)}</span>
+    </span>
+    <span class="attachment-open-card-action">${label}</span>
+  </button>`
+}
+
+function renderAttachmentVideoCard(attachment, alt = 'video') {
+  if (!attachment?.attachmentId) return ''
+  const title = attachment.attachmentName || alt || 'video'
+  const mediaType = String(attachment.mediaType || 'video')
+  const src = `/api/attachment/${attachmentPath(attachment.attachmentId)}`
+  return `<button class="attachment-open-card attachment-video-card" type="button" data-attachment-open-id="${escAttr(attachment.attachmentId)}" data-attachment-name="${escAttr(attachment.attachmentName || title)}" aria-label="Open ${escAttr(title)} with the default video app">
+    <span class="attachment-video-thumb">
+      <video src="${src}#t=0.001" preload="metadata" muted playsinline aria-hidden="true"></video>
+      <span class="attachment-video-open">Open video</span>
+    </span>
+    <span class="attachment-open-card-main">
+      <span class="attachment-open-card-title">${esc(title)}</span>
+      <span class="attachment-open-card-meta">${esc(mediaType)}</span>
+    </span>
+    <span class="attachment-open-card-action">Default app</span>
+  </button>`
+}
+
+const LOCAL_VIDEO_PATH_RE = /(?:^|[\s(["'`])((?:\/(?:Users|Volumes|private|tmp|var|home|mnt|media|opt)\/)[^<>"'`\n\r]{1,500}?\.(?:mp4|m4v|mov|qt|webm))(?![A-Za-z0-9._-])/gi
+
+function localVideoTitle(filePath) {
+  const normalized = String(filePath || '').replace(/\\/g, '/')
+  return normalized.split('/').filter(Boolean).pop() || 'video file'
+}
+
+function renderLocalVideoOpenCard(filePath) {
+  const title = localVideoTitle(filePath)
+  return `<button class="attachment-open-card" type="button" data-local-video-open-path="${escAttr(filePath)}" aria-label="Open ${escAttr(title)} with the default video app">
+    <span class="attachment-open-card-main">
+      <span class="attachment-open-card-title">${esc(title)}</span>
+      <span class="attachment-open-card-meta">${esc(filePath)}</span>
+    </span>
+    <span class="attachment-open-card-action">Open video</span>
+  </button>`
+}
+
+function plainLocalVideoPathPreviews(text, attachmentByPath) {
+  const value = String(text || '')
+  const seen = new Set()
+  let out = ''
+  LOCAL_VIDEO_PATH_RE.lastIndex = 0
+  for (const match of value.matchAll(LOCAL_VIDEO_PATH_RE)) {
+    const filePath = match[1]?.trim()
+    if (!filePath) continue
+    const normalized = normalizeReferencedDisplayPath(filePath)
+    if (attachmentByPath?.has?.(normalized) || seen.has(normalized)) continue
+    seen.add(normalized)
+    out += renderLocalVideoOpenCard(filePath)
+  }
+  return out
+}
+
+function plainReferencedAttachmentPreviews(text, attachmentByPath) {
+  let out = ''
+  for (const [normalizedPath, attachment] of attachmentByPath.entries()) {
+    if (!attachment?.attachmentId) continue
+    const preview = renderAttachmentPreview(attachment, attachment.attachmentName || normalizedPath)
+    if (!preview) continue
+    if (normalizeReferencedDisplayPath(text).includes(normalizedPath)) out += preview
+  }
+  return out
+}
+
+function markdownTableCells(line) {
+  let value = String(line || '').trim()
+  if (value.startsWith('|')) value = value.slice(1)
+  if (value.endsWith('|')) value = value.slice(0, -1)
+  return value.split('|').map(cell => cell.trim())
+}
+
+function isMarkdownTableSeparator(line) {
+  const cells = markdownTableCells(line)
+  return cells.length > 1 && cells.every(cell => /^:?-{3,}:?$/.test(cell))
+}
+
+function markdownTableCellItems(item) {
+  const line = String(item?.line ?? item ?? '')
+  const baseOffset = Number(item?.offset || 0)
+  let start = 0
+  let end = line.length
+  if (line.startsWith('|')) start = 1
+  if (line.endsWith('|')) end -= 1
+  const cells = line.slice(start, end).split('|')
+  let cursor = start
+  return cells.map(cell => {
+    const leading = cell.match(/^\s*/)?.[0]?.length || 0
+    const text = cell.trim()
+    const offset = baseOffset + cursor + leading
+    cursor += cell.length + 1
+    return { text, offset }
+  })
+}
+
+function renderMarkdownTable(lines, highlightQuery) {
+  const lineItems = lines.map(item => typeof item === 'string' ? { line: item, offset: 0 } : item)
+  const header = markdownTableCellItems(lineItems[0] || { line: '', offset: 0 })
+  const body = lineItems.slice(2).map(markdownTableCellItems)
+  const head = header.map(cell => `<th>${renderReadableInline(cell.text, highlightQuery, cell.offset)}</th>`).join('')
+  const rows = body.map(cells => `<tr>${cells.map(cell => `<td>${renderReadableInline(cell.text, highlightQuery, cell.offset)}</td>`).join('')}</tr>`).join('')
+  return `<div class="markdown-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>`
+}
+
+function renderMarkdownLike(text, referencedAttachments, highlightQuery = '') {
+  const rawText = String(text ?? '')
+  const lines = rawText.split('\n')
+  const lineOffsets = []
+  let offsetCursor = 0
+  for (const line of lines) {
+    lineOffsets.push(offsetCursor)
+    offsetCursor += line.length + 1
+  }
+  const attachmentByPath = referencedAttachmentByPath(referencedAttachments)
+  const out = []
+  let index = 0
+  let paragraph = []
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return
+    const paragraphText = paragraph.map(item => item.line).join('\n')
+    out.push(`<p>${paragraph.map(item => renderReadableInline(item.line, highlightQuery, item.offset)).join('<br>')}</p>${plainLocalVideoPathPreviews(paragraphText, attachmentByPath)}`)
+    paragraph = []
+  }
+
+  while (index < lines.length) {
+    const line = lines[index]
+    const lineOffset = lineOffsets[index] || 0
+    const trimmed = line.trim()
+    if (!trimmed) {
+      flushParagraph()
+      index += 1
+      continue
+    }
+
+    const fence = trimmed.match(/^```([A-Za-z0-9_-]+)?\s*$/)
+    if (fence) {
+      flushParagraph()
+      const codeLines = []
+      index += 1
+      const codeStartOffset = index < lines.length ? lineOffsets[index] : lineOffset + line.length + 1
+      while (index < lines.length && !lines[index].trim().startsWith('```')) {
+        codeLines.push(lines[index])
+        index += 1
+      }
+      if (index < lines.length) index += 1
+      const lang = fence[1] ? `<div class="tool-meta"><span class="tool-kind">${esc(fence[1])}</span></div>` : ''
+      out.push(`${lang}<pre class="markdown-code"><code>${renderSearchHighlightedInline(codeLines.join('\n'), highlightQuery, codeStartOffset)}</code></pre>`)
+      continue
+    }
+
+    const imageHtml = markdownImageHtml(line, attachmentByPath)
+    if (imageHtml) {
+      flushParagraph()
+      out.push(imageHtml)
+      index += 1
+      continue
+    }
+
+    const plainPreview = plainReferencedAttachmentPreviews(line, attachmentByPath) || plainLocalVideoPathPreviews(line, attachmentByPath)
+    if (plainPreview) {
+      flushParagraph()
+      out.push(`<p>${renderReadableInline(line, highlightQuery, lineOffset)}</p>${plainPreview}`)
+      index += 1
+      continue
+    }
+
+    const heading = line.match(/^(\s*#{1,4}\s+)(.+)$/)
+    if (heading) {
+      flushParagraph()
+      const level = Math.min(4, (heading[1].match(/#/g) || []).length)
+      out.push(`<h${level}>${renderReadableInline(heading[2], highlightQuery, lineOffset + heading[1].length)}</h${level}>`)
+      index += 1
+      continue
+    }
+
+    if (trimmed.includes('|') && index + 1 < lines.length && isMarkdownTableSeparator(lines[index + 1])) {
+      flushParagraph()
+      const tableLines = [{ line, offset: lineOffset }, { line: lines[index + 1], offset: lineOffsets[index + 1] || 0 }]
+      index += 2
+      while (index < lines.length && lines[index].trim().includes('|')) {
+        tableLines.push({ line: lines[index], offset: lineOffsets[index] || 0 })
+        index += 1
+      }
+      out.push(renderMarkdownTable(tableLines, highlightQuery))
+      continue
+    }
+
+    const unordered = line.match(/^(\s*[-*+]\s+)(.+)$/)
+    if (unordered) {
+      flushParagraph()
+      const items = []
+      while (index < lines.length) {
+        const item = lines[index].match(/^(\s*[-*+]\s+)(.+)$/)
+        if (!item) break
+        items.push(`<li>${renderReadableInline(item[2], highlightQuery, (lineOffsets[index] || 0) + item[1].length)}</li>`)
+        index += 1
+      }
+      out.push(`<ul>${items.join('')}</ul>`)
+      continue
+    }
+
+    const ordered = line.match(/^(\s*\d+[.)]\s+)(.+)$/)
+    if (ordered) {
+      flushParagraph()
+      const items = []
+      while (index < lines.length) {
+        const item = lines[index].match(/^(\s*\d+[.)]\s+)(.+)$/)
+        if (!item) break
+        items.push(`<li>${renderReadableInline(item[2], highlightQuery, (lineOffsets[index] || 0) + item[1].length)}</li>`)
+        index += 1
+      }
+      out.push(`<ol>${items.join('')}</ol>`)
+      continue
+    }
+
+    const quote = line.match(/^(\s*>\s?)(.*)$/)
+    if (quote) {
+      flushParagraph()
+      const quoteLines = []
+      while (index < lines.length) {
+        const item = lines[index].match(/^(\s*>\s?)(.*)$/)
+        if (!item) break
+        quoteLines.push({ text: item[2], offset: (lineOffsets[index] || 0) + item[1].length })
+        index += 1
+      }
+      out.push(`<blockquote>${quoteLines.map(item => renderReadableInline(item.text, highlightQuery, item.offset)).join('<br>')}</blockquote>`)
+      continue
+    }
+
+    paragraph.push({ line, offset: lineOffset })
+    index += 1
+  }
+
+  flushParagraph()
+  return out.join('')
+}
+
 function renderTextDisplay(text, className, referencedAttachments, highlightQuery = '') {
-  return `<div class="${className}">${renderInlineDisplayWithReferencedAttachments(text, referencedAttachments, DISPLAY_TEXT_MAX, highlightQuery)}</div>`
+  if (!readableMessageFormatting) {
+    return `<div class="${className}">${renderInlineDisplayWithReferencedAttachments(text, referencedAttachments, DISPLAY_TEXT_MAX, highlightQuery)}</div>`
+  }
+  const sliced = displaySlice(text)
+  return `<div class="${className} readable">${renderMarkdownLike(sliced.text, referencedAttachments, highlightQuery)}${sliced.truncated ? truncationNotice(sliced.total) : ''}</div>`
 }
 
 function renderPreDisplay(text, className = '', highlightQuery = '') {
   const sliced = displaySlice(text)
   const cls = className ? ` class="${escAttr(className)}"` : ''
   return `<pre${cls}>${renderSearchHighlightedInline(sliced.text, highlightQuery)}</pre>${sliced.truncated ? truncationNotice(sliced.total) : ''}`
+}
+
+const INLINE_DATA_IMAGE_DISPLAY_LIMIT = 8
+const INLINE_DATA_IMAGE_RE = /data:(image\/[a-zA-Z0-9.+-]+);base64,[a-zA-Z0-9+/=]+/g
+const BARE_BASE64_IMAGE_RE = /^[A-Za-z0-9+/]+={0,2}$/
+
+function inlineDataImageFallback(rawOutput) {
+  const value = String(rawOutput ?? '')
+  if (!value.includes('data:image/')) return { text: value, imageHtml: '' }
+  const images = []
+  let total = 0
+  const text = value.replace(INLINE_DATA_IMAGE_RE, (url, mediaType) => {
+    total += 1
+    if (images.length < INLINE_DATA_IMAGE_DISPLAY_LIMIT) images.push({ url, mediaType })
+    return `[inline image rendered: ${mediaType}]`
+  })
+  const imageHtml = images.map((item, index) =>
+    `<div class="inline-data-image-preview"><img src="${escAttr(item.url)}" alt="${escAttr(`inline image ${index + 1}`)}"></div>`
+  ).join('')
+  const hiddenHtml = total > images.length
+    ? `<div style="margin-top:8px;color:var(--muted);font-size:12px">${esc(String(total - images.length))} additional inline images are hidden from this preview.</div>`
+    : ''
+  return { text, imageHtml: imageHtml + hiddenHtml }
+}
+
+function imageMediaTypeFromBase64(value, explicitMediaType = '') {
+  const mediaType = String(explicitMediaType || '').trim().toLowerCase()
+  if (mediaType.startsWith('image/')) return mediaType
+  const sample = String(value || '').trim().slice(0, 16)
+  if (sample.startsWith('/9j/')) return 'image/jpeg'
+  if (sample.startsWith('iVBORw0KGgo')) return 'image/png'
+  if (sample.startsWith('R0lGOD')) return 'image/gif'
+  if (sample.startsWith('UklGR')) return 'image/webp'
+  if (sample.startsWith('PHN2Zy')) return 'image/svg+xml'
+  return ''
+}
+
+function base64ImageUrl(value, explicitMediaType = '') {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (raw.startsWith('data:image/')) return raw
+  if (raw.length < 80 || raw.length > 12 * 1024 * 1024) return ''
+  if (!BARE_BASE64_IMAGE_RE.test(raw)) return ''
+  const mediaType = imageMediaTypeFromBase64(raw, explicitMediaType)
+  if (!mediaType) return ''
+  return `data:${mediaType};base64,${raw}`
+}
+
+function extractStructuredInlineImages(value, images = [], seen = new Set(), depth = 0) {
+  if (images.length >= INLINE_DATA_IMAGE_DISPLAY_LIMIT || depth > 8 || value == null) return images
+  if (typeof value === 'string') {
+    const url = base64ImageUrl(value)
+    if (url && !seen.has(url)) {
+      seen.add(url)
+      images.push({ url, raw: value, mediaType: url.slice(5, url.indexOf(';base64,')) })
+    }
+    return images
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) extractStructuredInlineImages(item, images, seen, depth + 1)
+    return images
+  }
+  if (typeof value !== 'object') return images
+
+  const obj = value
+  const type = String(obj.type || obj.kind || '').toLowerCase()
+  const explicitMediaType = String(obj.mediaType || obj.mimeType || obj.mime_type || '').toLowerCase()
+  const imageLike = type.includes('image') || explicitMediaType.startsWith('image/')
+  const dataValue = typeof obj.data === 'string' ? obj.data : typeof obj.base64 === 'string' ? obj.base64 : ''
+  if (imageLike && dataValue) {
+    const url = base64ImageUrl(dataValue, explicitMediaType)
+    if (url && !seen.has(url)) {
+      seen.add(url)
+      images.push({ url, raw: dataValue, mediaType: url.slice(5, url.indexOf(';base64,')) })
+    }
+  }
+  const imageUrl = obj.image_url || obj.imageUrl || obj.url
+  if (imageLike && typeof imageUrl === 'string') {
+    const url = base64ImageUrl(imageUrl, explicitMediaType)
+    if (url && !seen.has(url)) {
+      seen.add(url)
+      images.push({ url, raw: imageUrl, mediaType: url.slice(5, url.indexOf(';base64,')) })
+    }
+  } else if (imageUrl && typeof imageUrl === 'object') {
+    extractStructuredInlineImages(imageUrl, images, seen, depth + 1)
+  }
+  for (const child of Object.values(obj)) extractStructuredInlineImages(child, images, seen, depth + 1)
+  return images
+}
+
+function inlineToolResultImageFallback(content, rawOutput) {
+  const dataUriFallback = inlineDataImageFallback(rawOutput)
+  const images = extractStructuredInlineImages(content)
+  if (images.length === 0) return dataUriFallback
+
+  let text = dataUriFallback.text
+  for (const item of images) {
+    if (item.raw) {
+      text = text.split(item.raw).join(`[inline image rendered: ${item.mediaType}]`)
+    }
+    text = text.split(item.url).join(`[inline image rendered: ${item.mediaType}]`)
+  }
+  const structuredHtml = images.map((item, index) =>
+    `<div class="inline-data-image-preview"><img src="${escAttr(item.url)}" alt="${escAttr(`inline image ${index + 1}`)}"></div>`
+  ).join('')
+  return { text, imageHtml: structuredHtml }
 }
 
 // Render an arbitrary value as HTML: scalars inline, lists/objects collapsed.
@@ -6013,14 +7952,24 @@ function attrChip(key, value) {
   return `<span class="attr-chip"><span class="k">${esc(key)}:</span> <span class="v">${esc(scalarToString(value))}</span></span>`
 }
 
-function renderAttrStrip(msg) {
+function renderMessageActions(messageIndex) {
+  const label = appTr('copyThroughContextTip')
+  return `<button class="message-action-btn icon-action-btn" type="button" data-copy-context-through="${escAttr(String(messageIndex))}" data-tip="${escAttr(label)}" title="${escAttr(label)}" aria-label="${escAttr(label)}">⧉</button>`
+}
+
+function renderAttrStrip(msg, messageIndex = null) {
   // Top chips — always-visible scalar provenance.
   const chips = []
+  const actionHtml = messageIndex === null ? '' : renderMessageActions(messageIndex)
   if (msg.appVersion) chips.push(attrChip('v', msg.appVersion))
   if (msg.model) chips.push(attrChip('model', msg.model))
-  if (msg.sourceEventType) chips.push(attrChip('event', msg.sourceEventType))
+  if (msg.sourceEventType) {
+    chips.push(attrChip('event', msg.sourceEventType))
+    if (actionHtml) chips.push(actionHtml)
+  }
   if (msg.fastModeState) chips.push(attrChip('fast-mode', msg.fastModeState))
   if (msg.permissionMode) chips.push(attrChip('perm', msg.permissionMode))
+  if (!msg.sourceEventType && actionHtml) chips.push(actionHtml)
 
   // Details body — every other bound field + unknown catch-all.
   const rows = []
@@ -6177,6 +8126,21 @@ function renderRateLimitStrip(msg) {
   return `<div class="rate-limit-strip"><span style="opacity:0.7">rate limit</span>${parts.join('')}</div>`
 }
 
+// Bookmark + vote buttons for one message. Synthetic events (`result`,
+// `rate_limit_event`) get random ids on each parse, so they cannot be stable
+// annotation targets and render no bar.
+function renderMessageAnnotationBar(msg) {
+  const uuid = String(msg.id || '')
+  if (!uuid || msg.sourceEventType === 'result' || msg.sourceEventType === 'rate_limit_event') return ''
+  const state = messageAnnotationState(uuid)
+  const hasActive = !!(state.bookmark || state.vote)
+  return `<span class="msg-anno-bar${hasActive ? ' has-active' : ''}" data-anno-uuid="${escAttr(uuid)}">
+    <button class="anno-btn bm${state.bookmark ? ' active' : ''}" type="button" data-anno-kind="bookmark" title="Bookmark message" aria-label="Bookmark message">${state.bookmark ? ANNO_ICONS.bookmarkFill : ANNO_ICONS.bookmark}</button>
+    <button class="anno-btn up${state.vote === 'up' ? ' active' : ''}" type="button" data-anno-kind="up" title="Thumbs up" aria-label="Thumbs up">${ANNO_ICONS.up}</button>
+    <button class="anno-btn down${state.vote === 'down' ? ' active' : ''}" type="button" data-anno-kind="down" title="Thumbs down" aria-label="Thumbs down">${ANNO_ICONS.down}</button>
+  </span>`
+}
+
 function renderMessage(msg, messageIndex = 0) {
   const isSearchTargetMessage = !!activeSearchTarget && activeSearchTarget.messageIndex === messageIndex
   const messageAttrs = `data-message-index="${escAttr(String(messageIndex))}"${isSearchTargetMessage ? ' data-search-target-message="1"' : ''}`
@@ -6187,7 +8151,7 @@ function renderMessage(msg, messageIndex = 0) {
     const highlightTarget = searchHighlightTargetForBlock(messageIndex, 0)
     return `<div class="message system${isSearchTargetMessage ? ' search-target-message' : ''}" ${messageAttrs}>
       <div class="message-role system">turn summary <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
-      ${renderAttrStrip(msg)}
+      ${renderAttrStrip(msg, messageIndex)}
       ${renderTurnSummary(msg)}
       ${msg.content && msg.content[0]?.text ? renderTextDisplay(msg.content[0].text, 'text-block', msg.content[0].referencedAttachments, highlightTarget) : ''}
     </div>`
@@ -6195,7 +8159,7 @@ function renderMessage(msg, messageIndex = 0) {
   if (msg.sourceEventType === 'rate_limit_event') {
     return `<div class="message system${isSearchTargetMessage ? ' search-target-message' : ''}" ${messageAttrs}>
       <div class="message-role system">rate limit <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
-      ${renderAttrStrip(msg)}
+      ${renderAttrStrip(msg, messageIndex)}
       ${renderRateLimitStrip(msg)}
     </div>`
   }
@@ -6205,9 +8169,8 @@ function renderMessage(msg, messageIndex = 0) {
     if (block.type === 'thinking') {
       const id = 'th_' + Math.random().toString(36).slice(2)
       const thinkingText = typeof block.thinking === 'string' ? block.thinking : ''
-      const thinkingCountLabel = thinkingText.trim()
-        ? `${wordCount(thinkingText)} words`
-        : '0 · event captured, no text summary'
+      if (!thinkingText.trim()) return ''
+      const thinkingCountLabel = `${wordCount(thinkingText)} words`
       return `<div class="thinking-block">
         <div class="thinking-toggle" onclick="toggleThinking('${id}')">
           <span class="thinking-arrow ${highlightTarget ? 'open' : ''}" id="arr_${id}">▶</span>
@@ -6239,16 +8202,22 @@ function renderMessage(msg, messageIndex = 0) {
         `<div class="attachment-block"><img src="/api/attachment/${attachmentPath(id)}" alt="screenshot" style="max-width:100%;max-height:480px;border-radius:4px;border:1px solid var(--border);display:block;margin:4px 0"></div>`
       ).join('')
       const rawOutput = pretty(block.text ?? block.content ?? '')
+      const fallbackOutput = imgs.length ? { text: rawOutput, imageHtml: '' } : inlineToolResultImageFallback(block.content, rawOutput)
+      const previewHtml = imageHtml + fallbackOutput.imageHtml
+      const hasRenderedImagePreview = !!previewHtml.trim()
+      const detailsOpen = !hasRenderedImagePreview || !!highlightTarget
+      const detailClass = `detail-block${hasRenderedImagePreview ? ' raw-image-output' : ''}`
+      const detailSummary = hasRenderedImagePreview ? 'raw output' : 'output'
       return `<div class="tool-block">
         <div class="tool-meta">
           <span class="tool-kind">tool output</span>
           <span class="tool-name">${esc(block.name || 'result')}</span>
         </div>
-        ${rawOutput ? `<details class="detail-block" open>
-          <summary>output</summary>
-          ${renderPreDisplay(rawOutput, 'detail-pre', highlightTarget)}
+        ${previewHtml}
+        ${rawOutput ? `<details class="${detailClass}"${detailsOpen ? ' open' : ''}>
+          <summary>${detailSummary}</summary>
+          ${renderPreDisplay(fallbackOutput.text, 'detail-pre', highlightTarget)}
         </details>` : ''}
-        ${imageHtml}
       </div>`
     }
     if (block.type === 'image') {
@@ -6260,14 +8229,18 @@ function renderMessage(msg, messageIndex = 0) {
     if (block.type === 'file') {
       const label = esc(block.attachmentName || (block.mediaType === 'application/pdf' ? 'attached pdf' : 'attached file'))
       if (block.attachmentId) {
+        const mediaType = String(block.mediaType || '').toLowerCase()
+        const isVideo = mediaType.startsWith('video/')
+        const preview = renderAttachmentPreview(block, block.attachmentName || 'attached file')
         return `<div class="tool-block">
           <div class="tool-meta">
             <span class="tool-kind">attachment</span>
             <span class="tool-name">${label}</span>
           </div>
-          <button class="attachment-open-btn" type="button" data-attachment-open-id="${escAttr(block.attachmentId)}" data-attachment-name="${escAttr(block.attachmentName || '')}">
+          ${preview}
+          ${isVideo ? '' : `<button class="attachment-open-btn" type="button" data-attachment-open-id="${escAttr(block.attachmentId)}" data-attachment-name="${escAttr(block.attachmentName || '')}">
             <span>Open ${block.mediaType === 'application/pdf' ? 'PDF' : 'file'}</span>
-          </button>
+          </button>`}
         </div>`
       }
       return `<div class="tool-block" style="color:var(--muted)">📎 ${label} (pre-capture)</div>`
@@ -6290,8 +8263,9 @@ function renderMessage(msg, messageIndex = 0) {
     <div class="message-role ${msg.role}">
       ${msg.role}
       <span class="msg-time">${fmtTime(msg.timestamp)}</span>
+      ${renderMessageAnnotationBar(msg)}
     </div>
-    ${renderAttrStrip(msg)}
+    ${renderAttrStrip(msg, messageIndex)}
     ${blocks}
     ${usageParts.length ? `<div class="usage-line">${usageParts.join(' · ')}</div>` : ''}
   </div>`
@@ -6756,11 +8730,25 @@ function renderReferencedAttachmentPanel() {
     : appTr('referencedEnableSub')
 }
 
+function maybeRefreshSessionAfterReferencedAttachmentUpdate(previousStatus, nextStatus) {
+  if (!activeId || activeBranchData || !nextStatus?.enabled) return
+  const previousFiles = Number(previousStatus?.protectedFiles || 0)
+  const nextFiles = Number(nextStatus?.protectedFiles || 0)
+  const justFinished = previousStatus?.running === true && nextStatus.running !== true
+  const addedFiles = nextFiles > previousFiles || nextFiles > referencedAttachmentRefreshedProtectedFiles
+  if (!justFinished && !addedFiles) return
+  referencedAttachmentRefreshedProtectedFiles = Math.max(referencedAttachmentRefreshedProtectedFiles, nextFiles)
+  void refreshActiveSessionIfChanged({ force: true })
+}
+
 async function loadReferencedAttachmentPanel() {
   referencedAttachmentBusy = true
   renderReferencedAttachmentPanel()
+  const previousStatus = referencedAttachmentStatus
   try {
-    referencedAttachmentStatus = await jsonOrThrow(await apiFetch('/api/referenced-attachments'))
+    const nextStatus = await jsonOrThrow(await apiFetch('/api/referenced-attachments'))
+    referencedAttachmentStatus = nextStatus
+    maybeRefreshSessionAfterReferencedAttachmentUpdate(previousStatus, nextStatus)
   } catch {
     referencedAttachmentStatus = null
   } finally {
@@ -6773,8 +8761,10 @@ async function loadReferencedAttachmentPanel() {
 async function enableReferencedAttachmentBackup() {
   referencedAttachmentBusy = true
   renderReferencedAttachmentPanel()
+  const previousStatus = referencedAttachmentStatus
   try {
     referencedAttachmentStatus = await jsonOrThrow(await apiFetch('/api/referenced-attachments/enable', { method: 'POST' }))
+    maybeRefreshSessionAfterReferencedAttachmentUpdate(previousStatus, referencedAttachmentStatus)
     referencedAttachmentPollTail = 3
     window.setTimeout(() => { void loadReferencedAttachmentPanel() }, 1200)
   } catch (error) {
@@ -6860,7 +8850,11 @@ function renderTransferExportPanel() {
     progressCountEl.textContent = ''
   }
   checkBtn.disabled = busy
-  openBtn.disabled = !data?.root
+  openBtn.disabled = busy
+    || !data?.root
+    || !data?.manifest
+    || data?.status === 'checking'
+    || data?.status === 'cannot transfer yet'
 }
 
 function renderTransferImportPanel() {
@@ -6884,6 +8878,8 @@ function renderTransferImportPanel() {
   const job = data?.job || (data?.version ? data : null)
   const status = job?.phase || data?.status || 'waiting for folder'
   const running = transferBusy || (job && !job.done && job.phase !== 'failed')
+  const cardEl = document.getElementById('transfer-import-card')
+  if (cardEl && job?.phase === 'completed') feelPulseElement(cardEl)
   stateEl.textContent = appStatusText(status)
   badgeEl.textContent = running ? appTr('working') : job?.phase === 'completed' ? appTr('ready') : data?.ok ? appTr('ready') : status === 'failed' ? appTr('failed') : appTr('waiting')
   badgeEl.classList.toggle('off', !(data?.ok || job?.phase === 'completed') || status === 'failed')
@@ -7232,6 +9228,11 @@ async function startTransferImport(mode) {
         : { sourceRoot: input.sourceRoot, mode, password: input.password, currentPassword: input.currentPassword, replaceConfirmText: input.replaceConfirmText }),
     }))
     scheduleTransferImportPollIfRunning()
+    // A merge/replace import can bring bookmarks and votes from the backup. The
+    // annotation summary is loaded once and cached (annoSummaryLoaded), so force
+    // a refresh here or the imported bookmarks stay invisible until a full app
+    // reload (which is why adopt/first-run showed them but in-app merge did not).
+    annoSummaryLoaded = false
     await loadSessions()
     setUpdatePanelMessage(mode === 'replace' ? appTr('transferReplaceDone') : appTr('transferMergeDone'), false)
   } catch (error) {
@@ -7288,6 +9289,8 @@ function renderChatGptImportPanel() {
   const job = currentChatGptImportJob()
   const status = job?.phase || data?.status || 'waiting for export'
   const running = chatGptImportBusy || chatGptImportJobIsRunning(job)
+  const cardEl = document.getElementById('chatgpt-import-card')
+  if (cardEl && job?.phase === 'completed') feelPulseElement(cardEl)
   const selectedPath = chatGptImportInputPath()
   const hasPicker = !!window.datamoatDesktop?.chatgptExport?.selectSource
   const displayStatus = job?.phase === 'completed'
@@ -7491,7 +9494,8 @@ async function startChatGptImport() {
     if (completed && failedSessions === 0) {
       setSourceFilter('chatgpt-export')
       closeSettings()
-      showNotice(appTr('chatgptImported'))
+      markSourceReaction('chatgpt-export')
+      feelPulseSelector('.session-item.search-result, .session-item[data-session-id]')
     } else {
       setUpdatePanelMessage(appTr('chatgptImportReview'), true)
     }
@@ -7885,9 +9889,30 @@ document.getElementById('conversation')?.addEventListener('input', e => {
 })
 document.getElementById('conversation')?.addEventListener('click', e => {
   const target = e.target instanceof Element ? e.target : null
+  const annoButton = target ? target.closest('button[data-anno-kind]') : null
+  if (annoButton) {
+    const bar = annoButton.closest('.msg-anno-bar[data-anno-uuid]')
+    if (bar && activeId) toggleMessageAnnotation(activeId, bar.dataset.annoUuid || '', annoButton.dataset.annoKind || '')
+    return
+  }
+  const sessionBookmarkButton = target ? target.closest('button[data-session-bookmark]') : null
+  if (sessionBookmarkButton) {
+    toggleSessionBookmark(sessionBookmarkButton.dataset.sessionBookmark || activeId || '')
+    return
+  }
   const headerToggle = target ? target.closest('[data-conv-header-toggle]') : null
   if (headerToggle) {
     toggleConversationHeaderHidden()
+    return
+  }
+  const copyContextButton = target ? target.closest('button[data-copy-context-through]') : null
+  if (copyContextButton) {
+    void copyContextThroughMessage(copyContextButton)
+    return
+  }
+  const copyFullButton = target ? target.closest('button[data-session-copy-full]') : null
+  if (copyFullButton) {
+    void copyActiveSessionContext(copyFullButton)
     return
   }
   const attachmentButton = target ? target.closest('button[data-attachment-open-id]') : null
@@ -7895,9 +9920,19 @@ document.getElementById('conversation')?.addEventListener('click', e => {
     void openAttachmentFile(attachmentButton)
     return
   }
+  const localVideoButton = target ? target.closest('button[data-local-video-open-path]') : null
+  if (localVideoButton) {
+    void openLocalVideoFile(localVideoButton)
+    return
+  }
   const searchNavButton = target ? target.closest('button[data-search-nav]') : null
   if (searchNavButton) {
     navigateSearchMatch(searchNavButton.dataset.searchNav === 'prev' ? -1 : 1)
+    return
+  }
+  const latestButton = target ? target.closest('button[data-session-jump-latest]') : null
+  if (latestButton) {
+    void jumpActiveSessionToLatest(latestButton)
     return
   }
   const branchButton = target ? target.closest('button[data-chatgpt-branch-id]') : null
@@ -8159,6 +10194,7 @@ document.querySelectorAll('.filter-btn').forEach(btn => {
 })
 document.getElementById('search').addEventListener('input', e => {
   const nextQ = e.target.value.trim()
+  document.querySelector('.search-wrap')?.classList.toggle('search-active', nextQ.length >= 2)
   if (nextQ !== searchQ) {
     lastExecutedSearchQ = ''
     lastExecutedSearchSource = 'all'
@@ -8179,7 +10215,17 @@ document.getElementById('search').addEventListener('input', e => {
 })
 document.getElementById('conversation').addEventListener('scroll', e => {
   maybeAutoLoadConversation(e.currentTarget)
+  updateConversationBottomState(e.currentTarget)
 })
+document.getElementById('conversation').addEventListener('wheel', () => {
+  cancelScheduledSearchScroll(true)
+}, { passive: true })
+document.getElementById('conversation').addEventListener('touchstart', () => {
+  cancelScheduledSearchScroll(true)
+}, { passive: true })
+document.getElementById('conversation').addEventListener('pointerdown', () => {
+  cancelScheduledSearchScroll(true)
+}, { passive: true })
 
 // ── Helpers ──
 function esc(s) {
@@ -8258,6 +10304,7 @@ document.getElementById('recovery-reset-confirm').addEventListener('keydown', e 
 document.getElementById('settings-backdrop').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeSettings()
 })
+document.getElementById('readable-format-toggle').addEventListener('click', () => { void toggleReadableMessageFormatting() })
 document.getElementById('update-toggle').addEventListener('click', () => { void toggleAutoUpdate() })
 document.getElementById('update-check-btn').addEventListener('click', () => { void checkUpdatesNow() })
 document.getElementById('update-apply-btn').addEventListener('click', () => { void applyUpdateNow() })
@@ -8300,21 +10347,36 @@ document.getElementById('reinstall-source-path').addEventListener('input', e => 
   }
   renderReinstallHelp()
 })
+function handleSessionListActivate(target) {
+  const modeBtn = target ? target.closest('[data-panel-mode]') : null
+  if (modeBtn) {
+    setPanelMode(modeBtn.dataset.panelMode || 'search')
+    return true
+  }
+  const folderHeader = target ? target.closest('.folder-group-header[data-folder-key]') : null
+  if (folderHeader) {
+    toggleFolderCollapsed(folderHeader.dataset.folderKey || '')
+    return true
+  }
+  const item = target ? target.closest('.session-item[data-session-id]') : null
+  if (!item) return false
+  const { sessionId, messageIndex } = item.dataset
+  if (!sessionId) return false
+  if (messageIndex !== undefined) {
+    void selectSession(sessionId, { jumpToMessageIndex: Number(messageIndex) })
+  } else {
+    openSessionFromList(sessionId)
+  }
+  return true
+}
 document.getElementById('session-list').addEventListener('click', e => {
   const target = e.target instanceof Element ? e.target : null
-  const item = target ? target.closest('.session-item[data-session-id]') : null
-  if (!item) return
-  const { sessionId } = item.dataset
-  if (sessionId) openSessionFromList(sessionId)
+  handleSessionListActivate(target)
 })
 document.getElementById('session-list').addEventListener('keydown', e => {
   if (e.key !== 'Enter' && e.key !== ' ') return
   const target = e.target instanceof Element ? e.target : null
-  const item = target ? target.closest('.session-item[data-session-id]') : null
-  if (!item) return
-  e.preventDefault()
-  const { sessionId } = item.dataset
-  if (sessionId) openSessionFromList(sessionId)
+  if (handleSessionListActivate(target)) e.preventDefault()
 })
 document.getElementById('session-tabs')?.addEventListener('click', e => {
   const target = e.target instanceof Element ? e.target : null
@@ -8329,14 +10391,78 @@ document.getElementById('session-tabs')?.addEventListener('click', e => {
   const { tabId } = tab.dataset
   if (tabId && tabId !== activeId) void selectSession(tabId)
 })
+document.getElementById('session-tabs')?.addEventListener('dragstart', e => {
+  const target = e.target instanceof Element ? e.target : null
+  if (target?.closest('[data-tab-close]')) {
+    e.preventDefault()
+    return
+  }
+  const tab = target ? target.closest('.session-tab[data-tab-id]') : null
+  if (!tab) return
+  draggedTabSessionId = tab.dataset.tabId || ''
+  if (!draggedTabSessionId) return
+  tab.classList.add('dragging')
+  document.getElementById('session-tabs')?.classList.add('drag-splitting')
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', draggedTabSessionId)
+  }
+})
+function cleanupTabDragState() {
+  draggedTabSessionId = null
+  hideSplitDropIndicator()
+  document.getElementById('session-tabs')?.classList.remove('drag-splitting')
+  document.querySelectorAll('.session-tab.dragging').forEach(tab => tab.classList.remove('dragging'))
+}
+function handleTabSplitDragOver(e) {
+  if (!draggedTabSessionId) return
+  if (!isRightSplitDrop(e.clientX)) {
+    hideSplitDropIndicator()
+    return
+  }
+  e.preventDefault()
+  showSplitDropIndicator()
+  if (e.dataTransfer) e.dataTransfer.dropEffect = 'move'
+}
+function handleTabSplitDrop(e) {
+  const sessionId = draggedTabSessionId || e.dataTransfer?.getData('text/plain') || ''
+  if (!sessionId || !isRightSplitDrop(e.clientX)) {
+    cleanupTabDragState()
+    return
+  }
+  e.preventDefault()
+  cleanupTabDragState()
+  void openSplitSession(sessionId)
+}
+document.getElementById('session-tabs')?.addEventListener('dragend', cleanupTabDragState)
+document.getElementById('conversation-shell')?.addEventListener('dragover', handleTabSplitDragOver)
+document.getElementById('conversation-shell')?.addEventListener('drop', handleTabSplitDrop)
+document.getElementById('session-tabs')?.addEventListener('dragover', handleTabSplitDragOver)
+document.getElementById('session-tabs')?.addEventListener('drop', handleTabSplitDrop)
+document.getElementById('conversation-shell')?.addEventListener('click', e => {
+  const target = e.target instanceof Element ? e.target : null
+  if (!target?.closest('#conversation-split')) return
+  const close = target.closest('[data-close-split-pane]')
+  if (close) {
+    closeSplitPane()
+    return
+  }
+  const headerToggle = target.closest('[data-conv-header-toggle]')
+  if (headerToggle) toggleConversationHeaderHidden()
+})
 document.getElementById('session-list').addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
 document.getElementById('conversation').addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
+document.getElementById('conversation-split')?.addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
 window.addEventListener('pointerdown', () => { void sendActivityPing() })
 window.addEventListener('keydown', () => { void sendActivityPing() })
 window.addEventListener('mousemove', () => { void sendActivityPing() })
 window.addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
 window.addEventListener('touchstart', () => { void sendActivityPing() }, { passive: true })
 window.addEventListener('focus', () => { void sendActivityPing(true) })
+window.addEventListener('resize', () => {
+  const hint = document.getElementById('conversation-bottom-hint')
+  if (hint?.classList.contains('show')) placeConversationBottomHint()
+})
 window.addEventListener('keydown', e => {
   if (e.key === 'Escape' && settingsOpen) closeSettings()
 })

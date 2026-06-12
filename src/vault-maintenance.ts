@@ -7,12 +7,19 @@ import {
   getVaultSessionId,
   loadSessions,
   makeRawPath,
+  readRawRecords,
+  readSessionMessages,
+  replaceRawRecords,
+  replaceSessionMessages,
   saveSessions,
 } from './store'
 import { decryptLinesForSession, encryptLinesForSession } from './vault-helper'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from './logging'
 import { sourceArchiveSize } from './source-archive'
-import type { ContentBlock, Message, RawRecord, Session } from './types'
+import { claudeForkGroupKeyForSession, pickCanonicalForkUid } from './session-identity'
+import { normalizedMessageKey } from './message-key'
+import { compactAnnotationFile, listAnnotationAnchors } from './annotations'
+import type { Message, RawRecord, Session } from './types'
 
 export type VaultMaintenanceMode = 'dry-run' | 'apply'
 
@@ -69,13 +76,16 @@ type BackgroundMaintenanceState = {
   status: 'running' | 'complete'
   startedAt: string
   updatedAt: string
+  mergeQueue?: string[]
   queue: string[]
   completed: string[]
   totals: VaultMaintenanceResult
 }
 
 let scheduledMaintenance: Promise<VaultMaintenanceResult | null> | null = null
-const VAULT_MAINTENANCE_VERSION = 3
+// v4: merge Claude resume/fork session copies (same internal sessionId across
+// multiple source files) into one canonical session before per-session dedup.
+const VAULT_MAINTENANCE_VERSION = 4
 const TRANSFER_REPLACE_JOURNAL_FILE = path.join(STATE_DIR, 'transfer-replace-journal.json')
 const VAULT_MAINTENANCE_PROGRESS_FILE = path.join(STATE_DIR, 'vault-maintenance-progress.json')
 const AUTO_MAINTENANCE_START_DELAY_MS = positiveNumber(process.env.DATAMOAT_AUTO_MAINTENANCE_START_DELAY_MS, 2_000)
@@ -103,26 +113,6 @@ function stableStringify(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
   const obj = value as Record<string, unknown>
   return `{${Object.keys(obj).sort().map(key => `${JSON.stringify(key)}:${stableStringify(obj[key])}`).join(',')}}`
-}
-
-function normalizedBlock(block: ContentBlock): unknown {
-  return {
-    ...block,
-    attachmentId: block.attachmentId || undefined,
-    attachmentIds: block.attachmentIds || undefined,
-  }
-}
-
-function normalizedMessageKey(message: Message): string {
-  return stableStringify({
-    role: message.role,
-    timestamp: message.timestamp,
-    model: message.model || '',
-    sourceEventType: message.sourceEventType || '',
-    content: message.content.map(normalizedBlock),
-    usage: message.usage || null,
-    hasThinking: message.hasThinking,
-  })
 }
 
 function rawRecordKey(record: RawRecord): string {
@@ -449,9 +439,127 @@ function removeSessionFiles(session: Session): void {
   fs.rmSync(path.join(RAW_ARCHIVE_DIR, session.source, session.uid), { recursive: true, force: true })
 }
 
+// ---- Claude resume/fork session merge -------------------------------------
+// Group sessions that share the same internal Claude sessionId (resume/fork
+// copies stored under separate uids because buildSessionUid mixes in the source
+// file path). Only groups with more than one member are duplicates to merge.
+function claudeForkGroups(sessions: Session[]): Map<string, Session[]> {
+  const groups = new Map<string, Session[]>()
+  for (const session of sessions) {
+    const key = claudeForkGroupKeyForSession(session)
+    if (!key) continue
+    const group = groups.get(key) || []
+    group.push(session)
+    groups.set(key, group)
+  }
+  for (const [key, members] of groups) {
+    if (members.length <= 1) groups.delete(key)
+  }
+  return groups
+}
+
+type ForkMergeOutcome = {
+  canonical: Session
+  removed: Session[]
+  addedMessages: number
+  reclaimedParsedBytes: number
+  reclaimedRawBytes: number
+}
+
+// Union the messages and raw records of every copy in a fork group into one
+// canonical session (the original root file when present), then delete the
+// redundant copies. Content-keyed dedupe keeps each unique turn exactly once,
+// so a resumed file's replayed prefix is collapsed while its new tail survives.
+async function mergeClaudeForkGroup(members: Session[], mode: VaultMaintenanceMode): Promise<ForkMergeOutcome | null> {
+  if (members.length <= 1) return null
+  const canonicalUid = pickCanonicalForkUid(members.map(s => ({ uid: s.uid, id: s.id, originalPath: s.originalPath })))
+  const canonical = members.find(s => s.uid === canonicalUid) ?? members[0]
+  const others = members.filter(s => s.uid !== canonical.uid)
+  const ordered = [canonical, ...others]
+
+  const seenMsg = new Set<string>()
+  const mergedMessages: Message[] = []
+  for (const member of ordered) {
+    const messages = await readSessionMessages(member)
+    for (const message of messages) {
+      const key = normalizedMessageKey(message)
+      if (seenMsg.has(key)) continue
+      seenMsg.add(key)
+      mergedMessages.push(message)
+    }
+  }
+  // Stable sort keeps insertion order (canonical first) for equal timestamps.
+  mergedMessages.sort((a, b) => (Date.parse(a.timestamp || '') || 0) - (Date.parse(b.timestamp || '') || 0))
+
+  const seenRaw = new Set<string>()
+  const mergedRaw: RawRecord[] = []
+  for (const member of ordered) {
+    const records = await readRawRecords(member.source, member.uid)
+    for (const record of records) {
+      const key = rawRecordKey(record)
+      if (seenRaw.has(key)) continue
+      seenRaw.add(key)
+      mergedRaw.push(record)
+    }
+  }
+
+  const reclaimedParsedBytes = others.reduce((sum, s) => sum + sessionVaultSize(s), 0)
+  const reclaimedRawBytes = others.reduce((sum, s) => sum + rawVaultSize(s), 0)
+  const addedMessages = Math.max(0, mergedMessages.length - canonical.messageCount)
+
+  const mergedSession: Session = {
+    ...canonical,
+    messageCount: mergedMessages.length,
+    firstTimestamp: mergedMessages[0]?.timestamp || canonical.firstTimestamp,
+    lastTimestamp: mergedMessages[mergedMessages.length - 1]?.timestamp || canonical.lastTimestamp,
+    hasThinking: canonical.hasThinking || mergedMessages.some(m => m.hasThinking),
+  }
+
+  if (mode === 'apply') {
+    await replaceSessionMessages(mergedSession, mergedMessages)
+    await replaceRawRecords(mergedSession.source, mergedSession.uid, mergedRaw)
+    for (const other of others) removeSessionFiles(other)
+  }
+
+  return { canonical: mergedSession, removed: others, addedMessages, reclaimedParsedBytes, reclaimedRawBytes }
+}
+
+// Merge every fork group in `sessions` and return the surviving session list
+// (canonicals updated, redundant copies dropped). Accumulates group/session
+// counts and reclaimed bytes into `result`. In dry-run nothing is written.
+async function applyForkMerges(
+  sessions: Session[],
+  mode: VaultMaintenanceMode,
+  result: VaultMaintenanceResult,
+): Promise<Session[]> {
+  const groups = claudeForkGroups(sessions)
+  if (groups.size === 0) return sessions
+  const removedUids = new Set<string>()
+  const replacements = new Map<string, Session>()
+  for (const members of groups.values()) {
+    try {
+      const outcome = await mergeClaudeForkGroup(members, mode)
+      if (!outcome) continue
+      result.duplicateSessionGroups += 1
+      result.duplicateSessions += outcome.removed.length
+      result.estimatedReclaimableParsedBytes += outcome.reclaimedParsedBytes
+      result.estimatedReclaimableRawBytes += outcome.reclaimedRawBytes
+      replacements.set(outcome.canonical.uid, outcome.canonical)
+      for (const removed of outcome.removed) removedUids.add(removed.uid)
+    } catch (error) {
+      result.errors.push({ uid: members[0]?.uid || '', error: errorMessage(error) })
+    }
+  }
+  const survivors = sessions
+    .filter(session => !removedUids.has(session.uid))
+    .map(session => replacements.get(session.uid) ?? session)
+  if (mode === 'apply' && (removedUids.size > 0 || replacements.size > 0)) {
+    await saveSessions(survivors)
+  }
+  return survivors
+}
+
 export async function auditAndCompactVaultDuplicates(mode: VaultMaintenanceMode = 'dry-run'): Promise<VaultMaintenanceResult> {
-  const sessions = await loadSessions()
-  const candidateUids = candidateDuplicateSessionUids(sessions)
   const result: VaultMaintenanceResult = {
     mode,
     applied: mode === 'apply',
@@ -468,6 +576,9 @@ export async function auditAndCompactVaultDuplicates(mode: VaultMaintenanceMode 
     changedSessions: [],
     errors: [],
   }
+  // Merge Claude resume/fork copies first, then dedupe within the survivors.
+  const sessions = await applyForkMerges(await loadSessions(), mode, result)
+  const candidateUids = candidateDuplicateSessionUids(sessions)
 
   const sequenceGroups = new Map<string, Array<{ session: Session; parsedBytes: number; rawBytes: number }>>()
   const updatedSessions: Session[] = []
@@ -563,11 +674,12 @@ function updateSessionMessageCount(sessions: Session[], uid: string, nextMessage
 
 async function createBackgroundMaintenanceState(reason: string): Promise<BackgroundMaintenanceState | null> {
   const sessions = await loadSessions()
+  const mergeQueue = [...claudeForkGroups(sessions).keys()]
   const candidateUids = candidateDuplicateSessionUids(sessions)
   const candidateSessions = sessions.filter(session => candidateUids.has(session.uid))
     .sort((a, b) => sessionTotalVaultBytes(b) - sessionTotalVaultBytes(a))
 
-  if (candidateSessions.length === 0) {
+  if (mergeQueue.length === 0 && candidateSessions.length === 0) {
     const result = emptyMaintenanceResult()
     const completedAt = new Date().toISOString()
     const completed = {
@@ -581,6 +693,7 @@ async function createBackgroundMaintenanceState(reason: string): Promise<Backgro
       status: 'complete',
       startedAt: completedAt,
       updatedAt: completedAt,
+      mergeQueue: [],
       queue: [],
       completed: [],
       totals: result,
@@ -601,6 +714,7 @@ async function createBackgroundMaintenanceState(reason: string): Promise<Backgro
     status: 'running',
     startedAt: now,
     updatedAt: now,
+    mergeQueue,
     queue: candidateSessions.map(session => session.uid),
     completed: [],
     totals: emptyMaintenanceResult(),
@@ -610,20 +724,84 @@ async function createBackgroundMaintenanceState(reason: string): Promise<Backgro
     running: true,
     reason,
     startedAt: now,
+    forkGroups: mergeQueue.length,
     candidateSessions: state.queue.length,
     remainingSessions: state.queue.length,
   })
   writeAuditEvent('vault-maintenance', 'background_repair_started', {
     reason,
+    forkGroups: mergeQueue.length,
     candidateSessions: state.queue.length,
   })
   return state
 }
 
+// Merge one fork group (by group key) and persist the survivor session list.
+// Re-derives members from the current sessions index so it is safe to resume
+// after a crash/kill between steps.
+async function mergeForkGroupStep(key: string, totals: VaultMaintenanceResult): Promise<void> {
+  const sessions = await loadSessions()
+  const members = sessions.filter(session => claudeForkGroupKeyForSession(session) === key)
+  if (members.length <= 1) return
+  const outcome = await mergeClaudeForkGroup(members, 'apply')
+  if (!outcome) return
+  const removedUids = new Set(outcome.removed.map(s => s.uid))
+  const survivors = sessions
+    .filter(session => !removedUids.has(session.uid))
+    .map(session => (session.uid === outcome.canonical.uid ? outcome.canonical : session))
+  await saveSessions(survivors)
+  totals.duplicateSessionGroups += 1
+  totals.duplicateSessions += outcome.removed.length
+  totals.estimatedReclaimableParsedBytes += outcome.reclaimedParsedBytes
+  totals.estimatedReclaimableRawBytes += outcome.reclaimedRawBytes
+}
+
 async function backgroundMaintenanceStep(reason: string): Promise<VaultMaintenanceResult | null> {
   let state = readBackgroundMaintenanceState() || await createBackgroundMaintenanceState(reason)
   if (!state) return null
+
+  // Phase 1: merge Claude resume/fork copies, one group per step (resumable).
+  if (state.mergeQueue && state.mergeQueue.length > 0) {
+    const [key, ...remainingMerges] = state.mergeQueue
+    const nextState: BackgroundMaintenanceState = {
+      ...state,
+      mergeQueue: remainingMerges,
+      updatedAt: new Date().toISOString(),
+    }
+    try {
+      await mergeForkGroupStep(key, nextState.totals)
+      writeAuditEvent('vault-maintenance', 'background_fork_group_merged', {
+        reason,
+        remainingForkGroups: remainingMerges.length,
+        duplicateSessions: nextState.totals.duplicateSessions,
+      })
+    } catch (error) {
+      nextState.totals.errors.push({ uid: key, error: errorMessage(error) })
+      writeLog('warn', 'vault-maintenance', 'background_fork_merge_failed', { reason, error: safeError(error) })
+    }
+    writePrivateJson(VAULT_MAINTENANCE_PROGRESS_FILE, nextState)
+    updateHealth('vault-maintenance', {
+      running: true,
+      reason,
+      remainingForkGroups: remainingMerges.length,
+      duplicateSessions: nextState.totals.duplicateSessions,
+      estimatedReclaimableParsedBytes: nextState.totals.estimatedReclaimableParsedBytes,
+      estimatedReclaimableRawBytes: nextState.totals.estimatedReclaimableRawBytes,
+    })
+    return null
+  }
+
   if (state.queue.length === 0) {
+    // Final phase: silently dedupe annotation op logs (tiny files; duplicate
+    // ops only ever come from overlapping imports). Never touches user intent —
+    // identical opIds collapse, everything else is preserved verbatim.
+    try {
+      for (const anchor of listAnnotationAnchors()) {
+        await compactAnnotationFile(anchor)
+      }
+    } catch (error) {
+      writeLog('warn', 'vault-maintenance', 'annotation_compact_failed', { reason, error: safeError(error) })
+    }
     state = {
       ...state,
       status: 'complete',

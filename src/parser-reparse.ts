@@ -4,6 +4,7 @@ import * as path from 'path'
 import { PARSER_REPARSE_FILE } from './config'
 import {
   CODEX_EXTRACTOR_VERSION,
+  codexRawHasToolOutputInlineImage,
   codexParserCompatibilityKey,
   extractCodexLine,
 } from './extractors/codex'
@@ -12,6 +13,7 @@ import {
   claudeParserCompatibilityKey,
   extractClaudeLine,
   extractClaudeModel,
+  isClaudeSyntheticModel,
 } from './extractors/claude'
 import type { RawImageData } from './extractors/claude'
 import {
@@ -21,6 +23,8 @@ import {
 } from './extractors/cursor'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from './logging'
 import { sourceAccountFromPath } from './session-identity'
+import { normalizedMessageKey } from './message-key'
+import { titleForSession } from './session-titles'
 import {
   getCaptureSessionId,
   getVaultSessionId,
@@ -47,6 +51,8 @@ type SourceParserProfile = {
   compatibilityKey: (sourceAppVersion: string) => string
   reparse: (session: Session, records: RawRecord[]) => Promise<Session>
   reparseWithoutPriorState: boolean
+  shouldReparseWithoutPriorState?: (session: Session, records: RawRecord[]) => boolean
+  shouldReparseParserStateChange?: (session: Session, records: RawRecord[], previous: SessionReparseState) => boolean
   requiresFullReadForReparse?: boolean
   compatibleLegacyParserVersion?: (previousParserVersion: number, parserCompatibilityKey: string) => boolean
 }
@@ -58,6 +64,8 @@ const SOURCE_PARSER_PROFILES: Partial<Record<Source, SourceParserProfile>> = {
     compatibilityKey: appVersion => claudeParserCompatibilityKey('claude-cli', appVersion),
     reparse: reparseClaudeSession,
     reparseWithoutPriorState: false,
+    shouldReparseWithoutPriorState: claudeRawNeedsCurrentReparse,
+    shouldReparseParserStateChange: claudeRawNeedsCurrentReparse,
     requiresFullReadForReparse: true,
   },
   'codex-cli': {
@@ -65,7 +73,9 @@ const SOURCE_PARSER_PROFILES: Partial<Record<Source, SourceParserProfile>> = {
     sourceAppVersion: codexSourceAppVersion,
     compatibilityKey: codexParserCompatibilityKey,
     reparse: reparseCodexSession,
-    reparseWithoutPriorState: true,
+    reparseWithoutPriorState: false,
+    shouldReparseWithoutPriorState: codexRawNeedsCurrentReparse,
+    shouldReparseParserStateChange: codexRawNeedsCurrentReparse,
   },
   'claude-app': {
     parserVersion: CLAUDE_EXTRACTOR_VERSION,
@@ -73,6 +83,8 @@ const SOURCE_PARSER_PROFILES: Partial<Record<Source, SourceParserProfile>> = {
     compatibilityKey: appVersion => claudeParserCompatibilityKey('claude-app', appVersion),
     reparse: reparseClaudeSession,
     reparseWithoutPriorState: false,
+    shouldReparseWithoutPriorState: claudeRawNeedsCurrentReparse,
+    shouldReparseParserStateChange: claudeRawNeedsCurrentReparse,
     requiresFullReadForReparse: true,
   },
   cursor: {
@@ -108,9 +120,39 @@ type ReparseResult = {
   reparsed: number
   skipped: number
   errors: number
+  budgetExhausted?: boolean
+  remainingSessions?: number
 }
 
 let reparseInFlight: Promise<ReparseResult> | null = null
+
+type ReparseBudget = {
+  maxSessions: number
+  maxReparsed: number
+  maxRuntimeMs: number
+}
+
+function positiveIntegerFromEnv(name: string): number {
+  const raw = process.env[name]?.trim()
+  if (!raw) return 0
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0
+}
+
+function parserReparseBudget(): ReparseBudget {
+  return {
+    maxSessions: positiveIntegerFromEnv('DATAMOAT_PARSER_REPARSE_MAX_SESSIONS_PER_RUN'),
+    maxReparsed: positiveIntegerFromEnv('DATAMOAT_PARSER_REPARSE_MAX_REPARSED_PER_RUN'),
+    maxRuntimeMs: positiveIntegerFromEnv('DATAMOAT_PARSER_REPARSE_MAX_RUNTIME_MS'),
+  }
+}
+
+function reparseBudgetReached(result: ReparseResult, startedAtMs: number, budget: ReparseBudget): boolean {
+  if (budget.maxSessions > 0 && result.checked >= budget.maxSessions) return true
+  if (budget.maxReparsed > 0 && result.reparsed >= budget.maxReparsed) return true
+  if (budget.maxRuntimeMs > 0 && Date.now() - startedAtMs >= budget.maxRuntimeMs) return true
+  return false
+}
 
 function defaultState(): ParserReparseState {
   return {
@@ -183,6 +225,8 @@ export async function runParserReparseIfNeeded(reason: string): Promise<ReparseR
 async function runParserReparse(reason: string): Promise<ReparseResult> {
   if (!stateSessionId()) return { checked: 0, reparsed: 0, skipped: 0, errors: 0 }
   const startedAt = new Date().toISOString()
+  const startedAtMs = Date.now()
+  const budget = parserReparseBudget()
   const result: ReparseResult = { checked: 0, reparsed: 0, skipped: 0, errors: 0 }
   const state = await readState()
   const sessions = (await loadSessions()).filter(session => SOURCE_PARSER_PROFILES[session.source])
@@ -191,9 +235,15 @@ async function runParserReparse(reason: string): Promise<ReparseResult> {
     reason,
     startedAt,
     totalSessions: sessions.length,
+    budget,
   })
 
   for (const session of sessions) {
+    if (reparseBudgetReached(result, startedAtMs, budget)) {
+      result.budgetExhausted = true
+      result.remainingSessions = Math.max(0, sessions.length - result.checked)
+      break
+    }
     result.checked += 1
     const profile = SOURCE_PARSER_PROFILES[session.source]
     if (!profile) {
@@ -234,7 +284,32 @@ async function runParserReparse(reason: string): Promise<ReparseResult> {
       const lastRawHash = rawRecords[rawRecords.length - 1]?.rawHash || ''
       const sourceAppVersion = profile.sourceAppVersion(session, rawRecords)
       const parserCompatibilityKey = profile.compatibilityKey(sourceAppVersion)
-      if (!previous && !profile.reparseWithoutPriorState) {
+      if (
+        !previous
+        && !profile.reparseWithoutPriorState
+        && profile.shouldReparseWithoutPriorState?.(session, rawRecords) !== true
+      ) {
+        state.sessions[session.uid] = {
+          source: session.source,
+          parserVersion: profile.parserVersion,
+          parserCompatibilityKey,
+          sourceAppVersion,
+          rawCount: rawRecords.length,
+          lastRawHash,
+          reparsedAt: new Date().toISOString(),
+          messageCount: session.messageCount,
+        }
+        await writeState(state)
+        result.skipped += 1
+        continue
+      }
+      if (
+        previous
+        && previous.rawCount === rawRecords.length
+        && previous.lastRawHash === lastRawHash
+        && !previousParserStateMatches(previous, profile, parserCompatibilityKey)
+        && profile.shouldReparseParserStateChange?.(session, rawRecords, previous) === false
+      ) {
         state.sessions[session.uid] = {
           source: session.source,
           parserVersion: profile.parserVersion,
@@ -410,6 +485,55 @@ function cursorSourceAppVersion(session: Session, records: RawRecord[]): string 
   return session.appVersion || ''
 }
 
+function claudeRawNeedsV2Reparse(_session: Session, records: RawRecord[]): boolean {
+  for (const record of records) {
+    if (claudeRawHasEmptyThinking(record.raw)) return true
+    const line = rawRecordLine(record)
+    if (!line) continue
+    const parsed = extractClaudeLine(line)
+    if (parsed?.message?.role === 'system' && parsed.message.content.length > 0) return true
+  }
+  return false
+}
+
+function claudeRawNeedsCurrentReparse(session: Session, records: RawRecord[]): boolean {
+  return isClaudeSyntheticModel(session.model) || claudeRawNeedsV2Reparse(session, records)
+}
+
+function claudeRawHasEmptyThinking(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const obj = value as Record<string, unknown>
+  const msg = obj.message as Record<string, unknown> | undefined
+  const content = msg?.content
+  if (!Array.isArray(content)) return false
+  return content.some(block => {
+    if (!block || typeof block !== 'object') return false
+    const record = block as Record<string, unknown>
+    return record.type === 'thinking'
+      && (typeof record.thinking !== 'string' || record.thinking.trim().length === 0)
+  })
+}
+
+function codexRawNeedsCurrentReparse(session: Session, records: RawRecord[]): boolean {
+  return codexRawNeedsV2Reparse(session, records) || records.some(record => codexRawHasToolOutputInlineImage(record.raw))
+}
+
+function codexRawNeedsV2Reparse(session: Session, records: RawRecord[]): boolean {
+  if (!session.hasThinking) return false
+  for (const record of records) {
+    const raw = record.raw
+    if (!raw || typeof raw !== 'object') continue
+    const obj = raw as Record<string, unknown>
+    const payload = obj.payload as Record<string, unknown> | undefined
+    if (obj.type !== 'response_item' || payload?.type !== 'reasoning') continue
+    const line = rawRecordLine(record)
+    if (!line) continue
+    const parsed = extractCodexLine(line)
+    if (parsed && !parsed.message) return true
+  }
+  return false
+}
+
 async function reparseCodexSession(session: Session, records: RawRecord[]): Promise<Session> {
   let next: Session = { ...session }
   let sawCwdFromRaw = false
@@ -446,6 +570,7 @@ async function reparseCodexSession(session: Session, records: RawRecord[]): Prom
     ...next,
     sourceAccount: sourceAccountFromPath(next.source, next.originalPath),
     vaultPath: makeVaultPath(next.source, next.uid),
+    title: titleForSession(next) || next.title,
     messageCount: messages.length,
     firstTimestamp: messages[0]?.timestamp || next.firstTimestamp,
     lastTimestamp: messages[messages.length - 1]?.timestamp || next.lastTimestamp,
@@ -467,7 +592,10 @@ type ReparseLine = {
 }
 
 async function reparseClaudeSession(session: Session, records: RawRecord[]): Promise<Session> {
-  return reparseSessionWithExtractor(session, records, (line): ReparseLine | null => {
+  const startingSession = isClaudeSyntheticModel(session.model)
+    ? { ...session, model: 'unknown' }
+    : session
+  return reparseSessionWithExtractor(startingSession, records, (line): ReparseLine | null => {
     const parsed = extractClaudeLine(line)
     const modelInfo = extractClaudeModel(line)
     if (!parsed && !modelInfo) return null
@@ -498,6 +626,10 @@ async function reparseSessionWithExtractor(
   let sawCwdFromRaw = false
   let activeModel = next.model || 'unknown'
   const messages: Message[] = []
+  // Raw can hold the same turn more than once — e.g. a merged Claude resume/fork
+  // session whose raw records came from several source files that each replayed
+  // the shared prefix. Collapse by content key so reparse never re-inflates it.
+  const seenMessageKeys = new Set<string>()
   for (const record of records) {
     const line = rawRecordLine(record)
     if (!line) continue
@@ -520,6 +652,10 @@ async function reparseSessionWithExtractor(
       parsed.message.model = activeModel
     }
 
+    const messageKey = normalizedMessageKey(parsed.message)
+    if (seenMessageKeys.has(messageKey)) continue
+    seenMessageKeys.add(messageKey)
+
     parsed.message.rawRef = { sessionUid: session.uid, rawHash: record.rawHash }
     await attachRawImages(parsed.message, parsed.rawImages)
     decorateMessageWithSession(parsed.message, next)
@@ -533,6 +669,7 @@ async function reparseSessionWithExtractor(
     ...next,
     sourceAccount: sourceAccountFromPath(next.source, next.originalPath),
     vaultPath: makeVaultPath(next.source, next.uid),
+    title: titleForSession(next) || next.title,
     messageCount: messages.length,
     firstTimestamp: messages[0]?.timestamp || next.firstTimestamp,
     lastTimestamp: messages[messages.length - 1]?.timestamp || next.lastTimestamp,

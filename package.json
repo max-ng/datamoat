@@ -1,6 +1,6 @@
 {
   "name": "datamoat",
-  "version": "2.0.7",
+  "version": "2.0.8",
   "description": "DataMoat exports and backs up ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw work records into an encrypted local vault.",
   "license": "BUSL-1.1",
   "homepage": "https://datamoat.org",
@@ -32,6 +32,8 @@
     "smoke:auth-options": "node scripts/auth-options-smoke.js",
     "smoke:transfer": "node scripts/transfer-smoke.js",
     "smoke:vault-maintenance": "node scripts/vault-maintenance-smoke.js",
+    "smoke:fork-merge": "node scripts/fork-merge-smoke.js",
+    "smoke:annotations": "node scripts/annotations-smoke.js",
     "smoke:source-archive": "node scripts/source-archive-smoke.js",
     "smoke:release-app": "node scripts/release-app-smoke.js",
     "smoke:codex-parser": "node scripts/codex-parser-smoke.js",

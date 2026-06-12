@@ -28,6 +28,12 @@ type SourceArchiveManifest = {
   chunks: SourceArchiveChunk[]
 }
 
+type PendingChunkEntry = {
+  name: string
+  filePath: string
+  chunk: SourceArchiveChunk
+}
+
 export type SourceArchiveAppend = {
   source: Source
   sessionUid: string
@@ -35,6 +41,18 @@ export type SourceArchiveAppend = {
   startOffset: number
   endOffset: number
   bytes: Buffer
+}
+
+export type SourceArchivePendingCleanupResult = {
+  scannedArchives: number
+  archivesWithPending: number
+  pendingFiles: number
+  mergedPendingFiles: number
+  skippedPendingFiles: number
+  removedPendingDirs: number
+  missingChunks: number
+  malformedPendingFiles: number
+  errors: Array<{ archive: string; file?: string; error: string }>
 }
 
 function archiveDirFromRoot(rawArchiveRoot: string, source: Source, sessionUid: string): string {
@@ -111,6 +129,24 @@ function isCaptureOnlySessionError(error: unknown): boolean {
   return message.includes('vault session is capture-only')
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function emptyPendingCleanupResult(): SourceArchivePendingCleanupResult {
+  return {
+    scannedArchives: 0,
+    archivesWithPending: 0,
+    pendingFiles: 0,
+    mergedPendingFiles: 0,
+    skippedPendingFiles: 0,
+    removedPendingDirs: 0,
+    missingChunks: 0,
+    malformedPendingFiles: 0,
+    errors: [],
+  }
+}
+
 function writePrivateBytes(filePath: string, content: Buffer): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true, mode: 0o700 })
   const tmpPath = `${filePath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`
@@ -131,7 +167,7 @@ async function readManifest(sessionId: string, source: Source, sessionUid: strin
   return await readManifestFromRoot(sessionId, RAW_ARCHIVE_DIR, source, sessionUid)
 }
 
-async function readManifestFromRoot(sessionId: string, rawArchiveRoot: string, source: Source, sessionUid: string): Promise<SourceArchiveManifest> {
+async function readBaseManifestFromRoot(sessionId: string, rawArchiveRoot: string, source: Source, sessionUid: string): Promise<SourceArchiveManifest> {
   const filePath = manifestPathFromRoot(rawArchiveRoot, source, sessionUid)
   let manifest: SourceArchiveManifest = { version: 1, source, sessionUid, chunks: [] }
   if (fs.existsSync(filePath)) {
@@ -140,29 +176,62 @@ async function readManifestFromRoot(sessionId: string, rawArchiveRoot: string, s
     const parsed = JSON.parse(plaintext.toString('utf8')) as SourceArchiveManifest
     if (Array.isArray(parsed.chunks)) manifest = parsed
   }
-
-  const pendingDir = pendingDirFromRoot(rawArchiveRoot, source, sessionUid)
-  if (!fs.existsSync(pendingDir)) return { ...manifest, chunks: dedupeChunks(manifest.chunks) }
-
-  const pendingChunks: SourceArchiveChunk[] = []
-  for (const entry of fs.readdirSync(pendingDir, { withFileTypes: true })) {
-    if (!entry.isFile() || !entry.name.endsWith('.dmenc')) continue
-    const encrypted = fs.readFileSync(path.join(pendingDir, entry.name))
-    const plaintext = await decryptBytesForSession(sessionId, encrypted)
-    const parsed = JSON.parse(plaintext.toString('utf8')) as SourceArchiveChunk
-    if (!parsed || typeof parsed.id !== 'string' || typeof parsed.rawSha256 !== 'string') {
-      throw new Error(`raw archive pending entry malformed: ${source}/${sessionUid}/${entry.name}`)
-    }
-    pendingChunks.push(parsed)
-  }
-
-  return { ...manifest, chunks: dedupeChunks([...manifest.chunks, ...pendingChunks]) }
+  return manifest
 }
 
-async function writeManifest(sessionId: string, manifest: SourceArchiveManifest): Promise<void> {
+async function readPendingChunkEntriesFromRoot(
+  sessionId: string,
+  rawArchiveRoot: string,
+  source: Source,
+  sessionUid: string,
+  options: { strict: boolean } = { strict: true },
+): Promise<{
+  entries: PendingChunkEntry[]
+  files: number
+  errors: Array<{ file: string; error: string }>
+}> {
+  const pendingDir = pendingDirFromRoot(rawArchiveRoot, source, sessionUid)
+  if (!fs.existsSync(pendingDir)) return { entries: [], files: 0, errors: [] }
+
+  const entries: PendingChunkEntry[] = []
+  const errors: Array<{ file: string; error: string }> = []
+  let files = 0
+  for (const entry of fs.readdirSync(pendingDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.dmenc')) continue
+    files += 1
+    const filePath = path.join(pendingDir, entry.name)
+    try {
+      const encrypted = fs.readFileSync(filePath)
+      const plaintext = await decryptBytesForSession(sessionId, encrypted)
+      const parsed = JSON.parse(plaintext.toString('utf8')) as SourceArchiveChunk
+      if (!parsed || typeof parsed.id !== 'string' || typeof parsed.rawSha256 !== 'string') {
+        throw new Error(`raw archive pending entry malformed: ${source}/${sessionUid}/${entry.name}`)
+      }
+      entries.push({ name: entry.name, filePath, chunk: parsed })
+    } catch (error) {
+      if (options.strict) throw error
+      errors.push({ file: entry.name, error: errorMessage(error) })
+    }
+  }
+  return { entries, files, errors }
+}
+
+async function readManifestFromRoot(sessionId: string, rawArchiveRoot: string, source: Source, sessionUid: string): Promise<SourceArchiveManifest> {
+  const manifest = await readBaseManifestFromRoot(sessionId, rawArchiveRoot, source, sessionUid)
+  const pending = await readPendingChunkEntriesFromRoot(sessionId, rawArchiveRoot, source, sessionUid, { strict: true })
+  if (pending.entries.length === 0) return { ...manifest, chunks: dedupeChunks(manifest.chunks) }
+
+  return { ...manifest, chunks: dedupeChunks([...manifest.chunks, ...pending.entries.map(entry => entry.chunk)]) }
+}
+
+async function writeManifestFile(sessionId: string, manifest: SourceArchiveManifest): Promise<void> {
   const plaintext = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
   const encrypted = await encryptBytesForSession(sessionId, plaintext)
   writePrivateBytes(manifestPath(manifest.source, manifest.sessionUid), encrypted)
+}
+
+async function writeManifest(sessionId: string, manifest: SourceArchiveManifest): Promise<void> {
+  await writeManifestFile(sessionId, manifest)
   fs.rmSync(pendingDirFromRoot(RAW_ARCHIVE_DIR, manifest.source, manifest.sessionUid), { recursive: true, force: true })
 }
 
@@ -385,6 +454,121 @@ export async function verifySourceArchive(sessionId: string, source: Source, ses
     encryptedBytes += encrypted.length
   }
   return { chunks: manifest.chunks.length, records, rawBytes, encryptedBytes }
+}
+
+function mergeCleanupResult(target: SourceArchivePendingCleanupResult, patch: SourceArchivePendingCleanupResult): SourceArchivePendingCleanupResult {
+  target.scannedArchives += patch.scannedArchives
+  target.archivesWithPending += patch.archivesWithPending
+  target.pendingFiles += patch.pendingFiles
+  target.mergedPendingFiles += patch.mergedPendingFiles
+  target.skippedPendingFiles += patch.skippedPendingFiles
+  target.removedPendingDirs += patch.removedPendingDirs
+  target.missingChunks += patch.missingChunks
+  target.malformedPendingFiles += patch.malformedPendingFiles
+  target.errors.push(...patch.errors)
+  return target
+}
+
+function removePendingDirIfEmpty(rawArchiveRoot: string, source: Source, sessionUid: string): boolean {
+  const pendingDir = pendingDirFromRoot(rawArchiveRoot, source, sessionUid)
+  try {
+    if (!fs.existsSync(pendingDir)) return false
+    const remaining = fs.readdirSync(pendingDir, { withFileTypes: true })
+      .some(entry => entry.isFile() || entry.isDirectory())
+    if (remaining) return false
+    fs.rmSync(pendingDir, { recursive: true, force: true })
+    return true
+  } catch {
+    return false
+  }
+}
+
+export async function cleanupSourceArchivePending(
+  sessionId: string,
+  source: Source,
+  sessionUid: string,
+  options: { rawArchiveRoot?: string } = {},
+): Promise<SourceArchivePendingCleanupResult> {
+  const rawArchiveRoot = path.resolve(options.rawArchiveRoot ?? RAW_ARCHIVE_DIR)
+  const result = emptyPendingCleanupResult()
+  const archiveLabel = `${source}/${sessionUid}`
+  result.scannedArchives = 1
+
+  const pendingDir = pendingDirFromRoot(rawArchiveRoot, source, sessionUid)
+  if (!fs.existsSync(pendingDir)) return result
+  result.archivesWithPending = 1
+
+  let manifest: SourceArchiveManifest
+  try {
+    manifest = await readBaseManifestFromRoot(sessionId, rawArchiveRoot, source, sessionUid)
+  } catch (error) {
+    result.errors.push({ archive: archiveLabel, error: errorMessage(error) })
+    return result
+  }
+
+  const pending = await readPendingChunkEntriesFromRoot(sessionId, rawArchiveRoot, source, sessionUid, { strict: false })
+  result.pendingFiles = pending.files
+  result.malformedPendingFiles = pending.errors.length
+  for (const error of pending.errors) {
+    result.errors.push({ archive: archiveLabel, file: error.file, error: error.error })
+  }
+
+  const mergeable: PendingChunkEntry[] = []
+  for (const entry of pending.entries) {
+    const chunkFile = chunkPathFromRoot(rawArchiveRoot, source, sessionUid, entry.chunk.id)
+    if (!fs.existsSync(chunkFile)) {
+      result.missingChunks += 1
+      result.skippedPendingFiles += 1
+      result.errors.push({
+        archive: archiveLabel,
+        file: entry.name,
+        error: `raw archive chunk missing: ${entry.chunk.id}`,
+      })
+      continue
+    }
+    mergeable.push(entry)
+  }
+
+  if (mergeable.length > 0) {
+    const merged: SourceArchiveManifest = {
+      ...manifest,
+      source,
+      sessionUid,
+      chunks: dedupeChunks([...manifest.chunks, ...mergeable.map(entry => entry.chunk)]),
+    }
+    try {
+      await writeManifestFile(sessionId, merged)
+      for (const entry of mergeable) {
+        fs.rmSync(entry.filePath, { force: true })
+        result.mergedPendingFiles += 1
+      }
+    } catch (error) {
+      result.errors.push({ archive: archiveLabel, error: errorMessage(error) })
+      result.skippedPendingFiles += mergeable.length
+    }
+  }
+
+  result.skippedPendingFiles += result.malformedPendingFiles
+  if (removePendingDirIfEmpty(rawArchiveRoot, source, sessionUid)) result.removedPendingDirs += 1
+  return result
+}
+
+export async function cleanupAllSourceArchivePending(sessionId: string): Promise<SourceArchivePendingCleanupResult> {
+  const result = emptyPendingCleanupResult()
+  if (!fs.existsSync(RAW_ARCHIVE_DIR)) return result
+
+  for (const sourceEntry of fs.readdirSync(RAW_ARCHIVE_DIR, { withFileTypes: true })) {
+    if (!sourceEntry.isDirectory()) continue
+    const source = sourceEntry.name as Source
+    const sourceDir = path.join(RAW_ARCHIVE_DIR, sourceEntry.name)
+    for (const sessionEntry of fs.readdirSync(sourceDir, { withFileTypes: true })) {
+      if (!sessionEntry.isDirectory()) continue
+      const pendingDir = pendingDirFromRoot(RAW_ARCHIVE_DIR, source, sessionEntry.name)
+      if (!fs.existsSync(pendingDir)) continue
+      mergeCleanupResult(result, await cleanupSourceArchivePending(sessionId, source, sessionEntry.name))
+    }
+  }
+  return result
 }
 
 export async function appendRawRecordArchiveLines(

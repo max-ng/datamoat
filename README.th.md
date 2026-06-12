@@ -2,7 +2,7 @@
 
 ภาษา: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
-[![Version](https://img.shields.io/badge/version-2.0.7-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.8-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -49,6 +49,16 @@ DataMoat เก็บสองชั้น:
 **Sources ที่รองรับวันนี้:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions บน macOS, DeepSeek และ Qwen sessions เมื่อถูกเขียน local โดย Claude Code GUI workflows, supported local OpenClaw session records และ supported local Cursor agent transcripts
 **Data sources และ platform releases เพิ่มเติมอยู่ใน roadmap:** star และ watch repository นี้เพื่อติดตาม capture integrations และ platform updates ใหม่เมื่อ ship
 
+## ใหม่ใน 2.0.8: annotations, ChatGPT Export import และ transfer ที่ปลอดภัยขึ้น
+
+DataMoat นำเข้า ChatGPT export ZIP หรือ export folder ที่รองรับเข้าสู่ encrypted local memory archive เดียวกับ Claude, Codex, Cursor, DeepSeek, Qwen, OpenClaw, skills และ attachments แล้ว
+
+- **Restore, view, search และ backup ChatGPT exports.** Conversations, alternate branches, attachments, assets และ raw export files ที่รองรับจะถูก import เข้า encrypted vault
+- **ทำเครื่องหมายบริบทสำคัญ.** Bookmark sessions และ individual messages, vote คำตอบที่มีประโยชน์หรืออ่อน และ filter review views เพื่อหา reusable context ได้ง่ายขึ้น
+- **เก็บ raw export โดยไม่เปลือง disk.** DataMoat รักษา original source records และเก็บ raw backup data ที่ซ้ำเยอะใน compressed encrypted archives ได้; source-record tests จริงวัด raw archive storage ได้ประมาณ 60% ของ original source bytes
+- **ย้ายงานข้ามคอมพิวเตอร์.** Copy DataMoat folder ไปเครื่องอื่นแล้ว restore ข้าม macOS, Windows และ Linux ได้ รวมถึง Mac to Windows และ Linux to Mac
+- **พก backup ที่สอง.** บันทึก encrypted DataMoat folder ลง USB หรือ external drive เพื่อให้ AI work history เดินทางแยกจาก source computer ได้
+
 ## ทำไมควรติดตั้ง DataMoat
 
 - **ทำให้ full AI work history recoverable.** Local records อาจกลับไปดูยากขึ้นหลัง compaction, cleanup, retention changes, account downgrades, device replacement หรือ environment loss
@@ -78,7 +88,7 @@ DataMoat เก็บสองชั้น:
 |---|---|---|
 | **macOS** | รองรับวันนี้ | Source install และ signed packaged DMG พร้อมใช้งานแล้ว |
 | **Linux** | รองรับวันนี้ | Source install พร้อมใช้งานแล้ว |
-| **Packaged macOS DMG** | [ดาวน์โหลด DMG](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) (แนะนำ) | Signed / notarized Apple Silicon DMG พร้อม Secure Enclave + Touch ID unlock บน Macs ที่รองรับ |
+| **Packaged macOS DMG** | [ดาวน์โหลด DMG](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-th) (แนะนำ) | Signed / notarized Apple Silicon DMG พร้อม Secure Enclave + Touch ID unlock บน Macs ที่รองรับ |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Unsigned manual packages สำหรับ Windows 11 x64 และ Windows 11 on Arm; x64 ผ่าน GitHub Actions packaged runtime smoke แล้ว, ARM64 ผ่าน real VM UI/background capture smoke แล้ว; signed installer ยังทำอยู่ |
 
 ### Sources
@@ -141,19 +151,19 @@ flowchart TD
 
 ## Install
 
-Signed / notarized macOS DMG คือ install path ที่แนะนำสำหรับ Mac users Source install ยังมีสำหรับ Linux, development และ fallback cases macOS DMG อยู่ที่ DataMoat release downloads: [https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) และมี Secure Enclave + Touch ID unlock บน Macs ที่รองรับ, menu-bar auto-start at login และ packaged auto-update ผ่าน DataMoat R2 release feed Windows x64 และ ARM64 มีเป็น unsigned ZIP + `DataMoat.exe` packages ระหว่างที่ signed installer กำลังทำให้เสร็จ
+Signed / notarized macOS DMG คือ install path ที่แนะนำสำหรับ Mac users Source install ยังมีสำหรับ Linux, development และ fallback cases macOS DMG อยู่ที่ DataMoat release downloads: [https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg) และมี Secure Enclave + Touch ID unlock บน Macs ที่รองรับ, menu-bar auto-start at login และ packaged auto-update ผ่าน DataMoat R2 release feed Windows x64 และ ARM64 มีเป็น unsigned ZIP + `DataMoat.exe` packages ระหว่างที่ signed installer กำลังทำให้เสร็จ
 
 Release downloads:
 
-[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-win32-x64.zip)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-win32-arm64.zip)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-th)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-x64.zip?s=gh-th)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-arm64.zip?s=gh-th)
 
 Windows ZIP ทุกตัวมี `DataMoat.exe` และ app files ที่จำเป็น Unzip Windows package, เก็บ folder contents ไว้ด้วยกัน และ run `Install DataMoat.cmd` หนึ่งครั้ง มันจะ launch DataMoat และ register startup สำหรับ current Windows user เพื่อให้ tray/background app กลับมาหลัง login หรือ restart นี่ยังเป็น portable ZIP package ไม่ใช่ signed single-file installer
 
 ### AI-Assisted Install
 
-สำหรับ Mac users ให้ใช้ signed และ notarized packaged DMG ก่อน: [Download DMG](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) อย่าเริ่มด้วย `git clone` บน macOS เว้นแต่ user ต้องการ source install ชัดเจนหรือ packaged release ใช้ไม่ได้
+สำหรับ Mac users ให้ใช้ signed และ notarized packaged DMG ก่อน: [Download DMG](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-th) อย่าเริ่มด้วย `git clone` บน macOS เว้นแต่ user ต้องการ source install ชัดเจนหรือ packaged release ใช้ไม่ได้
 
 คุณสามารถขอให้ ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI หรือ OpenClaw ติดตั้ง DataMoat เมื่อคุณกำลังดู target desktop
 
@@ -182,7 +192,7 @@ macOS remote prompt:
 
 Steps:
 1. Download latest macOS DMG:
-   https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg
+   https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg
 2. Mount the DMG.
 3. Copy DataMoat.app to ~/Applications.
 4. Launch exactly:
@@ -204,8 +214,8 @@ Windows remote prompt:
 
 Steps:
 1. Download correct latest Windows ZIP จาก DataMoat release downloads:
-   x64: https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip
-   ARM64: https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip
+   x64: https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-x64.zip
+   ARM64: https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-arm64.zip
 2. Extract ZIP เข้า Downloads.
 3. Launch exactly:
    %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen

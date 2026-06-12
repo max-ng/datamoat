@@ -195,6 +195,16 @@ function launcherEnvForDaemon(): NodeJS.ProcessEnv {
   }
 }
 
+export function launcherEnvForBackgroundWorker(worker: string): NodeJS.ProcessEnv {
+  const env = launcherEnvForScripts()
+  delete env.DATAMOAT_TRAY_ONLY
+  delete env.XPC_SERVICE_NAME
+  return {
+    ...env,
+    DATAMOAT_BACKGROUND_WORKER: worker,
+  }
+}
+
 function launcherNeedsElectronNodeMode(launcher: string): boolean {
   const resolvedLauncher = path.resolve(launcher)
   if (process.versions.electron && resolvedLauncher === path.resolve(process.execPath)) {

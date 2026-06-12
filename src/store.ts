@@ -13,6 +13,7 @@ import {
   ATTACHMENTS_DIR,
   RAW_DIR,
   RAW_ARCHIVE_DIR,
+  ANNOTATIONS_DIR,
   SKILLS_BACKUP_DIR,
   SKILLS_BLOBS_DIR,
   SKILLS_MANIFESTS_DIR,
@@ -37,7 +38,9 @@ let _captureSessionId: string | null = null
 
 type PublicStatus = {
   totalSessions: number
+  totalMessages?: number
   bySource: Partial<Record<Source, number>>
+  messagesBySource?: Partial<Record<Source, number>>
   lastTimestamp: string | null
   updatedAt: string
 }
@@ -155,6 +158,7 @@ export function ensureDirs(): void {
     ATTACHMENTS_DIR,
     RAW_DIR,
     RAW_ARCHIVE_DIR,
+    ANNOTATIONS_DIR,
     SKILLS_BACKUP_DIR,
     SKILLS_BLOBS_DIR,
     SKILLS_MANIFESTS_DIR,
@@ -201,7 +205,7 @@ const EXT_MIME: Record<string, string> = Object.fromEntries(
   Object.entries(EXT_MAP).map(([mime, ext]) => [ext, mime]),
 ) as Record<string, string>
 
-type AttachmentFileInfo = { path: string; ext: string; encrypted: 'single' | 'chunked' | false }
+type AttachmentFileInfo = { path: string; ext: string; encrypted: 'single' | 'chunked' | 'wrapped-chunked' | false }
 
 const CHUNKED_ATTACHMENT_MAGIC = Buffer.from('dmattchunk1\n', 'utf8')
 const CHUNKED_ATTACHMENT_PLAINTEXT_BYTES = 2 * 1024 * 1024
@@ -293,6 +297,10 @@ function attachmentFileInfo(id: string): AttachmentFileInfo | null {
   try {
     const files = fs.readdirSync(ATTACHMENTS_DIR)
     for (const file of files) {
+      const wrappedChunkedMatch = file.match(new RegExp(`^${normalizedId}\\.([^.]+)\\.dmchunk\\.dmenc$`, 'i'))
+      if (wrappedChunkedMatch) {
+        return { path: path.join(ATTACHMENTS_DIR, file), ext: wrappedChunkedMatch[1], encrypted: 'wrapped-chunked' }
+      }
       const chunkedMatch = file.match(new RegExp(`^${normalizedId}\\.([^.]+)\\.dmchunk$`, 'i'))
       if (chunkedMatch) {
         return { path: path.join(ATTACHMENTS_DIR, file), ext: chunkedMatch[1], encrypted: 'chunked' }
@@ -349,13 +357,45 @@ async function forEachChunkedAttachment(
   }
 }
 
+async function forEachWrappedChunkedAttachment(
+  info: AttachmentFileInfo,
+  onPlaintext: (chunk: Buffer) => Promise<void> | void,
+): Promise<void> {
+  const sessionId = requireReadSession()
+  const wrapped = fs.readFileSync(info.path)
+  const payload = await decryptBytesForSession(sessionId, wrapped)
+  let offset = 0
+  const read = (length: number): Buffer | null => {
+    if (offset >= payload.length) return null
+    if (offset + length > payload.length) throw new Error('truncated wrapped chunked attachment')
+    const chunk = payload.subarray(offset, offset + length)
+    offset += length
+    return chunk
+  }
+
+  const magic = read(CHUNKED_ATTACHMENT_MAGIC.length)
+  if (!magic || !magic.equals(CHUNKED_ATTACHMENT_MAGIC)) throw new Error('invalid wrapped chunked attachment')
+  for (;;) {
+    const lengthPrefix = read(4)
+    if (!lengthPrefix) break
+    const encryptedLength = lengthPrefix.readUInt32BE(0)
+    if (encryptedLength <= 0) throw new Error('invalid wrapped chunked attachment length')
+    const encrypted = read(encryptedLength)
+    if (!encrypted) throw new Error('truncated wrapped chunked attachment')
+    await onPlaintext(await decryptBytesForSession(sessionId, encrypted))
+  }
+}
+
 export async function readAttachment(id: string): Promise<{ data: Buffer; mediaType: string } | null> {
   const info = attachmentFileInfo(id)
   if (!info) return null
   const mediaType = EXT_MIME[info.ext] ?? 'application/octet-stream'
-  if (info.encrypted === 'chunked') {
+  if (info.encrypted === 'chunked' || info.encrypted === 'wrapped-chunked') {
     const chunks: Buffer[] = []
-    await forEachChunkedAttachment(info, chunk => {
+    const forEach = info.encrypted === 'wrapped-chunked'
+      ? forEachWrappedChunkedAttachment
+      : forEachChunkedAttachment
+    await forEach(info, chunk => {
       chunks.push(chunk)
     })
     return { data: Buffer.concat(chunks), mediaType }
@@ -370,7 +410,7 @@ export function attachmentMetadata(id: string): { mediaType: string; chunked: bo
   if (!info) return null
   return {
     mediaType: EXT_MIME[info.ext] ?? 'application/octet-stream',
-    chunked: info.encrypted === 'chunked',
+    chunked: info.encrypted === 'chunked' || info.encrypted === 'wrapped-chunked',
   }
 }
 
@@ -402,8 +442,11 @@ export async function writeAttachmentToWritable(id: string, writable: NodeJS.Wri
   const info = attachmentFileInfo(id)
   if (!info) return null
   const mediaType = EXT_MIME[info.ext] ?? 'application/octet-stream'
-  if (info.encrypted === 'chunked') {
-    await forEachChunkedAttachment(info, async chunk => {
+  if (info.encrypted === 'chunked' || info.encrypted === 'wrapped-chunked') {
+    const forEach = info.encrypted === 'wrapped-chunked'
+      ? forEachWrappedChunkedAttachment
+      : forEachChunkedAttachment
+    await forEach(info, async chunk => {
       await writeBufferToWritable(writable, chunk)
     })
     return { mediaType }
@@ -419,7 +462,7 @@ export async function writeAttachmentToFile(id: string, destinationPath: string)
   if (!info) return null
   const mediaType = EXT_MIME[info.ext] ?? 'application/octet-stream'
   ensurePrivateDir(path.dirname(destinationPath))
-  if (info.encrypted !== 'chunked') {
+  if (info.encrypted !== 'chunked' && info.encrypted !== 'wrapped-chunked') {
     const attachment = await readAttachment(id)
     if (!attachment) return null
     writePrivateBytes(destinationPath, attachment.data)
@@ -428,7 +471,10 @@ export async function writeAttachmentToFile(id: string, destinationPath: string)
   const tmpPath = `${destinationPath}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`
   const fd = fs.openSync(tmpPath, 'w', 0o600)
   try {
-    await forEachChunkedAttachment(info, chunk => {
+    const forEach = info.encrypted === 'wrapped-chunked'
+      ? forEachWrappedChunkedAttachment
+      : forEachChunkedAttachment
+    await forEach(info, chunk => {
       fs.writeSync(fd, chunk)
     })
     try {
@@ -527,9 +573,17 @@ function writePublicStatus(sessions: Session[]): void {
     return acc
   }, {})
 
+  const messagesBySource = sessions.reduce<NonNullable<PublicStatus['messagesBySource']>>((acc, session) => {
+    const count = Number.isFinite(session.messageCount) ? Math.max(0, session.messageCount) : 0
+    acc[session.source] = (acc[session.source] || 0) + count
+    return acc
+  }, {})
+
   const status: PublicStatus = {
     totalSessions: sessions.length,
+    totalMessages: Object.values(messagesBySource).reduce((sum, count) => sum + count, 0),
     bySource,
+    messagesBySource,
     lastTimestamp: sessions[0]?.lastTimestamp ?? null,
     updatedAt: new Date().toISOString(),
   }
@@ -706,7 +760,7 @@ export async function replaceRawRecords(source: Source, sessionUid: string, reco
 
 export async function readRawRecords(source: Source, sessionUid: string): Promise<RawRecord[]> {
   const filePath = path.join(RAW_DIR, makeRawPath(source, sessionUid))
-  const sessionId = getVaultSessionId()
+  const sessionId = availableStateSession()
   const archiveRecords = sessionId ? await readSourceArchiveRawRecords(sessionId, source, sessionUid) : []
   if (!fs.existsSync(filePath)) {
     return archiveRecords
@@ -716,8 +770,8 @@ export async function readRawRecords(source: Source, sessionUid: string): Promis
     return archiveRecords
   }
 
-  const decrypted = hasVaultSession() && !lines[0].startsWith('{')
-    ? await decryptLinesForSession(requireReadSession(), lines)
+  const decrypted = sessionId && !lines[0].startsWith('{')
+    ? await decryptLinesForSession(sessionId, lines)
     : lines
 
   const legacyRecords = decrypted.map(parseRawRecordLine).filter((r): r is RawRecord => r !== null)
@@ -964,6 +1018,7 @@ export async function encryptAttachmentFiles(): Promise<void> {
   for (const file of fs.readdirSync(ATTACHMENTS_DIR)) {
     if (file === '.DS_Store' || file.startsWith('._')) continue
     if (file.endsWith('.dmenc')) continue
+    if (file.endsWith('.dmchunk')) continue
     const filePath = path.join(ATTACHMENTS_DIR, file)
     try {
       const stat = fs.statSync(filePath)

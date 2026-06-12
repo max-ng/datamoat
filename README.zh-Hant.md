@@ -49,11 +49,12 @@ DataMoat 保留兩層資料:
 **目前支援的來源:** ChatGPT export ZIP/資料夾匯入、Claude CLI、Codex CLI、Codex app local sessions、macOS 上的 Claude Desktop local-agent sessions、Claude Code GUI workflow 寫入本地時的 DeepSeek 和 Qwen sessions、受支援的本地 OpenClaw session records，以及受支援的本地 Cursor agent transcripts。
 **更多資料來源和平台版本已在 roadmap:** star 和 watch 這個 repository，就可以跟進新的 capture integrations 和平台更新發布。
 
-## 2.0.8 新功能：從 vault 直接重用上下文
+## 2.0.8 新功能：標註、ChatGPT Export 匯入和從 vault 重用上下文
 
 DataMoat 現在可以把支援的 ChatGPT export ZIP 檔案或解壓後的 export 資料夾匯入到同一個加密本地 memory archive 中，和 Claude、Codex、Cursor、DeepSeek、Qwen、OpenClaw、skills 與附件放在一起保護。
 
 - **還原、查看、搜尋和備份 ChatGPT exports。** 支援的對話、分支、附件、assets 和 raw export 檔案會匯入到加密 vault。
+- **標註重要上下文。** 為會話和單條訊息加書籤，對有用或較弱的回答投票，並用篩選視圖快速找回可重用內容。
 - **從 vault 直接複製上下文。** 每條 message 都可以複製「到這一條為止」的 context pack。這不是瀏覽器選取文字，也不是從畫面 DOM 複製；DataMoat 會直接讀取加密 vault 裡已捕捉的 records，按順序重建角色、時間、模型/來源 metadata、tool call、tool result、已捕捉的 thinking block、usage、raw references 和附件引用。
 - **比手動 copy/paste 更少丟失結構。** 超長 session 不需要全部 render 在畫面上，也可以複製到指定位置以前的內容，方便貼到 ChatGPT、Claude 或其他模型繼續使用。DataMoat 只會匯出本機來源記錄或匯入備份中實際捕捉到的資料；如果原平台從未提供某些隱藏狀態，DataMoat 不會憑空生成。
 - **預設可讀格式，保留 plain text fallback。** Message text 預設以可讀的 Markdown-like 格式顯示 code block、list、table 和 heading；Settings 可關閉，回到原本 plain text layout。
@@ -91,7 +92,7 @@ DataMoat 現在可以把支援的 ChatGPT export ZIP 檔案或解壓後的 expor
 |---|---|---|
 | **macOS** | 目前支援 | Source install 和已簽名 packaged DMG 已可用 |
 | **Linux** | 目前支援 | Source install 已可用 |
-| **Packaged macOS DMG** | [下載 DMG](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) (推薦) | 已簽名 / notarized Apple Silicon DMG，在支援的 Mac 上支援 Secure Enclave + Touch ID unlock |
+| **Packaged macOS DMG** | [下載 DMG](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-zh-hant) (推薦) | 已簽名 / notarized Apple Silicon DMG，在支援的 Mac 上支援 Secure Enclave + Touch ID unlock |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Windows 11 x64 和 Windows 11 on Arm 的帶 SHA256 校驗的 portable ZIP packages；x64 已透過 GitHub Actions packaged runtime smoke，ARM64 已透過真實 VM UI/background capture smoke；signed installer 仍在製作中 |
 
 ### Sources
@@ -154,19 +155,19 @@ flowchart TD
 
 ## 安裝
 
-已簽名 / notarized macOS DMG 是 Mac users 推薦的安裝方式。Source install 仍然可用於 Linux、development 和 fallback cases。macOS DMG 可從 DataMoat release downloads 下載: [https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)，並包括支援 Mac 上的 Secure Enclave + Touch ID unlock、menu-bar login 自動啟動，以及透過 DataMoat R2 release feed 的 packaged auto-update。Windows x64 和 ARM64 目前提供帶 SHA256 校驗的 ZIP + `DataMoat.exe` packages，signed installer 正在完成中。
+已簽名 / notarized macOS DMG 是 Mac users 推薦的安裝方式。Source install 仍然可用於 Linux、development 和 fallback cases。macOS DMG 可從 DataMoat release downloads 下載: [https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg)，並包括支援 Mac 上的 Secure Enclave + Touch ID unlock、menu-bar login 自動啟動，以及透過 DataMoat R2 release feed 的 packaged auto-update。Windows x64 和 ARM64 目前提供帶 SHA256 校驗的 ZIP + `DataMoat.exe` packages，signed installer 正在完成中。
 
 Release downloads:
 
-[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-win32-x64.zip)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-win32-arm64.zip)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-zh-hant)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-x64.zip?s=gh-zh-hant)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-arm64.zip?s=gh-zh-hant)
 
 每個 Windows ZIP 都包括 `DataMoat.exe` 和所需 app files。解壓 Windows package，保持 folder 內容放在一起，然後執行一次 `Install DataMoat.cmd`。它會 launch DataMoat，並為目前 Windows user 註冊 startup，讓 tray/background app 在 login 或 restart 後自動回來。這個仍然是 portable ZIP package，暫時還不是已簽名 single-file installer。
 
 ### AI-Assisted Install
 
-Mac users 應先使用已簽名和 notarized 的 packaged DMG: [Download DMG](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)。除非 user 明確想 source install，或者 packaged release 無法使用，否則不要在 macOS 從 `git clone` 開始。
+Mac users 應先使用已簽名和 notarized 的 packaged DMG: [Download DMG](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-zh-hant)。除非 user 明確想 source install，或者 packaged release 無法使用，否則不要在 macOS 從 `git clone` 開始。
 
 當你看着 target desktop 時，可以讓 Claude CLI、Codex CLI 或 OpenClaw 幫你安裝 DataMoat。
 
@@ -195,7 +196,7 @@ macOS remote prompt:
 
 Steps:
 1. 下載最新 macOS DMG:
-   https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg
+   https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg
 2. Mount DMG。
 3. 將 DataMoat.app 複製到 ~/Applications。
 4. 完全照以下方式 launch:
@@ -217,8 +218,8 @@ Windows remote prompt:
 
 Steps:
 1. 從 DataMoat release downloads 下載正確的最新 Windows ZIP:
-   x64: https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip
-   ARM64: https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip
+   x64: https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-x64.zip
+   ARM64: https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-arm64.zip
 2. 將 ZIP 解壓到 Downloads。
 3. 完全照以下方式 launch:
    %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen

@@ -246,7 +246,7 @@ async function restartDaemonForRescan(): Promise<{ pid: number | null; port: num
 
 function hasBackgroundCaptureConfigured(): boolean {
   const config = loadAuthConfig()
-  return !!config?.backgroundWrappedVaultKey && !!config?.backgroundWrapSalt
+  return isSetupDone() && !!config?.backgroundWrappedVaultKey && !!config?.backgroundWrapSalt
 }
 
 async function startRemoteNoScreenCapture(): Promise<void> {
@@ -301,8 +301,14 @@ program
     console.log(`  daemon:   ${pid ? `running (pid ${pid})` : 'stopped'}`)
     if (publicStatus) {
       console.log(`  sessions: ${publicStatus.totalSessions} total`)
+      if (typeof publicStatus.totalMessages === 'number') {
+        console.log(`  messages: ${publicStatus.totalMessages} total`)
+      }
+      const messagesBySource = (publicStatus.messagesBySource ?? {}) as Record<string, number>
       for (const [src, count] of Object.entries(publicStatus.bySource)) {
-        console.log(`    ${src.padEnd(12)} ${count}`)
+        const messages = messagesBySource[src]
+        const suffix = typeof messages === 'number' ? ` sessions, ${messages} messages` : ''
+        console.log(`    ${src.padEnd(12)} ${count}${suffix}`)
       }
       if (publicStatus.lastTimestamp) {
         console.log(`  last:     ${new Date(publicStatus.lastTimestamp).toLocaleString()}`)

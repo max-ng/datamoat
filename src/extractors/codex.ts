@@ -3,17 +3,17 @@ import * as path from 'path'
 import { Message, ContentBlock, TokenUsage } from '../types'
 import type { RawImageData } from './claude'
 
-export const CODEX_EXTRACTOR_VERSION = 2
-export const CODEX_EXTRACTOR_COMPATIBILITY_VERSION = 1
+export const CODEX_EXTRACTOR_VERSION = 3
+export const CODEX_EXTRACTOR_COMPATIBILITY_VERSION = 2
 export const CODEX_VERIFIED_SOURCE_VERSION_LABELS: Record<string, string> = {
-  darwin: 'macOS <= 0.131.x (sampled through 0.131.0-alpha.9)',
+  darwin: 'macOS <= 0.136.x (sampled through 0.136.0-alpha.2)',
   linux: 'Linux <= 0.130.x',
   win32: 'Windows not yet recorded',
 }
 
 type VersionParts = readonly [number, number, number]
 const CODEX_NEXT_UNVERIFIED_SOURCE_VERSION: Partial<Record<NodeJS.Platform, VersionParts>> = {
-  darwin: [0, 132, 0],
+  darwin: [0, 137, 0],
   linux: [0, 131, 0],
   win32: [0, 0, 0],
 }
@@ -22,7 +22,7 @@ const CODEX_SOURCE_FORMATS: Array<{ minVersion: VersionParts; key: string }> = [
   // Keep newest-first so a future incompatible upstream family can override the
   // broad legacy bucket below.
   // Verified compatible for the current response_item JSONL family. Local
-  // release evidence covers macOS through 0.131.0-alpha.9 and Linux through
+  // release evidence covers macOS through 0.136.0-alpha.2 and Linux through
   // 0.130.x. Add a higher minVersion here when upstream introduces a format
   // that needs a different reparse pass.
   { minVersion: [0, 0, 0], key: 'response-items' },
@@ -46,6 +46,9 @@ export function codexVerifiedSourceVersionLabel(platform: NodeJS.Platform = proc
 // Codex top-level keys the extractor binds to typed columns. Anything else
 // is preserved as unknownAttrs so the UI can still render it.
 const CODEX_KNOWN_FIELDS = new Set(['type', 'timestamp', 'payload'])
+const INLINE_IMAGE_PLACEHOLDER = '[image attachment captured]'
+const INLINE_IMAGE_DATA_URL_RE = /data:(image\/[a-zA-Z0-9.+-]+);base64,([a-zA-Z0-9+/=]+)/g
+const INLINE_IMAGE_DATA_URL_TEST_RE = /data:image\/[a-zA-Z0-9.+-]+;base64,[a-zA-Z0-9+/=]+/
 
 function codexSourceFormatKey(appVersion: string | undefined): string {
   const version = parseVersionParts(appVersion)
@@ -189,9 +192,9 @@ export function extractCodexLine(raw: string): {
     }
 
     if (ptype === 'tool_search_output') {
-      const text = stringifyUnknown((payload as Record<string, unknown>).output ?? payload)
+      const parsedOutput = parseCodexToolOutput((payload as Record<string, unknown>).output ?? payload)
       return {
-        rawImages: localImagesFromText(text, 0, 0),
+        rawImages: parsedOutput.rawImages,
         message: decorate({
           id: crypto.randomUUID(),
           role: 'tool',
@@ -199,8 +202,8 @@ export function extractCodexLine(raw: string): {
           content: [{
             type: 'tool_result',
             name: (payload.call_id as string) || 'tool-search-output',
-            content: (payload as Record<string, unknown>).output ?? payload,
-            text,
+            content: parsedOutput.content,
+            text: parsedOutput.text,
           }],
           hasThinking: false,
         }),
@@ -281,10 +284,9 @@ export function extractCodexLine(raw: string): {
     }
 
     if (ptype === 'function_call_output') {
-      const output = payload.output
-      const text = stringifyUnknown(output)
+      const parsedOutput = parseCodexToolOutput(payload.output)
       return {
-        rawImages: localImagesFromText(text, 0, 0),
+        rawImages: parsedOutput.rawImages,
         message: decorate({
           id: crypto.randomUUID(),
           role: 'tool',
@@ -292,8 +294,8 @@ export function extractCodexLine(raw: string): {
           content: [{
             type: 'tool_result',
             name: (payload.call_id as string) || 'tool-output',
-            content: output,
-            text,
+            content: parsedOutput.content,
+            text: parsedOutput.text,
           }],
           hasThinking: false,
         }),
@@ -301,10 +303,9 @@ export function extractCodexLine(raw: string): {
     }
 
     if (ptype === 'custom_tool_call_output') {
-      const output = payload.output
-      const text = stringifyUnknown(output)
+      const parsedOutput = parseCodexToolOutput(payload.output)
       return {
-        rawImages: localImagesFromText(text, 0, 0),
+        rawImages: parsedOutput.rawImages,
         message: decorate({
           id: crypto.randomUUID(),
           role: 'tool',
@@ -312,8 +313,8 @@ export function extractCodexLine(raw: string): {
           content: [{
             type: 'tool_result',
             name: (payload.call_id as string) || 'custom-tool-output',
-            content: output,
-            text,
+            content: parsedOutput.content,
+            text: parsedOutput.text,
           }],
           hasThinking: false,
         }),
@@ -430,6 +431,148 @@ function parseCodexContent(rawContent: unknown): { blocks: ContentBlock[]; image
     }
   }
   return { blocks, images }
+}
+
+function parseCodexToolOutput(output: unknown): { content: unknown; text: string; rawImages: RawImageData[] } {
+  const target = typeof output === 'string' && output.includes('data:image/')
+    ? parseMaybeJson(output)
+    : output
+  const images: RawImageData[] = []
+  const sanitized = sanitizeInlineImages(target, images, 0, { nextInnerIndex: 0 })
+  const content = sanitized.value
+  const text = typeof output === 'string' && target === output && !sanitized.changed
+    ? output
+    : stringifyUnknown(content)
+  return {
+    content,
+    text,
+    rawImages: [
+      ...images,
+      ...localImagesFromText(text, 0, images.length),
+    ],
+  }
+}
+
+function sanitizeInlineImages(
+  value: unknown,
+  images: RawImageData[],
+  blockIndex: number,
+  cursor: { nextInnerIndex: number },
+  seen = new WeakSet<object>(),
+): { value: unknown; changed: boolean } {
+  if (typeof value === 'string') {
+    return sanitizeInlineImageString(value, images, blockIndex, cursor)
+  }
+
+  if (Array.isArray(value)) {
+    let changed = false
+    const out = value.map(item => {
+      const sanitized = sanitizeInlineImages(item, images, blockIndex, cursor, seen)
+      if (sanitized.changed) changed = true
+      return sanitized.value
+    })
+    return changed ? { value: out, changed: true } : { value, changed: false }
+  }
+
+  if (!value || typeof value !== 'object') return { value, changed: false }
+  if (seen.has(value)) return { value, changed: false }
+  seen.add(value)
+
+  const record = value as Record<string, unknown>
+  if (record.type === 'base64' && typeof record.data === 'string') {
+    const mediaType = typeof record.media_type === 'string'
+      ? record.media_type
+      : typeof record.mediaType === 'string'
+        ? record.mediaType
+        : 'image/png'
+    if (mediaType.startsWith('image/')) {
+      images.push({
+        blockIndex,
+        innerIndex: cursor.nextInnerIndex++,
+        base64Data: record.data,
+        mediaType,
+        blockType: 'image',
+      })
+      return {
+        value: {
+          ...record,
+          data: inlineImagePlaceholder(mediaType),
+        },
+        changed: true,
+      }
+    }
+  }
+
+  let changed = false
+  const out: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(record)) {
+    const sanitized = sanitizeInlineImages(item, images, blockIndex, cursor, seen)
+    if (sanitized.changed) changed = true
+    out[key] = sanitized.value
+  }
+  return changed ? { value: out, changed: true } : { value, changed: false }
+}
+
+function sanitizeInlineImageString(
+  value: string,
+  images: RawImageData[],
+  blockIndex: number,
+  cursor: { nextInnerIndex: number },
+): { value: string; changed: boolean } {
+  if (!value.includes('data:image/')) return { value, changed: false }
+  let changed = false
+  const sanitized = value.replace(INLINE_IMAGE_DATA_URL_RE, (_match, mediaType: string, base64Data: string) => {
+    changed = true
+    images.push({
+      blockIndex,
+      innerIndex: cursor.nextInnerIndex++,
+      base64Data,
+      mediaType,
+      blockType: 'image',
+    })
+    return inlineImagePlaceholder(mediaType)
+  })
+  return { value: sanitized, changed }
+}
+
+function inlineImagePlaceholder(mediaType: string): string {
+  return `${INLINE_IMAGE_PLACEHOLDER}: ${mediaType}`
+}
+
+export function codexRawHasToolOutputInlineImage(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const obj = value as Record<string, unknown>
+  const payload = obj.payload as Record<string, unknown> | undefined
+  if (obj.type !== 'response_item' || !payload || typeof payload !== 'object') return false
+  const ptype = payload.type
+  if (
+    ptype !== 'function_call_output'
+    && ptype !== 'custom_tool_call_output'
+    && ptype !== 'tool_search_output'
+  ) {
+    return false
+  }
+  const output = ptype === 'tool_search_output' ? payload.output ?? payload : payload.output
+  return hasInlineImageData(output)
+}
+
+function hasInlineImageData(value: unknown, seen = new WeakSet<object>()): boolean {
+  if (typeof value === 'string') return value.includes('data:image/') && INLINE_IMAGE_DATA_URL_TEST_RE.test(value)
+  if (Array.isArray(value)) return value.some(item => hasInlineImageData(item, seen))
+  if (!value || typeof value !== 'object') return false
+  if (seen.has(value)) return false
+  seen.add(value)
+
+  const record = value as Record<string, unknown>
+  if (record.type === 'base64' && typeof record.data === 'string') {
+    const mediaType = typeof record.media_type === 'string'
+      ? record.media_type
+      : typeof record.mediaType === 'string'
+        ? record.mediaType
+        : 'image/png'
+    return mediaType.startsWith('image/')
+  }
+  return Object.values(record).some(item => hasInlineImageData(item, seen))
 }
 
 const LOCAL_IMAGE_MEDIA: Record<string, string> = {

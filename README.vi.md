@@ -2,7 +2,7 @@
 
 Ngôn ngữ: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [简体中文](./README.zh-CN.md) | [繁體中文](./README.zh-Hant.md) | [日本語](./README.ja.md) | [한국어](./README.ko.md) | [Türkçe](./README.tr.md) | [Русский](./README.ru.md) | [Tiếng Việt](./README.vi.md) | [ไทย](./README.th.md) | [Deutsch](./README.de.md)
 
-[![Version](https://img.shields.io/badge/version-2.0.7-0F766E?style=flat-square)](#)
+[![Version](https://img.shields.io/badge/version-2.0.8-0F766E?style=flat-square)](#)
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933?style=flat-square&logo=node.js&logoColor=white)](#install)
 [![License](https://img.shields.io/badge/license-BUSL--1.1-7C3AED?style=flat-square)](./LICENSE.md)
 [![macOS](https://img.shields.io/badge/macOS-supported-111827?style=flat-square&logo=apple)](#supported-today)
@@ -49,14 +49,15 @@ DataMoat giữ hai lớp:
 **Sources được hỗ trợ hôm nay:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions trên macOS, DeepSeek và Qwen sessions khi được Claude Code GUI workflows ghi local, supported local OpenClaw session records và supported local Cursor agent transcripts.
 **Nhiều data sources và platform releases khác nằm trên roadmap:** star và watch repository này để theo dõi capture integrations và platform updates mới khi chúng ship.
 
-## New In 2.0.7: ChatGPT Export Memory Import
+## 2.0.8 Mới: Chú thích, nhập ChatGPT Export và chuyển máy an toàn hơn
 
-DataMoat now imports supported ChatGPT export ZIP files or extracted export folders into the same encrypted local memory archive used for Claude, Codex, Cursor, DeepSeek, Qwen, OpenClaw, skills, and attachments.
+DataMoat nay nhập các file ChatGPT export ZIP hoặc thư mục export đã giải nén được hỗ trợ vào cùng encrypted local memory archive dùng cho Claude, Codex, Cursor, DeepSeek, Qwen, OpenClaw, skills và attachments.
 
-- **Restore, view, search, and backup ChatGPT exports.** Supported conversations, alternate branches, attachments, assets, and raw export files are imported into the encrypted vault.
-- **Keep the raw export without wasting disk.** DataMoat preserves original source records and can store repetitive raw backup data in compressed encrypted archives; real source-record tests showed raw archive storage around 60% of original source bytes.
-- **Move work across computers.** Copy the DataMoat folder to another machine and restore it across macOS, Windows, and Linux, including Mac to Windows and Linux to Mac.
-- **Carry a second backup.** Save the encrypted DataMoat folder to USB or an external drive so your AI work history can travel separately from the source computer.
+- **Restore, view, search và backup ChatGPT exports.** Conversations, alternate branches, attachments, assets và raw export files được hỗ trợ sẽ được import vào encrypted vault.
+- **Đánh dấu ngữ cảnh quan trọng.** Bookmark sessions và từng message, vote câu trả lời hữu ích hoặc yếu, rồi filter review views để tìm reusable context dễ hơn.
+- **Giữ raw export mà không lãng phí disk.** DataMoat bảo toàn original source records và có thể lưu raw backup data lặp lại trong compressed encrypted archives; source-record tests thật cho thấy raw archive storage khoảng 60% original source bytes.
+- **Di chuyển work giữa computers.** Copy DataMoat folder sang máy khác và restore xuyên macOS, Windows, Linux, bao gồm Mac to Windows và Linux to Mac.
+- **Mang theo backup thứ hai.** Lưu encrypted DataMoat folder vào USB hoặc external drive để AI work history có thể đi riêng khỏi source computer.
 
 ## Vì Sao Nên Cài DataMoat
 
@@ -87,7 +88,7 @@ DataMoat now imports supported ChatGPT export ZIP files or extracted export fold
 |---|---|---|
 | **macOS** | Hỗ trợ hôm nay | Source install và signed packaged DMG đã có |
 | **Linux** | Hỗ trợ hôm nay | Source install đã có |
-| **Packaged macOS DMG** | [Tải DMG](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) (khuyến nghị) | Signed / notarized Apple Silicon DMG với Secure Enclave + Touch ID unlock trên Macs được hỗ trợ |
+| **Packaged macOS DMG** | [Tải DMG](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-vi) (khuyến nghị) | Signed / notarized Apple Silicon DMG với Secure Enclave + Touch ID unlock trên Macs được hỗ trợ |
 | **Windows x64 / ARM64** | ZIP + `DataMoat.exe` | Unsigned manual packages cho Windows 11 x64 và Windows 11 on Arm; x64 đã pass GitHub Actions packaged runtime smoke, ARM64 đã pass real VM UI/background capture smoke; signed installer vẫn đang làm |
 
 ### Sources
@@ -150,19 +151,19 @@ flowchart TD
 
 ## Install
 
-Signed / notarized macOS DMG là install path được khuyến nghị cho Mac users. Source install vẫn có cho Linux, development và fallback cases. macOS DMG có trong DataMoat release downloads tại [https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg) và gồm Secure Enclave + Touch ID unlock trên Macs được hỗ trợ, menu-bar auto-start at login, và packaged auto-update qua DataMoat R2 release feed. Windows x64 và ARM64 có dưới dạng unsigned ZIP + `DataMoat.exe` packages trong khi signed installer được hoàn thiện.
+Signed / notarized macOS DMG là install path được khuyến nghị cho Mac users. Source install vẫn có cho Linux, development và fallback cases. macOS DMG có trong DataMoat release downloads tại [https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg) và gồm Secure Enclave + Touch ID unlock trên Macs được hỗ trợ, menu-bar auto-start at login, và packaged auto-update qua DataMoat R2 release feed. Windows x64 và ARM64 có dưới dạng unsigned ZIP + `DataMoat.exe` packages trong khi signed installer được hoàn thiện.
 
 Release downloads:
 
-[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg)
-[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-win32-x64.zip)
-[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-win32-arm64.zip)
+[![Download macOS DMG](https://img.shields.io/badge/Download-macOS%20DMG-111827?style=for-the-badge&logo=apple&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-vi)
+[![Download Windows x64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20x64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-x64.zip?s=gh-vi)
+[![Download Windows ARM64 ZIP + EXE](https://img.shields.io/badge/Download-Windows%20ARM64%20ZIP%20%2B%20EXE-2563EB?style=for-the-badge&logo=windows&logoColor=white)](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-arm64.zip?s=gh-vi)
 
 Mỗi Windows ZIP gồm `DataMoat.exe` và app files cần thiết. Unzip Windows package, giữ folder contents cùng nhau, và chạy `Install DataMoat.cmd` một lần. Việc đó launch DataMoat và register startup cho current Windows user để tray/background app quay lại sau login hoặc restart. Đây vẫn là portable ZIP package, chưa phải signed single-file installer.
 
 ### AI-Assisted Install
 
-Với Mac users, dùng signed và notarized packaged DMG trước: [Download DMG](https://github.com/max-ng/datamoat/releases/download/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg). Đừng bắt đầu bằng `git clone` trên macOS trừ khi user rõ ràng muốn source install hoặc packaged release không khả dụng.
+Với Mac users, dùng signed và notarized packaged DMG trước: [Download DMG](https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg?s=gh-vi). Đừng bắt đầu bằng `git clone` trên macOS trừ khi user rõ ràng muốn source install hoặc packaged release không khả dụng.
 
 Bạn có thể nhờ ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI hoặc OpenClaw cài DataMoat khi bạn đang nhìn target desktop.
 
@@ -191,7 +192,7 @@ Không dùng git clone hoặc source install trừ khi DMG install fails.
 
 Steps:
 1. Download latest macOS DMG:
-   https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-macos-arm64.dmg
+   https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-macos-arm64.dmg
 2. Mount the DMG.
 3. Copy DataMoat.app to ~/Applications.
 4. Launch exactly:
@@ -213,8 +214,8 @@ Không dùng git clone hoặc source install.
 
 Steps:
 1. Download đúng latest Windows ZIP từ DataMoat release downloads:
-   x64: https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-x64.zip
-   ARM64: https://downloads.datamoat.org/releases/v2.0.7/DataMoat-2.0.7-win32-arm64.zip
+   x64: https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-x64.zip
+   ARM64: https://downloads.datamoat.org/releases/v2.0.8/DataMoat-2.0.8-win32-arm64.zip
 2. Extract ZIP vào Downloads.
 3. Launch exactly:
    %USERPROFILE%\Downloads\DataMoat-win32-<arch>\DataMoat.exe --datamoat-remote-no-screen

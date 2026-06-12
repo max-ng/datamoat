@@ -51,6 +51,9 @@ import {
   transferStateManifestPath,
 } from './transfer-export'
 import { readSourceArchiveRawRecordsFromRoot } from './source-archive'
+import { dedupeAndSortOps, mergeAnnotationOps } from './annotations'
+import type { AnnotationOp } from './annotations'
+import { writeAuditEvent, writeLog } from './logging'
 import {
   TRANSFER_IMPORTS_VERSION,
   TRANSFER_JOB_VERSION,
@@ -867,11 +870,49 @@ async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: Trans
   }
 
   nextJob = await importAttachments(nextJob, source, importsState, neededAttachmentIds)
+  await importAnnotationsFromSource(source)
   nextJob.currentSession = undefined
   nextJob.currentFile = undefined
   nextJob.done = true
   nextJob.completedAt = nowIso()
   return updateJob(nextJob, { phase: 'completed' })
+}
+
+// Union-merge the source vault's annotation op logs into the current vault.
+// Ops are deduped by opId, so re-importing the same backup is a no-op and a
+// backup made before new local annotations never drops them. Anchors are
+// path-independent session identities, so ops re-attach even when the session
+// uids differ between the two vaults. Failures are logged per anchor and never
+// abort the surrounding import.
+async function importAnnotationsFromSource(source: TransferUnlockResult): Promise<{ anchors: number; addedOps: number }> {
+  const annotationsRoot = path.join(source.root, 'vault', 'annotations')
+  let anchors = 0
+  let addedOps = 0
+  let entries: string[] = []
+  try {
+    entries = fs.existsSync(annotationsRoot)
+      ? fs.readdirSync(annotationsRoot).filter(name => name.endsWith('.jsonl'))
+      : []
+  } catch {
+    entries = []
+  }
+  for (const entry of entries) {
+    const anchor = entry.slice(0, -'.jsonl'.length)
+    try {
+      const rawOps = await readSourceJsonLines<AnnotationOp>(path.join(annotationsRoot, entry), source.helperSessionId)
+      const ops = dedupeAndSortOps(rawOps.filter(op => op && op.v === 1 && typeof op.opId === 'string' && op.opId.length > 0))
+      if (ops.length === 0) continue
+      const merged = await mergeAnnotationOps(anchor, ops)
+      anchors += 1
+      addedOps += merged.added
+    } catch (error) {
+      writeLog('warn', 'transfer', 'annotation_import_failed', { anchor, error: safeError(error) })
+    }
+  }
+  if (anchors > 0) {
+    writeAuditEvent('transfer', 'annotations_imported', { anchors, addedOps })
+  }
+  return { anchors, addedOps }
 }
 
 function isRootEmpty(root: string): boolean {
