@@ -6,14 +6,14 @@ import type { RawImageData } from './claude'
 export const CODEX_EXTRACTOR_VERSION = 3
 export const CODEX_EXTRACTOR_COMPATIBILITY_VERSION = 2
 export const CODEX_VERIFIED_SOURCE_VERSION_LABELS: Record<string, string> = {
-  darwin: 'macOS <= 0.136.x (sampled through 0.136.0-alpha.2)',
+  darwin: 'macOS <= 0.138.x (sampled through 0.138.0-alpha.7)',
   linux: 'Linux <= 0.130.x',
   win32: 'Windows not yet recorded',
 }
 
 type VersionParts = readonly [number, number, number]
 const CODEX_NEXT_UNVERIFIED_SOURCE_VERSION: Partial<Record<NodeJS.Platform, VersionParts>> = {
-  darwin: [0, 137, 0],
+  darwin: [0, 139, 0],
   linux: [0, 131, 0],
   win32: [0, 0, 0],
 }
@@ -22,7 +22,7 @@ const CODEX_SOURCE_FORMATS: Array<{ minVersion: VersionParts; key: string }> = [
   // Keep newest-first so a future incompatible upstream family can override the
   // broad legacy bucket below.
   // Verified compatible for the current response_item JSONL family. Local
-  // release evidence covers macOS through 0.136.0-alpha.2 and Linux through
+  // release evidence covers macOS through 0.138.0-alpha.7 and Linux through
   // 0.130.x. Add a higher minVersion here when upstream introduces a format
   // that needs a different reparse pass.
   { minVersion: [0, 0, 0], key: 'response-items' },

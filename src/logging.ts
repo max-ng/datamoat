@@ -334,6 +334,28 @@ export function installCrashHandlers(component: string): void {
     }
   }
 
+  // A Touch ID / Secure Enclave helper decrypt-authentication failure (CryptoKit
+  // error) must never crash the daemon. A wrapped secret/key that no longer
+  // unwraps after an update or re-sign has to fail closed and be repaired after
+  // the next password unlock, not take down the daemon and log the user out in a
+  // restart loop. See AGENTS.md ("stale ACL-bound items should fail closed
+  // without a prompt" / "OS-secret reads must not crash the app").
+  const isRecoverableSecretError = (error: unknown): boolean => {
+    const message = error instanceof Error ? error.message : String(error)
+    return message.includes('CryptoKitError') || message.includes('CryptoKit.CryptoKitError')
+  }
+  const recordRecoverableSecretError = (error: unknown, source: string): void => {
+    try {
+      updateHealth(component, {
+        recoverableSecretErrorAt: new Date().toISOString(),
+        recoverableSecretError: error instanceof Error ? error.message : String(error),
+        recoverableSecretErrorSource: source,
+      })
+    } catch {
+      /* non-fatal */
+    }
+  }
+
   try { process.stdout?.on('error', ignoreBrokenPipe) } catch { /* ignore */ }
   try { process.stderr?.on('error', ignoreBrokenPipe) } catch { /* ignore */ }
 
@@ -348,10 +370,18 @@ export function installCrashHandlers(component: string): void {
       }
       return
     }
+    if (isRecoverableSecretError(error)) {
+      recordRecoverableSecretError(error, 'uncaughtException')
+      return
+    }
     recordCrash(component, error, { source: 'uncaughtException' })
     process.exit(1)
   })
   process.on('unhandledRejection', reason => {
+    if (isRecoverableSecretError(reason)) {
+      recordRecoverableSecretError(reason, 'unhandledRejection')
+      return
+    }
     recordCrash(component, reason, { source: 'unhandledRejection' })
     process.exit(1)
   })
