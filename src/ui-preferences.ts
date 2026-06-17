@@ -3,6 +3,7 @@ import { execFileSync } from 'child_process'
 import { STATE_DIR, UI_PREFERENCES_FILE } from './config'
 
 export type UiLanguageCode = 'en' | 'zh-CN' | 'zh-TW' | 'ja'
+export type UiTheme = 'dark' | 'light'
 
 export const SUPPORTED_UI_LANGUAGES: readonly { code: UiLanguageCode; label: string }[] = [
   { code: 'en', label: 'EN' },
@@ -14,6 +15,7 @@ export const SUPPORTED_UI_LANGUAGES: readonly { code: UiLanguageCode; label: str
 type UiPreferences = {
   schemaVersion: 1
   language: UiLanguageCode
+  theme: UiTheme
   readableMessageFormatting: boolean
   configured: boolean
 }
@@ -21,6 +23,7 @@ type UiPreferences = {
 const DEFAULT_PREFERENCES: UiPreferences = {
   schemaVersion: 1,
   language: 'en',
+  theme: 'dark',
   readableMessageFormatting: true,
   configured: false,
 }
@@ -41,6 +44,10 @@ function parseSupportedUiLanguage(value: unknown): UiLanguageCode | null {
 
 export function normalizeUiLanguage(value: unknown): UiLanguageCode {
   return parseSupportedUiLanguage(value) || DEFAULT_PREFERENCES.language
+}
+
+export function normalizeUiTheme(value: unknown): UiTheme {
+  return value === 'light' ? 'light' : 'dark'
 }
 
 function supportedLanguageOrNull(value: unknown): UiLanguageCode | null {
@@ -131,6 +138,7 @@ export function readUiPreferences(): UiPreferences {
     return {
       schemaVersion: 1,
       language: normalizeUiLanguage(parsed.language),
+      theme: normalizeUiTheme(parsed.theme),
       readableMessageFormatting: parsed.readableMessageFormatting !== false,
       configured: true,
     }
@@ -139,11 +147,12 @@ export function readUiPreferences(): UiPreferences {
   }
 }
 
-export function saveUiPreferences(input: { language?: unknown; readableMessageFormatting?: unknown }): UiPreferences {
+export function saveUiPreferences(input: { language?: unknown; theme?: unknown; readableMessageFormatting?: unknown }): UiPreferences {
   const current = readUiPreferences()
   const preferences: UiPreferences = {
     schemaVersion: 1,
     language: input.language === undefined ? current.language : normalizeUiLanguage(input.language),
+    theme: input.theme === undefined ? current.theme : normalizeUiTheme(input.theme),
     readableMessageFormatting: input.readableMessageFormatting === undefined
       ? current.readableMessageFormatting
       : input.readableMessageFormatting !== false,
@@ -156,6 +165,7 @@ export function saveUiPreferences(input: { language?: unknown; readableMessageFo
     JSON.stringify({
       schemaVersion: preferences.schemaVersion,
       language: preferences.language,
+      theme: preferences.theme,
       readableMessageFormatting: preferences.readableMessageFormatting,
     }, null, 2),
     { mode: 0o600 },

@@ -6,14 +6,18 @@
 <title>DataMoat</title>
 <style>
   :root {
-    --bg:        #191919;
-    --surface:   #202020;
-    --surface2:  #252525;
-    --border:    #2f2f2f;
-    --border2:   #3a3a3a;
-    --text:      rgba(255,255,255,0.82);
-    --muted:     rgba(255,255,255,0.44);
-    --muted2:    rgba(255,255,255,0.62);
+    color-scheme: dark;
+    --bg:        #171717;
+    --surface:   #282828;
+    --surface2:  #303030;
+    --surface3:  #3a3a3a;
+    --panel:     #202020;
+    --panel2:    #252525;
+    --border:    #343434;
+    --border2:   #444444;
+    --text:      rgba(255,255,255,0.90);
+    --muted:     rgba(255,255,255,0.46);
+    --muted2:    rgba(255,255,255,0.66);
     --accent:    #74b6a5;
     --accent2:   #8abf9b;
     --warn:      #c78a4a;
@@ -26,8 +30,61 @@
     --think-bg:  rgba(116, 182, 165, 0.08);
     --think-border: rgba(116, 182, 165, 0.22);
     --think-text:   #78b8a6;
+    --input-bg: #202020;
+    --input-focus-bg: #242424;
+    --control-bg: #202020;
+    --control-hover-bg: #2f2f2f;
+    --control-active-bg: #3a3a3a;
+    --code-bg: #202020;
+    --tooltip-bg: #222222;
+    --modal-backdrop: rgba(23, 23, 23, 0.72);
+    --shadow-strong: rgba(0, 0, 0, 0.34);
+    --scrollbar-thumb: #444444;
+    --video-bg: #111111;
+    --info-bg: #0d1623;
+    --info-border: #1d3456;
+    --info-text: #a8c0e0;
+    --info-strong: #dbe5f5;
+    --warning-bg: #1a1408;
+    --warning-border: #4a380c;
+    --warning-text: #e0b870;
     --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
     --font-mono: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+  }
+  html[data-theme="light"] {
+    color-scheme: light;
+    --bg:        #ffffff;
+    --surface:   #f3f3f3;
+    --surface2:  #e9e9e9;
+    --surface3:  #dddddd;
+    --panel:     #ffffff;
+    --panel2:    #f7f7f7;
+    --border:    #e0e0e0;
+    --border2:   #cfcfcf;
+    --text:      #1f1f1f;
+    --muted:     #8b8b8b;
+    --muted2:    #5f6368;
+    --think-bg:  rgba(116, 182, 165, 0.12);
+    --think-border: rgba(15, 157, 118, 0.24);
+    --think-text:   #4d8d7d;
+    --input-bg: #ffffff;
+    --input-focus-bg: #ffffff;
+    --control-bg: #f7f7f7;
+    --control-hover-bg: #ececec;
+    --control-active-bg: #e4e4e4;
+    --code-bg: #f4f4f4;
+    --tooltip-bg: #ffffff;
+    --modal-backdrop: rgba(245, 245, 245, 0.72);
+    --shadow-strong: rgba(0, 0, 0, 0.14);
+    --scrollbar-thumb: #c7c7c7;
+    --video-bg: #e9e9e9;
+    --info-bg: #edf4ff;
+    --info-border: #c9dbf6;
+    --info-text: #426184;
+    --info-strong: #1f3f66;
+    --warning-bg: #fff6df;
+    --warning-border: #ead19b;
+    --warning-text: #755a1d;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
@@ -114,7 +171,7 @@
   #search {
     width: 100%;
     height: 32px;
-    background: #171a1d;
+    background: var(--input-bg);
     border: 1px solid transparent;
     border-radius: 6px;
     color: var(--text);
@@ -125,13 +182,13 @@
     transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
   }
   #search:focus {
-    border-color: #4a545c;
-    background: #1b2024;
+    border-color: var(--border2);
+    background: var(--input-focus-bg);
     box-shadow: 0 0 0 3px rgba(116, 134, 145, 0.1);
   }
   .search-wrap.search-active #search {
     border-color: rgba(116, 182, 165, 0.38);
-    background: #1b2024;
+    background: var(--input-focus-bg);
     box-shadow: 0 0 0 3px rgba(116, 182, 165, 0.08);
   }
   .search-wrap.dm-react #search {
@@ -161,8 +218,23 @@
     letter-spacing: 0;
     white-space: nowrap;
   }
+  .filter-btn[data-src="claude-cli"],
+  .filter-btn[data-src="claude-app"] {
+    color: #d88965;
+  }
+  .filter-btn[data-src="codex-cli"] {
+    color: #8aa2ff;
+  }
+  .filter-btn[data-src="openclaw"] {
+    color: #ef4444;
+  }
+  .filter-btn[data-src="cursor"] {
+    color: #9a9a9a;
+  }
+  .filter-btn[data-src="chatgpt-export"] {
+    color: #19c6a7;
+  }
   .filter-btn:hover {
-    color: var(--text);
     background: var(--surface2);
     transform: none;
     box-shadow: none;
@@ -172,9 +244,12 @@
   }
   .filter-btn.active,
   .filter-btn[data-src].active {
-    color: var(--text);
     background: var(--surface2);
     border-color: transparent;
+    font-weight: 650;
+  }
+  .filter-btn[data-src="all"].active {
+    color: var(--text);
   }
   .filter-btn.dm-react {
     border-color: rgba(116, 182, 165, 0.28);
@@ -468,7 +543,7 @@
     background: var(--surface);
   }
   .no-session-overview .weekly-metric:hover {
-    background: #242424;
+    background: var(--control-hover-bg);
   }
   .no-session-overview .weekly-value {
     font-size: 26px;
@@ -492,7 +567,7 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    background: rgba(3, 8, 12, 0.72);
+    background: var(--modal-backdrop);
     backdrop-filter: blur(8px);
   }
   #transfer-replace-backdrop {
@@ -500,10 +575,10 @@
   }
   .recovery-reset-panel {
     width: min(520px, 100%);
-    background: #0d141b;
+    background: var(--panel);
     border: 1px solid var(--border2);
     border-radius: 18px;
-    box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+    box-shadow: 0 24px 80px var(--shadow-strong);
     overflow: hidden;
   }
   .recovery-reset-head {
@@ -581,9 +656,9 @@
     color: var(--muted2);
   }
   .recovery-reset-btn:hover {
-    border-color: var(--border3);
+    border-color: var(--border2);
     color: var(--text);
-    background: rgba(255,255,255,0.03);
+    background: var(--control-hover-bg);
   }
   .recovery-reset-btn.primary {
     color: #07110d;
@@ -681,14 +756,15 @@
     padding: 0;
   }
   .session-tab-close:hover {
-    background: rgba(255,255,255,0.08);
+    background: var(--control-hover-bg);
     color: var(--text);
   }
 
   /* ── Session list ── */
   .session-list {
-    width: 300px;
-    min-width: 240px;
+    width: var(--dm-sidebar-width, 330px);
+    min-width: 264px;
+    max-width: min(620px, 52vw);
     border-right: 1px solid var(--border);
     background: var(--surface);
     overflow-y: auto;
@@ -700,6 +776,35 @@
   .session-list::-webkit-scrollbar { width: 4px; }
   .session-list::-webkit-scrollbar-track { background: transparent; }
   .session-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .sidebar-resizer {
+    position: relative;
+    flex: 0 0 7px;
+    width: 7px;
+    min-width: 7px;
+    height: 100%;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    cursor: col-resize;
+    touch-action: none;
+    z-index: 10;
+  }
+  .sidebar-resizer::before {
+    content: '';
+    position: absolute;
+    inset: 0 2px;
+    border-left: 1px solid transparent;
+    border-right: 1px solid transparent;
+  }
+  .sidebar-resizer:hover::before,
+  .sidebar-resizer.dragging::before,
+  .layout.sidebar-resizing .sidebar-resizer::before {
+    border-color: rgba(116, 182, 165, 0.52);
+  }
+  .layout.sidebar-resizing,
+  .layout.sidebar-resizing * {
+    cursor: col-resize !important;
+    user-select: none;
+  }
 
   .panel-mode-bar {
     position: sticky;
@@ -831,7 +936,7 @@
     transform: none;
   }
   .session-item.active {
-    background: #303030;
+    background: var(--control-active-bg);
     box-shadow: none;
   }
   .session-item.search-result {
@@ -900,7 +1005,7 @@
     padding: 2px 8px;
     border-radius: 999px;
     border: 1px solid var(--border);
-    background: rgba(255,255,255,0.04);
+    background: var(--panel2);
     font-family: var(--font-sans);
     font-size: 11px;
     color: var(--accent);
@@ -971,7 +1076,7 @@
     min-width: 28px;
     border: 1px solid var(--border2);
     border-radius: 6px;
-    background: rgba(255,255,255,0.02);
+    background: var(--control-bg);
     color: var(--muted2);
     cursor: pointer;
     font-family: var(--font-sans);
@@ -980,8 +1085,8 @@
   }
   .conversation-split-close:hover {
     color: var(--text);
-    border-color: var(--border3);
-    background: rgba(255,255,255,0.06);
+    border-color: var(--border2);
+    background: var(--control-hover-bg);
   }
   .split-drop-indicator {
     position: absolute;
@@ -1036,9 +1141,9 @@
     padding: 6px 11px;
     border: 1px solid rgba(116, 182, 165, 0.26);
     border-radius: 999px;
-    background: rgba(18, 24, 27, 0.92);
-    color: rgba(255,255,255,0.68);
-    box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+    background: var(--panel);
+    color: var(--muted2);
+    box-shadow: 0 12px 32px var(--shadow-strong);
     font-family: var(--font-sans);
     font-size: 11px;
     white-space: nowrap;
@@ -1073,9 +1178,9 @@
   .session-search-input {
     width: min(360px, 100%);
     height: 28px;
-    border: 1px solid #30363d;
+    border: 1px solid var(--border2);
     border-radius: 6px;
-    background: #14181c;
+    background: var(--input-bg);
     color: var(--text);
     padding: 0 9px;
     font-family: var(--font-mono);
@@ -1083,7 +1188,7 @@
     outline: none;
   }
   .session-search-input:focus {
-    border-color: #56656e;
+    border-color: var(--border2);
     box-shadow: 0 0 0 3px rgba(116, 134, 145, 0.12);
   }
   .session-search-input.search-active {
@@ -1093,17 +1198,17 @@
   .search-nav-btn {
     width: 26px;
     height: 24px;
-    border: 1px solid #343b42;
+    border: 1px solid var(--border2);
     border-radius: 5px;
-    background: #151a1f;
+    background: var(--control-bg);
     color: var(--muted2);
     cursor: pointer;
     transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
   }
   .search-nav-btn:not(:disabled):hover {
     color: var(--text);
-    border-color: #56656e;
-    background: #1b2228;
+    border-color: var(--border2);
+    background: var(--control-hover-bg);
     transform: translateY(-1px);
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.18);
   }
@@ -1126,7 +1231,7 @@
     padding: 24px 32px 16px;
     background: var(--bg);
     border-bottom: 1px solid var(--border);
-    box-shadow: 0 10px 18px rgba(0,0,0,0.22);
+    box-shadow: 0 10px 18px var(--shadow-strong);
   }
   .conv-header-toggle-zone {
     appearance: none;
@@ -1240,9 +1345,9 @@
     max-width: min(520px, 48vw);
   }
   .conv-action-btn {
-    border: 1px solid #343b42;
+    border: 1px solid var(--border2);
     border-radius: 5px;
-    background: #151a1f;
+    background: var(--control-bg);
     color: var(--muted2);
     width: 30px;
     height: 30px;
@@ -1254,13 +1359,18 @@
   }
   .conv-action-btn:hover {
     color: var(--text);
-    border-color: #56656e;
-    background: #1b2228;
+    border-color: var(--border2);
+    background: var(--control-hover-bg);
   }
   .conv-action-btn.copied {
     color: #0d1714;
     border-color: transparent;
     background: var(--accent);
+  }
+  .conv-action-btn.active {
+    color: var(--accent);
+    border-color: rgba(116, 182, 165, 0.48);
+    background: rgba(116, 182, 165, 0.10);
   }
   .conv-action-btn:disabled {
     cursor: default;
@@ -1282,7 +1392,7 @@
     padding: 6px 8px;
     border-radius: 5px;
     border: 1px solid var(--border2);
-    background: #101418;
+    background: var(--tooltip-bg);
     color: var(--text);
     font-family: var(--font-sans);
     font-size: 11px;
@@ -1317,7 +1427,7 @@
     margin: 0 0 18px;
     border: 1px solid rgba(0, 200, 160, 0.28);
     border-radius: 8px;
-    background: #07110f;
+    background: var(--control-bg);
     padding: 12px;
     display: grid;
     gap: 10px;
@@ -1347,7 +1457,7 @@
   .conversation-map-stat {
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 6px;
-    background: rgba(255,255,255,0.02);
+    background: var(--control-bg);
     padding: 5px 8px;
     font-family: var(--font-mono);
     font-size: 10px;
@@ -1370,7 +1480,7 @@
     border: 1px solid rgba(255,255,255,0.08);
     border-radius: 7px;
     padding: 8px;
-    background: #09141a;
+    background: var(--control-bg);
   }
   .branch-name {
     font-family: var(--font-mono);
@@ -1437,7 +1547,7 @@
     display: inline-block;
   }
   .session-skills[open] > summary::before { transform: rotate(90deg); }
-  .session-skills > summary:hover { background: rgba(255,255,255,0.025); }
+  .session-skills > summary:hover { background: var(--control-hover-bg); }
   .session-skills-title {
     color: var(--text);
     font-weight: 600;
@@ -1458,9 +1568,9 @@
     gap: 8px;
   }
   .skill-tree-group {
-    border: 1px solid rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
     border-radius: 6px;
-    background: rgba(255,255,255,0.018);
+    background: var(--control-bg);
     overflow: hidden;
   }
   .skill-tree-group summary {
@@ -1476,7 +1586,7 @@
     font-size: 11px;
   }
   .skill-tree-group summary::-webkit-details-marker { display: none; }
-  .skill-tree-group summary:hover { background: rgba(255,255,255,0.025); }
+  .skill-tree-group summary:hover { background: var(--control-hover-bg); }
   .skill-tree-title {
     display: flex;
     align-items: center;
@@ -1521,7 +1631,7 @@
     padding: 7px 8px;
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 5px;
-    background: rgba(255,255,255,0.02);
+    background: var(--control-bg);
   }
   .session-skill-name {
     color: var(--text);
@@ -1570,9 +1680,9 @@
     font-weight: 300;
   }
   .message-action-btn {
-    border: 1px solid #343b42;
+    border: 1px solid var(--border2);
     border-radius: 5px;
-    background: #151a1f;
+    background: var(--control-bg);
     color: var(--muted);
     width: 24px;
     height: 22px;
@@ -1586,8 +1696,8 @@
   }
   .message-action-btn:hover:not(:disabled) {
     color: var(--text);
-    border-color: #56656e;
-    background: #1b2228;
+    border-color: var(--border2);
+    background: var(--control-hover-bg);
   }
   .message-action-btn:disabled {
     cursor: default;
@@ -1619,7 +1729,7 @@
     font-size: 11px;
     color: var(--think-text);
   }
-  .thinking-toggle:hover { background: #0f1f10; }
+  .thinking-toggle:hover { background: var(--control-hover-bg); }
   .thinking-arrow {
     font-size: 10px;
     transition: transform 0.15s;
@@ -1694,7 +1804,7 @@
     display: inline-block;
   }
   .attr-details[open] summary::before { transform: rotate(90deg); }
-  .attr-details summary:hover { background: #11161f; }
+  .attr-details summary:hover { background: var(--control-hover-bg); }
   .attr-details > .attr-body {
     border-top: 1px solid var(--border);
     padding: 8px 12px;
@@ -1744,32 +1854,32 @@
   /* Turn-summary block for Claude `result` events. Renders cost / duration /
      stop reason / full usage breakdown that the extractor used to drop. */
   .turn-summary {
-    background: #0d1623;
-    border: 1px solid #1d3456;
+    background: var(--info-bg);
+    border: 1px solid var(--info-border);
     border-radius: 5px;
     padding: 8px 12px;
     margin: 6px 0;
     font-family: var(--font-mono);
     font-size: 12px;
-    color: #a8c0e0;
+    color: var(--info-text);
     display: flex;
     flex-wrap: wrap;
     gap: 14px;
     align-items: center;
   }
   .turn-summary .ts-label { opacity: 0.65; }
-  .turn-summary .ts-value { color: #dbe5f5; }
+  .turn-summary .ts-value { color: var(--info-strong); }
 
   /* Rate-limit strip for `rate_limit_event`. */
   .rate-limit-strip {
-    background: #1a1408;
-    border: 1px solid #4a380c;
+    background: var(--warning-bg);
+    border: 1px solid var(--warning-border);
     border-radius: 5px;
     padding: 8px 12px;
     margin: 6px 0;
     font-family: var(--font-mono);
     font-size: 12px;
-    color: #e0b870;
+    color: var(--warning-text);
     display: flex;
     flex-wrap: wrap;
     gap: 14px;
@@ -1808,7 +1918,7 @@
     margin: 12px 0 6px;
     font-size: 15px;
     line-height: 1.45;
-    color: #e6edf7;
+    color: var(--text);
   }
   .text-block.readable ul,
   .text-block.readable ol {
@@ -1827,8 +1937,8 @@
     padding: 10px 12px;
     border-radius: 5px;
     border: 1px solid var(--border2);
-    background: #080d12;
-    color: #d8e3f0;
+    background: var(--code-bg);
+    color: var(--text);
     overflow-x: auto;
     white-space: pre;
   }
@@ -1853,8 +1963,8 @@
     vertical-align: top;
   }
   .text-block.readable th {
-    color: #dbe5f5;
-    background: #0a1016;
+    color: var(--text);
+    background: var(--control-bg);
   }
 
   .tool-block {
@@ -1866,6 +1976,45 @@
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--muted);
+  }
+  details.tool-block {
+    overflow: hidden;
+  }
+  .tool-block > summary.tool-meta {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    margin-bottom: 0;
+    min-height: 24px;
+  }
+  .tool-block > summary.tool-meta::-webkit-details-marker { display: none; }
+  .tool-block > summary.tool-meta::before {
+    content: '▶';
+    color: var(--muted);
+    font-size: 8px;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .tool-block[open] > summary.tool-meta {
+    margin-bottom: 8px;
+  }
+  .tool-block[open] > summary.tool-meta::before {
+    transform: rotate(90deg);
+  }
+  .tool-block > summary.tool-meta:hover {
+    color: var(--text);
+  }
+  .tool-block.search-opened {
+    border-color: rgba(255, 213, 74, 0.34);
+  }
+  .tool-mini-label {
+    margin-left: auto;
+    color: var(--muted);
+    font-family: var(--font-sans);
+    font-size: 10px;
+  }
+  .tool-block[open] .tool-mini-label {
+    display: none;
   }
   .tool-name { color: var(--warn); font-weight: 500; }
   .tool-meta {
@@ -1891,7 +2040,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px 12px;
-    background: #0f131a;
+    background: var(--control-bg);
     cursor: pointer;
     font-family: var(--font-mono);
     font-size: 12px;
@@ -1915,14 +2064,14 @@
     text-align: left;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: #0d1218;
+    background: var(--control-bg);
     color: var(--text);
     cursor: pointer;
     font-family: var(--font-sans);
   }
   .attachment-open-card:hover:not(:disabled) {
     border-color: rgba(116, 182, 165, 0.55);
-    background: #10171e;
+    background: var(--control-hover-bg);
   }
   .attachment-open-card:disabled {
     opacity: 0.65;
@@ -1962,7 +2111,7 @@
     position: relative;
     flex: 0 0 220px;
     min-height: 124px;
-    background: #070b10;
+    background: var(--video-bg);
     border-right: 1px solid var(--border);
     display: block;
   }
@@ -2010,7 +2159,7 @@
     border: 1px solid var(--border);
     border-radius: 5px;
     overflow: hidden;
-    background: #0a0f14;
+    background: var(--control-bg);
   }
   .detail-block summary {
     cursor: pointer;
@@ -2022,7 +2171,7 @@
     user-select: none;
   }
   .detail-block summary::-webkit-details-marker { display: none; }
-  .detail-block summary:hover { background: #101821; }
+  .detail-block summary:hover { background: var(--control-hover-bg); }
   .detail-block.raw-image-output:not([open]) {
     border-color: rgba(116, 182, 165, 0.22);
   }
@@ -2049,7 +2198,7 @@
     color: var(--text);
   }
   .other-block {
-    background: #0c1117;
+    background: var(--control-bg);
     border: 1px dashed var(--border2);
     border-radius: 5px;
     padding: 8px 12px;
@@ -2128,7 +2277,7 @@
   .settings-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(4, 8, 12, 0.78);
+    background: var(--modal-backdrop);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -2142,8 +2291,8 @@
     overflow: auto;
     border-radius: 14px;
     border: 1px solid var(--border2);
-    background: linear-gradient(180deg, #10161d 0%, #0b1015 100%);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+    background: var(--panel);
+    box-shadow: 0 24px 80px var(--shadow-strong);
   }
   .settings-head {
     display: flex;
@@ -2171,7 +2320,7 @@
   .settings-close:hover {
     color: var(--text);
     border-color: var(--border2);
-    background: #10161d;
+    background: var(--control-hover-bg);
   }
   .settings-body {
     display: grid;
@@ -2188,6 +2337,74 @@
     position: relative;
     flex-shrink: 0;
   }
+  .theme-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .theme-choice-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--control-bg);
+    flex-shrink: 0;
+  }
+  .theme-choice {
+    min-width: 92px;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--muted2);
+    cursor: pointer;
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 650;
+    padding: 6px 9px;
+  }
+  .theme-choice:hover {
+    color: var(--text);
+    background: var(--control-hover-bg);
+    transform: none;
+    box-shadow: none;
+  }
+  .theme-choice.active {
+    color: var(--text);
+    border-color: var(--border);
+    background: var(--control-active-bg);
+  }
+  .theme-swatch {
+    width: 18px;
+    height: 14px;
+    display: inline-grid;
+    grid-template-columns: 7px 1fr;
+    overflow: hidden;
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .theme-swatch.dark {
+    background: #171717;
+  }
+  .theme-swatch.dark::before {
+    content: '';
+    background: #282828;
+  }
+  .theme-swatch.light {
+    background: #ffffff;
+  }
+  .theme-swatch.light::before {
+    content: '';
+    background: #f3f3f3;
+  }
   .language-current {
     min-width: 156px;
     display: inline-flex;
@@ -2196,7 +2413,7 @@
     gap: 12px;
     border: 1px solid var(--border2);
     border-radius: 10px;
-    background: #0a1016;
+    background: var(--control-bg);
     color: var(--text);
     font-family: var(--font-mono);
     font-size: 12px;
@@ -2222,8 +2439,8 @@
     gap: 4px;
     border: 1px solid var(--border2);
     border-radius: 10px;
-    background: #081017;
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.42);
+    background: var(--panel);
+    box-shadow: 0 18px 40px var(--shadow-strong);
     padding: 6px;
   }
   .language-menu[hidden] {
@@ -2248,6 +2465,16 @@
     color: #bffdfa;
   }
   @media (max-width: 720px) {
+    .theme-card-head {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .theme-choice-group {
+      width: 100%;
+    }
+    .theme-choice {
+      flex: 1;
+    }
     .language-card-head {
       align-items: stretch;
       flex-direction: column;
@@ -2269,7 +2496,7 @@
     padding: 14px 16px;
     border-radius: 12px;
     border: 1px solid var(--border);
-    background: #0a1016;
+    background: var(--control-bg);
     color: inherit;
     cursor: pointer;
     text-align: left;
@@ -2283,7 +2510,7 @@
     height: 24px;
     border-radius: 999px;
     border: 1px solid var(--border2);
-    background: #121922;
+    background: var(--surface3);
     position: relative;
     flex-shrink: 0;
     transition: background 0.15s, border-color 0.15s;
@@ -2295,7 +2522,7 @@
     width: 18px;
     height: 18px;
     border-radius: 999px;
-    background: #b9c6d5;
+    background: var(--muted2);
     transition: transform 0.15s ease;
   }
   .switch-row.enabled .switch-track {
@@ -2329,7 +2556,7 @@
     padding: 14px 16px;
     border-radius: 12px;
     border: 1px solid var(--border);
-    background: #0a1016;
+    background: var(--control-bg);
   }
   .manual-update-row[hidden] { display: none; }
   .manual-update-icon {
@@ -2358,7 +2585,7 @@
     padding: 9px 12px;
     border-radius: 8px;
     border: 1px solid var(--border2);
-    background: #10161d;
+    background: var(--control-bg);
     color: var(--text);
     cursor: pointer;
   }
@@ -2386,7 +2613,7 @@
   .settings-card {
     border: 1px solid var(--border);
     border-radius: 12px;
-    background: #0a1016;
+    background: var(--control-bg);
     padding: 12px;
   }
   .settings-card.wide {
@@ -2447,7 +2674,7 @@
     height: 6px;
     overflow: hidden;
     border-radius: 999px;
-    background: #121a23;
+    background: var(--surface3);
   }
   .referenced-progress-fill {
     width: 0;
@@ -2491,7 +2718,7 @@
     color: var(--text);
     font-family: var(--font-mono);
     font-size: 11px;
-    background: #070c11;
+    background: var(--control-bg);
   }
   .referenced-folder-chip span {
     color: var(--muted);
@@ -2523,7 +2750,7 @@
     height: 22px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 999px;
-    background: #111821;
+    background: var(--surface3);
     padding: 2px;
     flex: 0 0 auto;
   }
@@ -2580,6 +2807,36 @@
   .settings-message.is-error {
     color: #ffb1a8;
     border-left-color: #ff6a52;
+  }
+  .release-notes-card {
+    display: grid;
+    gap: 12px;
+  }
+  .release-notes-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+  .release-notes-version {
+    flex: 0 0 auto;
+    border: 1px solid rgba(0, 200, 160, 0.32);
+    border-radius: 999px;
+    background: rgba(0, 200, 160, 0.08);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+  .release-notes-list {
+    margin: 0;
+    padding-left: 18px;
+    color: var(--text);
+    font-size: 12px;
+    line-height: 1.65;
+  }
+  .release-notes-list li + li {
+    margin-top: 5px;
   }
   .source-field {
     display: grid;
@@ -2645,7 +2902,7 @@
   .backup-path-group {
     border: 1px solid var(--border);
     border-radius: 12px;
-    background: #0a1016;
+    background: var(--control-bg);
     padding: 12px;
   }
   .backup-path-head {
@@ -2676,7 +2933,7 @@
   .backup-path-item {
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 10px;
-    background: rgba(255,255,255,0.02);
+    background: var(--control-bg);
     padding: 8px 10px;
   }
   .backup-path-account {
@@ -2723,7 +2980,7 @@
   }
   .skill-mini-btn {
     border: 1px solid var(--border2);
-    background: #0c1219;
+    background: var(--control-bg);
     color: var(--text);
     border-radius: 4px;
     padding: 4px 7px;
@@ -2734,7 +2991,7 @@
   .skill-mini-btn:hover:not(:disabled) {
     border-color: var(--accent);
     color: var(--accent);
-    background: #0d1926;
+    background: var(--control-hover-bg);
   }
   .skill-mini-btn:disabled {
     color: var(--muted);
@@ -2753,7 +3010,7 @@
   .skill-file-row {
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 6px;
-    background: rgba(0,0,0,0.18);
+    background: var(--control-bg);
     padding: 7px 8px;
   }
   .skill-file-head {
@@ -2779,7 +3036,7 @@
     word-break: break-word;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: #05080c;
+    background: var(--code-bg);
     padding: 10px;
     color: var(--text);
     font-family: var(--font-mono);
@@ -2790,7 +3047,7 @@
   /* Shared panel refresh for secondary surfaces */
   .recovery-reset-backdrop,
   .settings-backdrop {
-    background: rgba(25, 25, 25, 0.72);
+    background: var(--modal-backdrop);
     backdrop-filter: blur(10px);
   }
   .recovery-reset-panel,
@@ -2798,7 +3055,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     background: var(--surface);
-    box-shadow: 0 20px 56px rgba(0, 0, 0, 0.32);
+    box-shadow: 0 20px 56px var(--shadow-strong);
   }
   .settings-panel {
     width: min(1040px, calc(100vw - 32px));
@@ -2846,7 +3103,7 @@
     gap: 4px;
     padding: 14px;
     border-right: 1px solid var(--border);
-    background: #191919;
+    background: var(--surface);
   }
   .settings-nav-btn {
     min-height: 34px;
@@ -2866,13 +3123,13 @@
     text-align: left;
   }
   .settings-nav-btn:hover {
-    background: #252525;
+    background: var(--control-hover-bg);
     color: var(--text);
     transform: none;
     box-shadow: none;
   }
   .settings-nav-btn.active {
-    background: #2a2a2a;
+    background: var(--control-active-bg);
     color: var(--text);
   }
   .settings-panel-content {
@@ -2901,7 +3158,7 @@
   .settings-card:hover,
   .switch-row:hover:not(.disabled),
   .manual-update-row:hover {
-    background: #2a2a2a;
+    background: var(--control-hover-bg);
   }
   .settings-grid {
     grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -2947,7 +3204,7 @@
   .language-current,
   .source-input,
   .recovery-reset-input {
-    background: #2a2a2a;
+    background: var(--input-bg);
     border-color: var(--border);
     border-radius: 6px;
   }
@@ -2959,8 +3216,8 @@
   .language-menu {
     border-color: var(--border);
     border-radius: 8px;
-    background: #202020;
-    box-shadow: 0 16px 42px rgba(0, 0, 0, 0.36);
+    background: var(--panel);
+    box-shadow: 0 16px 42px var(--shadow-strong);
   }
   .language-btn.active {
     color: var(--text);
@@ -2971,7 +3228,7 @@
   .skill-mini-btn,
   .recovery-reset-btn {
     border-radius: 6px;
-    background: #2a2a2a;
+    background: var(--control-bg);
     border-color: var(--border);
     color: var(--text);
   }
@@ -2979,7 +3236,7 @@
   .skill-mini-btn:hover:not(:disabled),
   .recovery-reset-btn:hover:not(:disabled) {
     border-color: var(--border2);
-    background: #303030;
+    background: var(--control-hover-bg);
     color: var(--text);
   }
   .settings-btn.primary,
@@ -2996,7 +3253,7 @@
   }
   .switch-track,
   .referenced-toggle-track {
-    background: #303030;
+    background: var(--surface3);
     border-color: var(--border2);
   }
   .switch-knob,
@@ -3020,7 +3277,7 @@
     border-color: rgba(15, 157, 118, 0.28);
   }
   .referenced-progress-bar {
-    background: #303030;
+    background: var(--surface3);
   }
   .referenced-progress-fill {
     background: var(--accent);
@@ -3029,12 +3286,12 @@
   .backup-path-item,
   .skill-file-row {
     border-color: var(--border);
-    background: #202020;
+    background: var(--control-bg);
   }
   .skill-file-content pre {
     border-color: var(--border);
     border-radius: 8px;
-    background: #191919;
+    background: var(--code-bg);
   }
   @media (max-width: 820px) {
     .conv-title-row {
@@ -3221,6 +3478,7 @@
       <div class="empty-title">loading sessions</div>
     </div>
   </div>
+  <div class="sidebar-resizer" id="sidebar-resizer" role="separator" aria-label="Resize conversation list" aria-orientation="vertical" tabindex="0"></div>
   <div class="workspace-main">
     <div class="session-tabs" id="session-tabs" role="tablist" hidden></div>
     <div class="conversation-shell" id="conversation-shell">
@@ -3252,6 +3510,24 @@
         </nav>
         <div class="settings-panel-content">
           <section class="settings-section active" id="settings-section-general" data-settings-section="general" role="tabpanel" aria-labelledby="settings-nav-general">
+            <div class="settings-card wide" id="theme-settings-card">
+              <div class="theme-card-head">
+                <div>
+                  <div class="settings-label" id="theme-settings-title">Theme</div>
+                  <div class="settings-value" id="theme-settings-subtitle">Choose the app color theme.</div>
+                </div>
+                <div class="theme-choice-group" id="app-theme-picker" role="radiogroup" aria-label="Theme">
+                  <button class="theme-choice active" type="button" role="radio" aria-checked="true" data-theme-choice="dark">
+                    <span class="theme-swatch dark" aria-hidden="true"></span>
+                    <span id="theme-dark-label">Dark</span>
+                  </button>
+                  <button class="theme-choice" type="button" role="radio" aria-checked="false" data-theme-choice="light">
+                    <span class="theme-swatch light" aria-hidden="true"></span>
+                    <span id="theme-light-label">Light</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="settings-card wide" id="language-settings-card">
               <div class="language-card-head">
                 <div>
@@ -3309,6 +3585,16 @@
             </div>
           </section>
           <section class="settings-section" id="settings-section-updates" data-settings-section="updates" role="tabpanel" aria-labelledby="settings-nav-updates" hidden>
+            <div class="settings-card wide release-notes-card" id="release-notes-card">
+              <div class="release-notes-head">
+                <div>
+                  <div class="settings-label" id="release-notes-title">New in this version</div>
+                  <div class="settings-value" id="release-notes-subtitle">What changed in the installed DataMoat version.</div>
+                </div>
+                <div class="release-notes-version" id="release-notes-version">v2.0.10</div>
+              </div>
+              <ul class="release-notes-list" id="release-notes-list"></ul>
+            </div>
             <button id="update-toggle" class="switch-row" type="button" role="switch" aria-checked="true">
               <span class="switch-track"><span class="switch-knob"></span></span>
               <span class="switch-copy">
@@ -3549,6 +3835,9 @@ let transferExportPollTimer = null
 let transferImportPollTimer = null
 let transferImportPreflightTimer = null
 let transferImportAuthMode = 'password'
+const TRANSFER_IMPORT_SETTINGS_PIN_KEY = 'dm-transfer-import-settings-pinned'
+let transferImportCompletionHandledJobId = ''
+let transferImportAutoCloseOnCompletion = false
 let chatGptImportData = null
 let chatGptImportBusy = false
 let chatGptImportPollTimer = null
@@ -3568,7 +3857,15 @@ const LARGE_SESSION_MESSAGE_THRESHOLD = 1000
 const SESSION_PAGE_SIZE = 500
 const SEARCH_CONTEXT_BEFORE = 80
 const CONVERSATION_HEADER_HIDDEN_KEY = 'dm_conversation_header_hidden'
+const SIDEBAR_WIDTH_KEY = 'dm_sidebar_width_px'
+const SIDEBAR_DEFAULT_WIDTH = 330
+const SIDEBAR_MIN_WIDTH = 264
+const SIDEBAR_MAX_WIDTH = 720
+const TOOL_COLLAPSED_KEY = 'dm_tool_blocks_collapsed'
 let conversationHeaderHidden = localStorage.getItem(CONVERSATION_HEADER_HIDDEN_KEY) === '1'
+let toolBlocksCollapsedByDefault = localStorage.getItem(TOOL_COLLAPSED_KEY) === '1'
+let toolBlockOpenState = {}
+let suppressToolBlockToggleState = false
 let activeSessionData = null
 let activeMessages = []
 let activePageInfo = null
@@ -3605,6 +3902,19 @@ const SOURCE_LABELS = {
   'openclaw': 'OpenClaw',
   'cursor': 'Cursor',
   'chatgpt-export': 'chatgpt-export',
+}
+
+const CURRENT_RELEASE_NOTES_VERSION = '2.0.10'
+const CURRENT_RELEASE_NOTES = {
+  en: [
+    "Collapse and expand tool output blocks with a button for a cleaner conversation view.",
+    "Switch between dark and light themes.",
+    "Bookmark important sessions and individual messages, vote answers up or down, and review those saved items from the sidebar.",
+    "Duplicate conversations from Claude resume/fork are merged into one clean session while the original records are preserved.",
+    "Transfer import stays stable during long imports — closing Settings no longer cancels the background refresh or bounces you unexpectedly.",
+    "Keeps pace with the latest versions of the AI tools DataMoat backs up.",
+    "More reliable downloads and update checks, so you always get the right build.",
+  ],
 }
 
 function sessionSourceLabel(session) {
@@ -3650,6 +3960,10 @@ const appText = {
     noticeDismiss: 'dismiss',
     languageTitle: 'Language',
     languageSubtitle: 'Choose the app language for setup, unlock, and settings.',
+    themeTitle: 'Theme',
+    themeSubtitle: 'Choose the app color theme.',
+    themeDark: 'Dark',
+    themeLight: 'Light',
     readableFormatting: 'Readable message formatting',
     readableFormattingCopy: 'Render captured Markdown-like text for easier reading. Turn off to show exact plain text layout.',
     settingsPanelGeneral: 'General',
@@ -3665,7 +3979,10 @@ const appText = {
     checkNow: 'Check Now',
     updateNow: 'Update Now',
     downloadLatest: 'Download Latest Version',
+    downloadAndReplace: 'Download and Replace',
     reinstallSource: 'Reinstall From Source',
+    releaseNotesTitle: 'New in this version',
+    releaseNotesSubtitle: 'What changed in DataMoat {version}.',
     currentInstall: 'Current Install',
     appVersion: 'App Version',
     updateMethod: 'Update Method',
@@ -3771,6 +4088,10 @@ const appText = {
     noticeDismiss: '关闭',
     languageTitle: '语言',
     languageSubtitle: '选择首次设置、解锁和设置页面使用的界面语言。',
+    themeTitle: '主题',
+    themeSubtitle: '选择 app 颜色主题。',
+    themeDark: '深色',
+    themeLight: '浅色',
     settingsPanelGeneral: '通用',
     settingsPanelUpdates: '更新',
     settingsPanelFiles: '文件备份',
@@ -3784,7 +4105,10 @@ const appText = {
     checkNow: '立即检查',
     updateNow: '立即更新',
     downloadLatest: '下载最新版',
+    downloadAndReplace: '下载并替换',
     reinstallSource: '从源码重新安装',
+    releaseNotesTitle: '这个版本更新了什么',
+    releaseNotesSubtitle: 'DataMoat {version} 的主要改动。',
     currentInstall: '当前安装',
     appVersion: 'App 版本',
     updateMethod: '更新方式',
@@ -3890,6 +4214,10 @@ const appText = {
     noticeDismiss: '閉じる',
     languageTitle: '言語',
     languageSubtitle: '初回設定、ロック解除、設定画面で使う表示言語を選択します。',
+    themeTitle: 'テーマ',
+    themeSubtitle: 'アプリのカラーテーマを選択します。',
+    themeDark: 'ダーク',
+    themeLight: 'ライト',
     settingsPanelGeneral: '一般',
     settingsPanelUpdates: '更新',
     settingsPanelFiles: 'ファイルバックアップ',
@@ -3903,7 +4231,10 @@ const appText = {
     checkNow: '今すぐ確認',
     updateNow: '今すぐ更新',
     downloadLatest: '最新版をダウンロード',
+    downloadAndReplace: 'ダウンロードして置き換え',
     reinstallSource: 'ソースから再インストール',
+    releaseNotesTitle: 'このバージョンの更新内容',
+    releaseNotesSubtitle: 'DataMoat {version} の主な変更点です。',
     currentInstall: '現在のインストール',
     appVersion: 'App バージョン',
     updateMethod: '更新方法',
@@ -4043,6 +4374,8 @@ const appTextSettingsExtra = {
     updateApplying: 'Applying the latest update...',
     updateChecking: 'Checking whether an update is available...',
     updateAvailable: 'A newer version is available for this install. You can update when ready.',
+    updateAvailableVersion: 'DataMoat {version} is available. You can update when ready.',
+    updateAvailableAlert: 'DataMoat {version} is available. Use Download and Replace when you are ready.',
     updateDownloadedPackaged: 'A newer packaged version has finished downloading. Click Update Now whenever you are ready to install it.',
     updateUpToDate: 'Everything is up to date.',
     updateInstalling: 'Closing and reopening DataMoat to apply the downloaded update...',
@@ -4169,6 +4502,8 @@ const appTextSettingsExtra = {
     updateApplying: '正在应用最新更新...',
     updateChecking: '正在检查是否有更新...',
     updateAvailable: '此安装有新版本。准备好后可以更新。',
+    updateAvailableVersion: 'DataMoat {version} 可用。准备好后可以更新。',
+    updateAvailableAlert: 'DataMoat {version} 可用。准备好后使用下载并替换。',
     updateDownloadedPackaged: '新的打包版本已下载完成。准备好安装时点击立即更新。',
     updateUpToDate: '已经是最新。',
     updateInstalling: '正在关闭并重新打开 DataMoat 以应用已下载的更新...',
@@ -4295,6 +4630,8 @@ const appTextSettingsExtra = {
     updateApplying: '最新更新を適用中...',
     updateChecking: '更新があるか確認中...',
     updateAvailable: 'このインストールに新しいバージョンがあります。準備ができたら更新できます。',
+    updateAvailableVersion: 'DataMoat {version} が利用できます。準備ができたら更新できます。',
+    updateAvailableAlert: 'DataMoat {version} が利用できます。準備ができたら「ダウンロードして置き換え」を使ってください。',
     updateDownloadedPackaged: '新しいパッケージ版のダウンロードが完了しました。インストールできるときに今すぐ更新を押してください。',
     updateUpToDate: 'すべて最新です。',
     updateInstalling: 'ダウンロード済み更新を適用するため、DataMoat を閉じて再起動しています...',
@@ -4518,7 +4855,7 @@ for (const [language, values] of Object.entries(appTextOverviewExtra)) {
 }
 const appZhTwPhrases = [
   ['简体中文', '繁體中文'], ['搜索', '搜尋'], ['对话', '對話'], ['设置', '設定'], ['关闭', '關閉'],
-  ['选择', '選擇'], ['语言', '語言'], ['界面', '介面'], ['自动', '自動'], ['更新', '更新'],
+  ['选择', '選擇'], ['语言', '語言'], ['主题', '主題'], ['颜色', '顏色'], ['浅色', '淺色'], ['界面', '介面'], ['自动', '自動'], ['更新', '更新'],
   ['安装', '安裝'], ['原地', '原地'], ['其他', '其他'], ['方式', '方式'], ['目前', '目前'],
   ['为了', '為了'], ['安全', '安全'], ['保留', '保留'], ['手动', '手動'], ['下载', '下載'],
   ['版本', '版本'], ['运行', '執行'], ['升级', '升級'], ['立即', '立即'], ['检查', '檢查'],
@@ -4556,6 +4893,8 @@ function appToTraditionalText(text) {
 }
 appText['zh-TW'] = Object.fromEntries(Object.entries(appText['zh-CN']).map(([key, value]) => [key, appToTraditionalText(value)]))
 Object.assign(appText['zh-TW'], {
+  releaseNotesTitle: '這個版本更新了什麼',
+  releaseNotesSubtitle: 'DataMoat {version} 的主要改動。',
   overviewAllTimeVault: '全部工作記憶庫',
   overviewConversationsSaved: '已保存 {count} 個對話',
   overviewSubtitle: '{messages} 條訊息 · {projects} 個項目 · 最近 {latest}',
@@ -4598,6 +4937,7 @@ Object.assign(appText['zh-TW'], {
   overviewCalculating: '計算中…',
 })
 let appLanguage = 'en'
+let appTheme = 'dark'
 let readableMessageFormatting = true
 function normalizeAppLanguage(value) {
   const code = String(value || '').replace('_', '-').toLowerCase()
@@ -4608,6 +4948,9 @@ function normalizeAppLanguage(value) {
   }
   if (code === 'ja' || code.startsWith('ja-') || code === 'jp') return 'ja'
   return 'en'
+}
+function normalizeAppTheme(value) {
+  return value === 'light' ? 'light' : 'dark'
 }
 function detectAppLanguage() {
   const languages = Array.isArray(navigator.languages) && navigator.languages.length > 0
@@ -4627,6 +4970,23 @@ function appTr(key) {
 }
 function appFmt(key, values = {}) {
   return appTr(key).replace(/\{(\w+)\}/g, (_match, name) => String(values[name] ?? ''))
+}
+function renderReleaseNotesPanel() {
+  const version = settingsAppVersion || CURRENT_RELEASE_NOTES_VERSION
+  const title = document.getElementById('release-notes-title')
+  const subtitle = document.getElementById('release-notes-subtitle')
+  const badge = document.getElementById('release-notes-version')
+  const list = document.getElementById('release-notes-list')
+  if (title) title.textContent = appTr('releaseNotesTitle')
+  if (subtitle) subtitle.textContent = appFmt('releaseNotesSubtitle', { version: `v${version}` })
+  if (badge) badge.textContent = `v${version}`
+  if (!list) return
+  const notes = CURRENT_RELEASE_NOTES[appLanguage] || CURRENT_RELEASE_NOTES.en
+  list.replaceChildren(...notes.map(note => {
+    const item = document.createElement('li')
+    item.textContent = note
+    return item
+  }))
 }
 const APP_STATUS_TEXT_KEYS = {
   'checking': 'checking',
@@ -4712,6 +5072,15 @@ function setSettingsPanel(panel) {
   const content = document.querySelector('.settings-panel-content')
   if (content) content.scrollTop = 0
 }
+function applyAppTheme() {
+  appTheme = normalizeAppTheme(appTheme)
+  document.documentElement.dataset.theme = appTheme
+  document.querySelectorAll('[data-theme-choice]').forEach(btn => {
+    const active = btn.dataset.themeChoice === appTheme
+    btn.classList.toggle('active', active)
+    btn.setAttribute('aria-checked', active ? 'true' : 'false')
+  })
+}
 function applyAppLanguage(options = {}) {
   document.documentElement.lang = appLanguage === 'zh-CN' ? 'zh-CN' : appLanguage
   const currentLanguageButton = document.getElementById('app-language-current')
@@ -4738,6 +5107,10 @@ function applyAppLanguage(options = {}) {
   if (about) about.textContent = appTr('about')
   setAppText('notice-dismiss-btn', 'noticeDismiss')
   setAppText('settings-title', 'settings')
+  setAppText('theme-settings-title', 'themeTitle')
+  setAppText('theme-settings-subtitle', 'themeSubtitle')
+  setAppText('theme-dark-label', 'themeDark')
+  setAppText('theme-light-label', 'themeLight')
   setAppText('language-settings-title', 'languageTitle')
   setAppText('language-settings-subtitle', 'languageSubtitle')
   document.querySelector('#readable-format-toggle .switch-title') && (document.querySelector('#readable-format-toggle .switch-title').textContent = appTr('readableFormatting'))
@@ -4776,8 +5149,9 @@ function applyAppLanguage(options = {}) {
   setAppText('manual-update-subtitle', 'manualUpdatesCopy')
   setAppText('update-check-btn', 'checkNow')
   setAppText('update-apply-btn', 'updateNow')
-  setAppText('update-install-latest-btn', 'downloadLatest')
+  updateInstallLatestButtonLabel()
   setAppText('update-reinstall-btn', 'reinstallSource')
+  renderReleaseNotesPanel()
   setAppText('transfer-export-check-btn', 'checkNow')
   const labelMap = [
     ['update-install-type', 'currentInstall'],
@@ -4829,8 +5203,10 @@ async function loadAppPreferences() {
     } else {
       appLanguage = normalizeAppLanguage(data?.language || detectAppLanguage())
     }
+    appTheme = normalizeAppTheme(data?.theme)
     readableMessageFormatting = data?.readableMessageFormatting !== false
   } catch {}
+  applyAppTheme()
   applyAppLanguage()
   applyReadableMessageFormattingState()
   rerenderLocalizedSettingsPanels()
@@ -4854,6 +5230,25 @@ async function saveAppLanguage(language) {
     }
   } catch {}
   rerenderLocalizedSettingsPanels()
+}
+async function saveAppTheme(theme) {
+  const nextTheme = normalizeAppTheme(theme)
+  appTheme = nextTheme
+  applyAppTheme()
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme: appTheme }),
+    }))
+    const savedTheme = normalizeAppTheme(data.theme)
+    if (savedTheme !== appTheme) {
+      appTheme = savedTheme
+      applyAppTheme()
+    }
+  } catch {
+    applyAppTheme()
+  }
 }
 async function toggleReadableMessageFormatting() {
   readableMessageFormatting = !readableMessageFormatting
@@ -5089,13 +5484,27 @@ async function checkChatGptExportFeatureNotice() {
   showChatGptExportFeatureNotice(version)
 }
 
-function syncPackagedUpdateNotice() {
-  const isPackaged = updateState?.installMode === 'packaged' && updateState?.updateStrategy === 'packaged-auto-update'
+function syncPackagedUpdateNotice(options = {}) {
+  const isPackaged = updateState?.installMode === 'packaged'
+    && (updateState?.updateStrategy === 'packaged-auto-update' || updateState?.updateStrategy === 'packaged-manual-update')
   if (!isPackaged) return
 
   const downloadedVersion = updateState?.downloadedVersion || updateState?.availableVersion || ''
+  if (updateState?.lastResult === 'available' && updateState?.updateStrategy === 'packaged-manual-update' && downloadedVersion) {
+    if (!options.force && updateReadyDismissedVersion() === downloadedVersion) return
+    showNotice(
+      `DataMoat ${downloadedVersion} is available.`,
+      {
+        noticeKey: `update-ready:${downloadedVersion}`,
+        actionLabel: appTr('downloadAndReplace'),
+        onAction: installLatestVersion,
+      },
+    )
+    return
+  }
+
   if (updateState?.lastResult === 'downloaded' && downloadedVersion) {
-    if (updateReadyDismissedVersion() === downloadedVersion) return
+    if (!options.force && updateReadyDismissedVersion() === downloadedVersion) return
     showNotice(
       `DataMoat ${downloadedVersion} has been downloaded and is ready to install.`,
       {
@@ -5119,7 +5528,11 @@ function syncPackagedUpdateNotice() {
     }
   }
 
-  if (activeNoticeKey.startsWith('update-ready:') && updateState?.lastResult !== 'downloaded') {
+  if (
+    activeNoticeKey.startsWith('update-ready:')
+    && updateState?.lastResult !== 'downloaded'
+    && !(updateState?.lastResult === 'available' && updateState?.updateStrategy === 'packaged-manual-update')
+  ) {
     dismissNotice()
   }
 }
@@ -6495,16 +6908,95 @@ function renderConversationActions(session, pageInfo) {
   const copyDisabled = total <= 0
   const copyLabel = appTr('copyAllContextTip')
   const latestLabel = appTr('jumpLatestTip')
+  const toolLabel = toolBlocksCollapsedByDefault ? 'Expand tool contents' : 'Minimize tool contents'
   const sessionKey = session.uid || session.id
   const bookmarked = sessionKey === activeId
     ? !!activeAnnotations.bookmark
     : !!annoSummary.sessions?.[sessionKey]?.bookmark
   return `<div class="conv-actions">
+    <button class="conv-action-btn icon-action-btn${toolBlocksCollapsedByDefault ? ' active' : ''}" type="button" data-tool-collapse-all aria-pressed="${toolBlocksCollapsedByDefault ? 'true' : 'false'}" data-tip="${escAttr(toolLabel)}" title="${escAttr(toolLabel)}" aria-label="${escAttr(toolLabel)}">${toolBlocksCollapsedByDefault ? '▥' : '▤'}</button>
     <button class="conv-action-btn icon-action-btn conv-bookmark-btn${bookmarked ? ' active' : ''}" type="button" data-session-bookmark="${escAttr(sessionKey)}" data-tip="Bookmark session" title="Bookmark session" aria-label="Bookmark session">${bookmarked ? ANNO_ICONS.bookmarkFill : ANNO_ICONS.bookmark}</button>
     <button class="conv-action-btn icon-action-btn" type="button" data-session-copy-full data-tip="${escAttr(copyLabel)}" title="${escAttr(copyLabel)}" aria-label="${escAttr(copyLabel)}"${copyDisabled ? ' disabled' : ''}>⧉</button>
     <span class="copy-inline-status" role="status" aria-live="polite"></span>
     <button class="conv-action-btn icon-action-btn" type="button" data-session-jump-latest data-tip="${escAttr(latestLabel)}" title="${escAttr(latestLabel)}" aria-label="${escAttr(latestLabel)}"${total <= 0 ? ' disabled' : ''}>↓</button>
   </div>`
+}
+
+function maxSidebarWidth() {
+  const viewportLimit = Math.floor((window.innerWidth || SIDEBAR_MAX_WIDTH) * 0.52)
+  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, viewportLimit || SIDEBAR_MAX_WIDTH))
+}
+
+function clampSidebarWidth(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return SIDEBAR_DEFAULT_WIDTH
+  return Math.max(SIDEBAR_MIN_WIDTH, Math.min(maxSidebarWidth(), Math.round(n)))
+}
+
+function applySidebarWidth(value, persist = false) {
+  const width = clampSidebarWidth(value)
+  document.documentElement.style.setProperty('--dm-sidebar-width', `${width}px`)
+  const handle = document.getElementById('sidebar-resizer')
+  if (handle) {
+    handle.setAttribute('aria-valuemin', String(SIDEBAR_MIN_WIDTH))
+    handle.setAttribute('aria-valuemax', String(maxSidebarWidth()))
+    handle.setAttribute('aria-valuenow', String(width))
+  }
+  if (persist) localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width))
+  return width
+}
+
+function initSidebarResize() {
+  const handle = document.getElementById('sidebar-resizer')
+  const layout = handle?.closest('.layout')
+  if (!handle || !layout) return
+  applySidebarWidth(localStorage.getItem(SIDEBAR_WIDTH_KEY) || SIDEBAR_DEFAULT_WIDTH)
+  let dragging = false
+  const setFromPointer = event => {
+    const layoutRect = layout.getBoundingClientRect()
+    applySidebarWidth(event.clientX - layoutRect.left, true)
+  }
+  handle.addEventListener('pointerdown', event => {
+    event.preventDefault()
+    dragging = true
+    handle.classList.add('dragging')
+    layout.classList.add('sidebar-resizing')
+    handle.setPointerCapture?.(event.pointerId)
+    setFromPointer(event)
+  })
+  handle.addEventListener('pointermove', event => {
+    if (!dragging) return
+    event.preventDefault()
+    setFromPointer(event)
+  })
+  const stop = event => {
+    if (!dragging) return
+    dragging = false
+    handle.classList.remove('dragging')
+    layout.classList.remove('sidebar-resizing')
+    handle.releasePointerCapture?.(event.pointerId)
+  }
+  handle.addEventListener('pointerup', stop)
+  handle.addEventListener('pointercancel', stop)
+  handle.addEventListener('keydown', event => {
+    const current = clampSidebarWidth(localStorage.getItem(SIDEBAR_WIDTH_KEY) || SIDEBAR_DEFAULT_WIDTH)
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      applySidebarWidth(current - (event.shiftKey ? 40 : 16), true)
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      applySidebarWidth(current + (event.shiftKey ? 40 : 16), true)
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      applySidebarWidth(SIDEBAR_MIN_WIDTH, true)
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      applySidebarWidth(maxSidebarWidth(), true)
+    }
+  })
+  window.addEventListener('resize', () => {
+    applySidebarWidth(localStorage.getItem(SIDEBAR_WIDTH_KEY) || SIDEBAR_DEFAULT_WIDTH, true)
+  })
 }
 
 function applyConversationHeaderHiddenState() {
@@ -7388,6 +7880,58 @@ function offsetTopInsideScrollHost(target, host) {
   return host.scrollTop + targetRect.top - hostRect.top
 }
 
+function conversationViewportAnchor(conv) {
+  if (!conv) return null
+  const convRect = conv.getBoundingClientRect()
+  const stickyOffset = conversationStickyTopOffset(conv)
+  const probeY = Math.min(convRect.bottom - 18, convRect.top + stickyOffset + Math.max(80, Math.floor((conv.clientHeight - stickyOffset) * 0.28)))
+  const probeX = Math.min(convRect.right - 24, convRect.left + Math.max(48, Math.floor(conv.clientWidth * 0.22)))
+  let node = document.elementFromPoint(probeX, probeY)
+  const elementAnchor = node instanceof Element
+    ? node.closest('#conversation details.tool-block[data-tool-block-key], #conversation .text-block, #conversation .other-block, #conversation .message[data-message-index]')
+    : null
+  let message = node instanceof Element ? node.closest('#conversation .message[data-message-index]') : null
+  if (!message) message = conv.querySelector('.message[data-message-index]')
+  if (!(message instanceof HTMLElement)) return { scrollTop: conv.scrollTop }
+  const anchoredElement = elementAnchor instanceof HTMLElement ? elementAnchor : message
+  return {
+    element: anchoredElement,
+    messageIndex: message.dataset.messageIndex,
+    top: anchoredElement.getBoundingClientRect().top - convRect.top,
+    scrollTop: conv.scrollTop,
+  }
+}
+
+function restoreConversationViewport(anchor, conv = document.getElementById('conversation')) {
+  if (!conv || !anchor) return
+  if (anchor.element instanceof HTMLElement && anchor.element.isConnected) {
+    const rect = anchor.element.getBoundingClientRect()
+    if (rect.width > 0 && rect.height > 0) {
+      const convRect = conv.getBoundingClientRect()
+      const nextTop = rect.top - convRect.top
+      conv.scrollTop += nextTop - anchor.top
+      return
+    }
+  }
+  if (anchor.messageIndex !== undefined) {
+    const message = conv.querySelector(`.message[data-message-index="${cssEscape(String(anchor.messageIndex))}"]`)
+    if (message instanceof HTMLElement) {
+      const convRect = conv.getBoundingClientRect()
+      const nextTop = message.getBoundingClientRect().top - convRect.top
+      conv.scrollTop += nextTop - anchor.top
+      return
+    }
+  }
+  if (Number.isFinite(anchor.scrollTop)) conv.scrollTop = anchor.scrollTop
+}
+
+function preserveConversationViewport(mutator, conv = document.getElementById('conversation')) {
+  const anchor = conversationViewportAnchor(conv)
+  mutator()
+  restoreConversationViewport(anchor, conv)
+  requestAnimationFrame(() => restoreConversationViewport(anchor, conv))
+}
+
 function conversationStickyTopOffset(conv) {
   const convRect = conv.getBoundingClientRect()
   const headerRect = conv.querySelector('.conv-header')?.getBoundingClientRect()
@@ -7444,6 +7988,7 @@ function scheduleAnnotationMessageJump(sessionId, messageIndex, seq) {
 function scrollToSearchTarget() {
   if (!activeSearchTarget) return
   const conv = document.getElementById('conversation')
+  expandSearchTargetToolBlock(conv)
   const message = conv?.querySelector(`[data-message-index="${activeSearchTarget.messageIndex}"]`)
   const currentHit = visibleSearchHit(message?.querySelector('.search-hit-mark.current'))
   const firstHit = visibleSearchHit(message?.querySelector('.search-hit-mark'))
@@ -7457,6 +8002,95 @@ function scrollToSearchTarget() {
   const visibleTargetY = stickyOffset + Math.max(90, Math.floor((conv.clientHeight - stickyOffset) * 0.34))
   const top = offsetTopInsideScrollHost(target, conv)
   conv.scrollTo({ top: Math.max(0, top - visibleTargetY), behavior: 'auto' })
+}
+
+function toolBlockKey(messageIndex, blockIndex) {
+  return `${activeId || 'session'}:${messageIndex}:${blockIndex}`
+}
+
+function toolBlockShouldOpen(messageIndex, blockIndex, highlightTarget) {
+  if (highlightTarget) return true
+  const key = toolBlockKey(messageIndex, blockIndex)
+  if (Object.prototype.hasOwnProperty.call(toolBlockOpenState, key)) return !!toolBlockOpenState[key]
+  return !toolBlocksCollapsedByDefault
+}
+
+function renderToolBlock(kind, name, messageIndex, blockIndex, highlightTarget, bodyHtml) {
+  const key = toolBlockKey(messageIndex, blockIndex)
+  const open = toolBlockShouldOpen(messageIndex, blockIndex, highlightTarget)
+  const classes = `tool-block${highlightTarget ? ' search-opened' : ''}`
+  return `<details class="${classes}" data-tool-block-key="${escAttr(key)}" data-message-index="${escAttr(String(messageIndex))}" data-block-index="${escAttr(String(blockIndex))}"${open ? ' open' : ''}>
+    <summary class="tool-meta">
+      <span class="tool-kind">${esc(kind)}</span>
+      <span class="tool-name">${esc(name || 'tool')}</span>
+      <span class="tool-mini-label">mini</span>
+    </summary>
+    ${bodyHtml}
+  </details>`
+}
+
+function toolBlockMatchesSearchTarget(detail) {
+  if (!activeSearchTarget || !(detail instanceof HTMLElement)) return false
+  if (Number(detail.dataset.messageIndex) !== Number(activeSearchTarget.messageIndex)) return false
+  const targetBlockIndex = Number(activeSearchTarget.blockIndex)
+  if (!Number.isFinite(targetBlockIndex)) return true
+  return Number(detail.dataset.blockIndex) === targetBlockIndex
+}
+
+function expandSearchTargetToolBlock(conv = document.getElementById('conversation')) {
+  if (!activeSearchTarget || !conv) return
+  const messageIndex = String(activeSearchTarget.messageIndex)
+  const blockIndex = Number(activeSearchTarget.blockIndex)
+  const selector = Number.isFinite(blockIndex)
+    ? `details.tool-block[data-message-index="${cssEscape(messageIndex)}"][data-block-index="${cssEscape(String(blockIndex))}"]`
+    : `details.tool-block[data-message-index="${cssEscape(messageIndex)}"]`
+  conv.querySelectorAll(selector).forEach(detail => {
+    if (!(detail instanceof HTMLDetailsElement)) return
+    detail.open = true
+    detail.classList.add('search-opened')
+    detail.querySelectorAll('details.detail-block').forEach(inner => {
+      if (inner instanceof HTMLDetailsElement) inner.open = true
+    })
+  })
+}
+
+function updateToolCollapseButtons() {
+  const label = toolBlocksCollapsedByDefault ? 'Expand tool contents' : 'Minimize tool contents'
+  document.querySelectorAll('button[data-tool-collapse-all]').forEach(button => {
+    button.classList.toggle('active', toolBlocksCollapsedByDefault)
+    button.setAttribute('aria-pressed', toolBlocksCollapsedByDefault ? 'true' : 'false')
+    button.setAttribute('aria-label', label)
+    button.title = label
+    button.dataset.tip = label
+    button.textContent = toolBlocksCollapsedByDefault ? '▥' : '▤'
+  })
+}
+
+function setAllToolBlocksCollapsed(collapsed) {
+  toolBlocksCollapsedByDefault = !!collapsed
+  toolBlockOpenState = {}
+  localStorage.setItem(TOOL_COLLAPSED_KEY, toolBlocksCollapsedByDefault ? '1' : '0')
+  const conv = document.getElementById('conversation')
+  suppressToolBlockToggleState = true
+  preserveConversationViewport(() => {
+    conv?.querySelectorAll('details.tool-block[data-tool-block-key]').forEach(detail => {
+      if (!(detail instanceof HTMLDetailsElement)) return
+      detail.open = toolBlocksCollapsedByDefault ? toolBlockMatchesSearchTarget(detail) : true
+      if (detail.open && toolBlockMatchesSearchTarget(detail)) detail.classList.add('search-opened')
+    })
+  }, conv)
+  window.setTimeout(() => { suppressToolBlockToggleState = false }, 100)
+  updateToolCollapseButtons()
+}
+
+function toggleToolBlock(detail) {
+  if (!(detail instanceof HTMLDetailsElement)) return
+  const key = detail.dataset.toolBlockKey
+  const nextOpen = !detail.open
+  preserveConversationViewport(() => {
+    detail.open = nextOpen
+  })
+  if (key) toolBlockOpenState[key] = nextOpen
 }
 
 function displaySlice(text, max = DISPLAY_TEXT_MAX) {
@@ -8185,16 +8819,12 @@ function renderMessage(msg, messageIndex = 0) {
     }
     if (block.type === 'tool_use') {
       const rawInput = pretty(block.input ?? block.text ?? '')
-      return `<div class="tool-block">
-        <div class="tool-meta">
-          <span class="tool-kind">tool call</span>
-          <span class="tool-name">${esc(block.name || 'tool')}</span>
-        </div>
+      return renderToolBlock('tool call', block.name || 'tool', messageIndex, blockIndex, highlightTarget, `
         <details class="detail-block" open>
           <summary>arguments</summary>
           ${renderPreDisplay(rawInput, 'detail-pre', highlightTarget)}
         </details>
-      </div>`
+      `)
     }
     if (block.type === 'tool_result') {
       const imgs = block.attachmentIds || []
@@ -8208,17 +8838,13 @@ function renderMessage(msg, messageIndex = 0) {
       const detailsOpen = !hasRenderedImagePreview || !!highlightTarget
       const detailClass = `detail-block${hasRenderedImagePreview ? ' raw-image-output' : ''}`
       const detailSummary = hasRenderedImagePreview ? 'raw output' : 'output'
-      return `<div class="tool-block">
-        <div class="tool-meta">
-          <span class="tool-kind">tool output</span>
-          <span class="tool-name">${esc(block.name || 'result')}</span>
-        </div>
+      return renderToolBlock('tool output', block.name || 'result', messageIndex, blockIndex, highlightTarget, `
         ${previewHtml}
         ${rawOutput ? `<details class="${detailClass}"${detailsOpen ? ' open' : ''}>
           <summary>${detailSummary}</summary>
           ${renderPreDisplay(fallbackOutput.text, 'detail-pre', highlightTarget)}
         </details>` : ''}
-      </div>`
+      `)
     }
     if (block.type === 'image') {
       if (block.attachmentId) {
@@ -8328,6 +8954,14 @@ function hasDesktopPackagedUpdateBridge() {
   return !!window.datamoatDesktop?.update?.getSettings
 }
 
+function shouldUseDesktopPackagedUpdateBridge(state) {
+  return !!(
+    hasDesktopPackagedUpdateBridge()
+    && state?.installMode === 'packaged'
+    && (state.updateStrategy === 'packaged-auto-update' || state.updateStrategy === 'packaged-manual-update')
+  )
+}
+
 function normalizeUpdateStateForUi(state) {
   if (!state || typeof state !== 'object') return state
   if (
@@ -8406,6 +9040,7 @@ function friendlyStatusMessage(state) {
 
   switch (state.lastResult) {
     case 'available':
+      if (state.availableVersion) return appTr('updateAvailableVersion').replace('{version}', state.availableVersion)
       return appTr('updateAvailable')
     case 'downloading':
       return updateState?.message || appTr('updateStateDownloading')
@@ -8489,6 +9124,18 @@ function canApplyUpdate(state) {
   return typeof state.behind === 'number' && state.behind > 0
 }
 
+function isPackagedManualUpdateAvailable(state = updateState) {
+  return state?.updateStrategy === 'packaged-manual-update' && state?.lastResult === 'available'
+}
+
+function updateInstallLatestButtonLabel() {
+  const installLatestButton = document.getElementById('update-install-latest-btn')
+  if (!installLatestButton) return
+  installLatestButton.textContent = isPackagedManualUpdateAvailable()
+    ? appTr('downloadAndReplace')
+    : appTr('downloadLatest')
+}
+
 function renderReinstallHelp() {
   const help = document.getElementById('reinstall-source-help')
   const input = document.getElementById('reinstall-source-path')
@@ -8532,6 +9179,7 @@ function renderUpdatePanel() {
   const showManualUpdateRow = isPackagedInstall && !canAutoUpdate
   const showSourceControls = !isPackagedInstall
   const wantsAutoUpdate = updateSettings?.autoUpdateEnabled !== false
+  const canCheckForUpdates = canAutoUpdate || updateState?.updateStrategy === 'packaged-manual-update'
   setSwitchState(canAutoUpdate && wantsAutoUpdate, updatePanelBusy || !canAutoUpdate)
   if (toggleTitle) toggleTitle.textContent = canAutoUpdate ? appTr('autoUpdate') : appTr('autoUpdateUnavailable')
   if (toggleSubtitle) toggleSubtitle.textContent = autoUpdateToggleSubtitle()
@@ -8550,16 +9198,18 @@ function renderUpdatePanel() {
   document.getElementById('update-last-checked').textContent = formatDateTime(updateState?.lastCheckedAt)
   document.getElementById('update-last-applied').textContent = formatDateTime(updateState?.lastAppliedAt)
   document.getElementById('update-git-status').textContent = gitStatusSummary(updateState)
+  renderReleaseNotesPanel()
 
   const running = !!updateState?.running
   if (installLatestButton) {
     installLatestButton.hidden = canAutoUpdate
     installLatestButton.disabled = updatePanelBusy || running
+    updateInstallLatestButtonLabel()
   }
   if (toggleButton) toggleButton.hidden = !showAutoUpdateToggle
   if (manualUpdateRow) manualUpdateRow.hidden = !showManualUpdateRow
   if (checkUpdateButton) {
-    checkUpdateButton.hidden = !canAutoUpdate
+    checkUpdateButton.hidden = !canCheckForUpdates
     checkUpdateButton.disabled = updatePanelBusy || running
   }
   if (applyUpdateButton) {
@@ -8883,7 +9533,9 @@ function renderTransferImportPanel() {
   stateEl.textContent = appStatusText(status)
   badgeEl.textContent = running ? appTr('working') : job?.phase === 'completed' ? appTr('ready') : data?.ok ? appTr('ready') : status === 'failed' ? appTr('failed') : appTr('waiting')
   badgeEl.classList.toggle('off', !(data?.ok || job?.phase === 'completed') || status === 'failed')
-  messageEl.textContent = job?.phase === 'completed'
+  messageEl.textContent = job?.phase === 'failed'
+    ? (job?.lastError || data?.error || appTr('failed'))
+    : job?.phase === 'completed'
     ? appTr('transferImportCompleted')
     : data?.ok
       ? appTr('transferImportPassed')
@@ -8901,10 +9553,11 @@ function renderTransferImportPanel() {
   passwordTab.disabled = transferBusy || !!passwordUnavailable
   phraseTab.disabled = transferBusy || !!phraseUnavailable
 
-  const warnings = Array.isArray(data?.warnings) ? data.warnings : []
-  if (warnings.length > 0 || data?.error) {
+  const warnings = Array.isArray(job?.warnings) ? job.warnings : Array.isArray(data?.warnings) ? data.warnings : []
+  const jobError = job?.phase === 'failed' ? job?.lastError : ''
+  if (warnings.length > 0 || data?.error || jobError) {
     warningEl.hidden = false
-    warningEl.textContent = data?.error || warnings.join(' · ')
+    warningEl.textContent = data?.error || jobError || warnings.join(' · ')
   } else {
     warningEl.hidden = true
     warningEl.textContent = ''
@@ -9023,6 +9676,7 @@ async function loadTransferPanels() {
     transferBusy = false
     renderTransferExportPanel()
     renderTransferImportPanel()
+    await handleTransferImportSettled()
   }
 }
 
@@ -9058,12 +9712,74 @@ function transferImportJobIsRunning(job = currentTransferImportJob()) {
   return !!job && !job.done && job.phase !== 'failed' && job.phase !== 'completed' && job.phase !== 'cancelled'
 }
 
+function pinTransferImportSettings(job = currentTransferImportJob()) {
+  try { localStorage.setItem(TRANSFER_IMPORT_SETTINGS_PIN_KEY, job?.id || 'pending') } catch {}
+}
+
+function clearTransferImportSettingsPin() {
+  try { localStorage.removeItem(TRANSFER_IMPORT_SETTINGS_PIN_KEY) } catch {}
+}
+
+function transferImportSettingsPinValue() {
+  try { return localStorage.getItem(TRANSFER_IMPORT_SETTINGS_PIN_KEY) || '' } catch { return '' }
+}
+
+function transferImportSettingsPinned() {
+  return !!transferImportSettingsPinValue()
+}
+
+function focusTransferImportSettings() {
+  settingsOpen = true
+  const backdrop = document.getElementById('settings-backdrop')
+  if (backdrop) backdrop.hidden = false
+  if (activeSettingsPanel !== 'transfer') setSettingsPanel('transfer')
+}
+
+async function handleTransferImportSettled() {
+  const job = currentTransferImportJob()
+  if (!job) {
+    clearTransferImportSettingsPin()
+    return
+  }
+  if (transferImportJobIsRunning(job)) {
+    transferImportAutoCloseOnCompletion = true
+    pinTransferImportSettings(job)
+    // Only surface Settings when it's already open (e.g. the user just started the
+    // import). If the user deliberately closed Settings, keep watching in the
+    // background instead of yanking them back in.
+    if (settingsOpen) focusTransferImportSettings()
+    return
+  }
+  if (job.phase === 'completed') {
+    // Auto-close + refresh only when we actually watched this import run to completion
+    // in THIS session. A completed job persisted in state from a previous run must NOT
+    // be treated as "just completed" — the old `pinValue === job.id` trigger read a
+    // persisted localStorage pin, which made Settings bounce to the main UI on open
+    // (and could fire the instant an import started, before it finished).
+    const watchedThisSession = transferImportAutoCloseOnCompletion
+    transferImportAutoCloseOnCompletion = false
+    clearTransferImportSettingsPin()
+    if (transferImportCompletionHandledJobId === job.id) return
+    transferImportCompletionHandledJobId = job.id
+    if (!watchedThisSession) return
+    annoSummaryLoaded = false
+    await loadSessions()
+    closeSettings({ force: true })
+    feelPulseSelector('.session-item.search-result, .session-item[data-session-id]')
+    return
+  }
+  if (job.phase === 'failed' || job.phase === 'cancelled') {
+    clearTransferImportSettingsPin()
+  }
+}
+
 function scheduleTransferImportPollIfRunning(delay = 900) {
   if (transferImportPollTimer) {
     window.clearTimeout(transferImportPollTimer)
     transferImportPollTimer = null
   }
-  if (!settingsOpen) return
+  // No settingsOpen guard: a running import keeps polling in the background after
+  // the user closes Settings, so the main UI can refresh when it completes.
   const job = currentTransferImportJob()
   if (!transferImportJobIsRunning(job)) return
   transferImportPollTimer = window.setTimeout(async () => {
@@ -9071,6 +9787,7 @@ function scheduleTransferImportPollIfRunning(delay = 900) {
     try {
       transferImportData = await jsonOrThrow(await apiFetch('/api/transfer/import/status'))
       renderTransferImportPanel()
+      await handleTransferImportSettled()
     } catch {
       // Keep the last visible progress; the start request will surface errors.
     }
@@ -9217,6 +9934,9 @@ async function startTransferImport(mode) {
   }
   transferBusy = true
   transferImportData = { job: { phase: 'unlocking-source', done: false, counts: {}, imported: {}, skipped: {}, failed: {} } }
+  transferImportAutoCloseOnCompletion = true
+  pinTransferImportSettings()
+  focusTransferImportSettings()
   renderTransferImportPanel()
   scheduleTransferImportPollIfRunning(500)
   try {
@@ -9235,8 +9955,10 @@ async function startTransferImport(mode) {
     annoSummaryLoaded = false
     await loadSessions()
     setUpdatePanelMessage(mode === 'replace' ? appTr('transferReplaceDone') : appTr('transferMergeDone'), false)
+    await handleTransferImportSettled()
   } catch (error) {
     transferImportData = { error: error instanceof Error ? error.message : String(error) }
+    clearTransferImportSettingsPin()
   } finally {
     transferBusy = false
     renderTransferImportPanel()
@@ -9889,6 +10611,15 @@ document.getElementById('conversation')?.addEventListener('input', e => {
 })
 document.getElementById('conversation')?.addEventListener('click', e => {
   const target = e.target instanceof Element ? e.target : null
+  const toolSummary = target ? target.closest('summary.tool-meta') : null
+  if (toolSummary) {
+    const detail = toolSummary.closest('details.tool-block[data-tool-block-key]')
+    if (detail) {
+      e.preventDefault()
+      toggleToolBlock(detail)
+      return
+    }
+  }
   const annoButton = target ? target.closest('button[data-anno-kind]') : null
   if (annoButton) {
     const bar = annoButton.closest('.msg-anno-bar[data-anno-uuid]')
@@ -9903,6 +10634,11 @@ document.getElementById('conversation')?.addEventListener('click', e => {
   const headerToggle = target ? target.closest('[data-conv-header-toggle]') : null
   if (headerToggle) {
     toggleConversationHeaderHidden()
+    return
+  }
+  const toolCollapseButton = target ? target.closest('button[data-tool-collapse-all]') : null
+  if (toolCollapseButton) {
+    setAllToolBlocksCollapsed(!toolBlocksCollapsedByDefault)
     return
   }
   const copyContextButton = target ? target.closest('button[data-copy-context-through]') : null
@@ -9946,6 +10682,12 @@ document.getElementById('conversation')?.addEventListener('click', e => {
 document.getElementById('conversation')?.addEventListener('toggle', e => {
   const detail = e.target
   if (!detail || detail.tagName !== 'DETAILS') return
+  if (detail.matches?.('details.tool-block[data-tool-block-key]')) {
+    if (suppressToolBlockToggleState) return
+    const key = detail.dataset?.toolBlockKey
+    if (key) toolBlockOpenState[key] = !!detail.open
+    return
+  }
   const key = detail.dataset?.skillDetailKey
   if (!key) return
   skillDetailOpenState[key] = detail.open
@@ -9956,7 +10698,7 @@ async function loadUpdatePanel() {
   renderUpdatePanel()
   try {
     let data = await jsonOrThrow(await apiFetch('/api/update/settings'))
-    if (data.state?.updateStrategy === 'packaged-auto-update' && window.datamoatDesktop?.update?.getSettings) {
+    if (shouldUseDesktopPackagedUpdateBridge(data.state)) {
       try {
         data = await window.datamoatDesktop.update.getSettings()
       } catch {
@@ -9989,7 +10731,7 @@ async function loadUpdatePanel() {
 async function refreshUpdatePanel() {
   try {
     let latestState = await jsonOrThrow(await apiFetch('/api/update/status'))
-    if ((latestState?.updateStrategy === 'packaged-auto-update' || updateState?.updateStrategy === 'packaged-auto-update') && window.datamoatDesktop?.update?.getSettings) {
+    if (shouldUseDesktopPackagedUpdateBridge(latestState) || shouldUseDesktopPackagedUpdateBridge(updateState)) {
       try {
         const desktop = await window.datamoatDesktop.update.getSettings()
         updateSettings = {
@@ -10034,7 +10776,12 @@ function openSettingsToChatGptExport() {
   }, 80)
 }
 
-function closeSettings() {
+function openSettingsToTransferImport() {
+  openSettings()
+  setSettingsPanel('transfer')
+}
+
+function closeSettings(options = {}) {
   settingsOpen = false
   closeLanguageMenu()
   if (referencedAttachmentPollTimer) {
@@ -10058,6 +10805,9 @@ function closeSettings() {
     chatGptImportPreflightTimer = null
   }
   document.getElementById('settings-backdrop').hidden = true
+  // Keep a running import alive in the background so the main UI refreshes when it finishes.
+  if (transferImportJobIsRunning()) scheduleTransferImportPollIfRunning()
+  return true
 }
 
 async function toggleAutoUpdate() {
@@ -10093,11 +10843,15 @@ async function checkUpdatesNow() {
   updatePanelBusy = true
   renderUpdatePanel()
   try {
-    updateState = updateState?.updateStrategy === 'packaged-auto-update' && window.datamoatDesktop?.update?.check
+    updateState = shouldUseDesktopPackagedUpdateBridge(updateState) && window.datamoatDesktop?.update?.check
       ? await window.datamoatDesktop.update.check()
       : await jsonOrThrow(await apiFetch('/api/update/check', { method: 'POST' }))
     updateState = normalizeUpdateStateForUi(updateState)
     setUpdatePanelMessage('', false)
+    syncPackagedUpdateNotice({ force: true })
+    if (isPackagedManualUpdateAvailable(updateState) && updateState.availableVersion) {
+      window.alert(appFmt('updateAvailableAlert', { version: updateState.availableVersion }))
+    }
   } catch (error) {
     setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
   } finally {
@@ -10235,6 +10989,11 @@ function esc(s) {
 function escAttr(s) {
   return esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
+function cssEscape(s) {
+  const value = String(s || '')
+  if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value)
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
 function attachmentPath(id) {
   return encodeURIComponent(String(id || ''))
 }
@@ -10265,16 +11024,44 @@ function fmtDate(ts) { return new Date(ts).toLocaleDateString() }
 function fmtTime(ts) { return new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) }
 function wordCount(s) { return s ? s.trim().split(/\s+/).length : 0 }
 
+async function resumeTransferImportOnLaunch() {
+  // Only resume when a pin was left behind by a previous run.
+  if (!transferImportSettingsPinned()) return
+  try {
+    transferImportData = await jsonOrThrow(await apiFetch('/api/transfer/import/status'))
+  } catch {
+    transferImportData = null
+  }
+  const job = currentTransferImportJob()
+  if (transferImportJobIsRunning(job)) {
+    // An import was still in progress when the app last closed — resume watching it,
+    // showing live progress, and bounce to the main UI when it finishes.
+    transferImportAutoCloseOnCompletion = true
+    openSettingsToTransferImport()
+    scheduleTransferImportPollIfRunning(500)
+  } else {
+    // Stale pin pointing at a finished/old import. Clear it so Settings does not
+    // auto-open and immediately bounce back to the main UI on launch.
+    clearTransferImportSettingsPin()
+  }
+}
+
 async function initApp() {
+  initSidebarResize()
   await loadAppPreferences()
   await loadSessions()
+  await resumeTransferImportOnLaunch()
 }
+applyAppTheme()
 applyAppLanguage()
 void initApp()
 document.getElementById('open-settings-btn').addEventListener('click', () => openSettings())
 document.getElementById('close-settings-btn').addEventListener('click', () => closeSettings())
 document.querySelectorAll('[data-settings-target]').forEach(btn => {
   btn.addEventListener('click', () => setSettingsPanel(btn.dataset.settingsTarget))
+})
+document.querySelectorAll('[data-theme-choice]').forEach(btn => {
+  btn.addEventListener('click', () => { void saveAppTheme(btn.dataset.themeChoice) })
 })
 document.getElementById('app-language-current')?.addEventListener('click', event => {
   event.preventDefault()

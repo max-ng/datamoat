@@ -10,7 +10,7 @@ import { autoUpdater, type ProgressInfo, type UpdateDownloadedEvent, type Update
 import { detectInstallContext } from '../install-context'
 import { writeLog } from '../logging'
 import { loadAppConfig, loadUpdateState, saveAppConfig, writeUpdateState, type UpdateState } from '../update-config'
-import { UPDATE_GITHUB_HOST, UPDATE_GITHUB_OWNER, UPDATE_GITHUB_REPO, WINDOWS_UPDATE_MANIFEST_URL, packagedUpdateFeedOptions, updateReleasesUrl } from '../update-channel'
+import { DOWNLOAD_BASE_URL, UPDATE_GITHUB_HOST, UPDATE_GITHUB_OWNER, UPDATE_GITHUB_REPO, effectiveWindowsManifestUrl, packagedUpdateFeedOptions, selectUpdateFeedBase, updateReleasesUrl } from '../update-channel'
 
 type PackagedUpdateSettingsResponse = {
   autoUpdateEnabled: boolean
@@ -74,6 +74,7 @@ let packagedUpdateInterval: NodeJS.Timeout | null = null
 let packagedUpdateDownloadVersion: string | null = null
 let downloadedNotificationVersion: string | null = null
 let updatedNotificationVersion: string | null = null
+let availableNotificationVersion: string | null = null
 
 function packagedUpdateLogger() {
   return {
@@ -159,13 +160,19 @@ function observePackagedDownload(downloadPromise: Promise<Array<string>> | null 
   })
 }
 
-function showPackagedUpdateNotification(version: string, kind: 'downloaded' | 'updated'): void {
+function showPackagedUpdateNotification(version: string, kind: 'available' | 'downloaded' | 'updated'): void {
   if (!Notification.isSupported()) return
 
-  const title = kind === 'downloaded' ? 'Update Ready' : 'Update Complete'
-  const body = kind === 'downloaded'
-    ? `DataMoat ${version} has been downloaded. Open the app to install it.`
-    : `DataMoat has been updated to version ${version}.`
+  const title = kind === 'available'
+    ? 'Update Available'
+    : kind === 'downloaded'
+      ? 'Update Ready'
+      : 'Update Complete'
+  const body = kind === 'available'
+    ? `DataMoat ${version} is available. Open the app to update.`
+    : kind === 'downloaded'
+      ? `DataMoat ${version} has been downloaded. Open the app to install it.`
+      : `DataMoat has been updated to version ${version}.`
 
   const notification = new Notification({
     title,
@@ -220,8 +227,21 @@ function restartPackagedUpdateLoop(): void {
   if (packagedUpdateTimer) clearTimeout(packagedUpdateTimer)
   if (packagedUpdateInterval) clearInterval(packagedUpdateInterval)
 
-  const support = packagedUpdateSupport()
   const config = loadAppConfig()
+  if (isWindowsManualPackagedUpdateInstall()) {
+    const scheduleRun = () => {
+      void checkForPackagedUpdates('auto').catch(error => {
+        writeLog('warn', 'packaged-update', 'windows_manual_auto_check_failed', {
+          error: error instanceof Error ? error.message : String(error),
+        })
+      })
+    }
+    packagedUpdateTimer = setTimeout(scheduleRun, 15000)
+    packagedUpdateInterval = setInterval(scheduleRun, config.autoUpdateIntervalHours * 60 * 60 * 1000)
+    return
+  }
+
+  const support = packagedUpdateSupport()
   if (!support.supported || !config.autoUpdateEnabled) return
 
   const scheduleRun = () => {
@@ -345,11 +365,22 @@ export async function initializePackagedUpdater(): Promise<void> {
   reconcileInstalledPackagedUpdate()
   const support = packagedUpdateSupport()
   if (!support.supported) {
-    if (isWindowsManualPackagedUpdateInstall()) return
+    if (isWindowsManualPackagedUpdateInstall()) {
+      await selectUpdateFeedBase()
+      packagedUpdateStatePatch({
+        running: false,
+        supported: true,
+        currentVersion: app.getVersion(),
+      })
+      restartPackagedUpdateLoop()
+      return
+    }
     packagedUpdateUnsupportedState(support.reason || 'automatic packaged updates are unavailable')
     return
   }
 
+  // Choose the update feed base (relay if healthy, else direct downloads).
+  await selectUpdateFeedBase()
   configureAutoUpdater()
   installAutoUpdaterEventHandlers()
   reconcileInstalledPackagedUpdate()
@@ -388,6 +419,9 @@ export function savePackagedUpdateSettings(autoUpdateEnabled: boolean): Packaged
 export async function checkForPackagedUpdates(mode: 'auto' | 'manual' = 'manual'): Promise<UpdateState> {
   const support = packagedUpdateSupport()
   if (!support.supported) {
+    if (isWindowsManualPackagedUpdateInstall()) {
+      return await checkForWindowsManualPackagedUpdate()
+    }
     return packagedUpdateUnsupportedState(support.reason || 'automatic packaged updates are unavailable')
   }
 
@@ -406,6 +440,62 @@ export async function checkForPackagedUpdates(mode: 'auto' | 'manual' = 'manual'
     packagedUpdateErrorState(error)
   }
   return loadUpdateState()
+}
+
+async function checkForWindowsManualPackagedUpdate(): Promise<UpdateState> {
+  packagedUpdateStatePatch({
+    running: true,
+    supported: true,
+    lastCheckedAt: new Date().toISOString(),
+    lastResult: 'checking',
+    currentVersion: app.getVersion(),
+    downloadedVersion: null,
+    downloadProgressPercent: null,
+    message: 'checking for Windows packaged updates',
+  })
+
+  try {
+    await selectUpdateFeedBase()
+    const resolved = await resolveWindowsManualUpdate()
+    const currentVersion = app.getVersion()
+    if (!resolved.version) throw new Error('latest Windows update does not include a version')
+
+    if (compareVersions(resolved.version, currentVersion) <= 0) {
+      return packagedUpdateStatePatch({
+        running: false,
+        supported: true,
+        lastCheckedAt: new Date().toISOString(),
+        lastResult: 'up-to-date',
+        currentVersion,
+        availableVersion: resolved.version,
+        downloadedVersion: null,
+        downloadProgressPercent: null,
+        message: `already on version ${currentVersion}`,
+      })
+    }
+
+    const state = packagedUpdateStatePatch({
+      running: false,
+      supported: true,
+      lastCheckedAt: new Date().toISOString(),
+      lastResult: 'available',
+      currentVersion,
+      availableVersion: resolved.version,
+      downloadedVersion: null,
+      downloadProgressPercent: null,
+      message: `Windows version ${resolved.version} is available`,
+    })
+    if (availableNotificationVersion !== resolved.version) {
+      availableNotificationVersion = resolved.version
+      showPackagedUpdateNotification(resolved.version, 'available')
+    }
+    return state
+  } catch (error) {
+    writeLog('warn', 'packaged-update', 'windows_manual_check_failed', {
+      error: packagedUpdateErrorMessage(error),
+    })
+    return packagedUpdateErrorState(error, 'could not check Windows packaged update')
+  }
 }
 
 export async function applyPackagedUpdate(): Promise<UpdateState> {
@@ -604,7 +694,7 @@ async function resolveWindowsManualUpdate(): Promise<{
   releaseUrl: string
 }> {
   const manifestOverride = process.env.DATAMOAT_WINDOWS_UPDATE_MANIFEST_URL?.trim()
-  const manifestUrl = manifestOverride || WINDOWS_UPDATE_MANIFEST_URL
+  const manifestUrl = manifestOverride || effectiveWindowsManifestUrl()
   try {
     return await resolveWindowsManualUpdateFromManifest(manifestUrl)
   } catch (error) {
@@ -613,6 +703,19 @@ async function resolveWindowsManualUpdate(): Promise<{
       error: error instanceof Error ? error.message : String(error),
     })
     if (manifestOverride) throw error
+  }
+  // If the relay manifest was used and failed, try the direct downloads origin
+  // before falling back to GitHub (reachable where GitHub is blocked).
+  const directManifestUrl = `${DOWNLOAD_BASE_URL}/releases/latest/manifest.json`
+  if (manifestUrl !== directManifestUrl) {
+    try {
+      return await resolveWindowsManualUpdateFromManifest(directManifestUrl)
+    } catch (error) {
+      writeLog('warn', 'packaged-update', 'windows_direct_manifest_failed', {
+        manifestUrl: directManifestUrl,
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
   return await resolveWindowsManualUpdateFromGithub()
 }
@@ -693,8 +796,9 @@ async function installLatestWindowsManualUpdate(): Promise<OpenLatestResult> {
       lastCheckedAt: new Date().toISOString(),
       lastResult: 'up-to-date',
       availableVersion: resolved.version,
-      message: `already on version ${currentVersion}`,
+      message: `already on version ${currentVersion}; opened latest release page`,
     })
+    await shell.openExternal(resolved.releaseUrl)
     return { ok: true, url: resolved.releaseUrl, state, manualUpdateStarted: false, version: resolved.version, assetName: resolved.assetName }
   }
 
@@ -745,7 +849,13 @@ async function installLatestWindowsManualUpdate(): Promise<OpenLatestResult> {
 export async function openPackagedReleasePage(): Promise<OpenLatestResult> {
   const url = updateReleasesUrl()
   if (isWindowsManualPackagedUpdateInstall()) {
-    return await installLatestWindowsManualUpdate()
+    try {
+      return await installLatestWindowsManualUpdate()
+    } catch (error) {
+      const state = packagedUpdateErrorState(error, 'could not install Windows packaged update; opened latest release page')
+      await shell.openExternal(url)
+      return { ok: true, url, state, manualUpdateStarted: false }
+    }
   }
   await shell.openExternal(url)
   return { ok: true, url, manualUpdateStarted: false }

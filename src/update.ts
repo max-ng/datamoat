@@ -1,7 +1,7 @@
 import * as child_process from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
-import { InstallMode, UpdateStrategy, detectInstallContext } from './install-context'
+import { InstallMode, UpdateStrategy, detectInstallContext, installRoot } from './install-context'
 import { ensureDaemonRunning, findDaemonPids, nodeBinaryForBuildTasks, stopDaemonPids } from './runtime'
 import { isBranchAllowed, isBranchNameSafe, isRemoteAllowed, remoteToDisplay } from './update-policy'
 
@@ -31,6 +31,8 @@ export type UpdateStatus =
       ahead: number
       behind: number
       clean: boolean
+      needsReinstall: boolean
+      reinstallReason: string | null
     }
 
 export function updateBlockReason(status: UpdateStatus): string | null {
@@ -38,7 +40,42 @@ export function updateBlockReason(status: UpdateStatus): string | null {
   if (!status.clean) return 'working tree has local changes; skipping automatic update'
   if (status.ahead > 0 && status.behind > 0) return 'local branch has diverged from origin; manual merge required'
   if (status.ahead > 0) return 'local branch has local commits; skipping automatic update'
+  if (status.needsReinstall) return null
   if (status.behind === 0) return 'already up to date'
+  return null
+}
+
+function packageVersion(root: string): string | null {
+  try {
+    const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { version?: unknown }
+    return typeof packageJson.version === 'string' && packageJson.version.trim()
+      ? packageJson.version.trim()
+      : null
+  } catch {
+    return null
+  }
+}
+
+function shortCommit(value: string): string {
+  return value.slice(0, 12)
+}
+
+function sourceCopyReinstallReason(sourceRoot: string, sourceCommit: string): string | null {
+  const installedRoot = installRoot()
+  if (path.resolve(installedRoot) === path.resolve(sourceRoot)) return null
+
+  const context = detectInstallContext()
+  const installedCommit = context.installInfo?.sourceCommit?.trim()
+  if (installedCommit && installedCommit !== sourceCommit) {
+    return `installed app was built from ${shortCommit(installedCommit)}; source checkout is ${shortCommit(sourceCommit)}`
+  }
+
+  const sourceVersion = packageVersion(sourceRoot)
+  const installedVersion = packageVersion(installedRoot)
+  if (!installedCommit && sourceVersion && installedVersion && sourceVersion !== installedVersion) {
+    return `installed app version ${installedVersion} is behind source version ${sourceVersion}`
+  }
+
   return null
 }
 
@@ -87,6 +124,9 @@ export function checkForUpdate(): UpdateStatus {
     const ahead = Number(run('git', ['rev-list', '--count', `origin/${branch}..HEAD`], context.root) || '0')
     const behind = Number(run('git', ['rev-list', '--count', `HEAD..origin/${branch}`], context.root) || '0')
     const clean = run('git', ['status', '--porcelain'], context.root).length === 0
+    const reinstallReason = context.mode === 'source-copy'
+      ? sourceCopyReinstallReason(context.root, current)
+      : null
     return {
       supported: true,
       mode: context.mode,
@@ -98,6 +138,8 @@ export function checkForUpdate(): UpdateStatus {
       ahead,
       behind,
       clean,
+      needsReinstall: !!reinstallReason,
+      reinstallReason,
     }
   } catch (error) {
     return {
@@ -115,11 +157,11 @@ export async function applyUpdate(): Promise<{ updated: boolean; root: string; v
   if (!status.clean) throw new Error('update blocked: working tree has local changes')
   if (status.ahead > 0 && status.behind > 0) throw new Error('update blocked: local branch has diverged from origin')
   if (status.ahead > 0) throw new Error('update blocked: local branch has local commits')
-  if (status.behind === 0) {
+  if (status.behind === 0 && !status.needsReinstall) {
     return { updated: false, root: status.root, version: status.current }
   }
 
-  run('git', ['pull', '--ff-only', 'origin', status.branch], status.root)
+  if (status.behind > 0) run('git', ['pull', '--ff-only', 'origin', status.branch], status.root)
   const installScript = path.join(status.root, 'install.sh')
   const env = installScriptEnv()
 

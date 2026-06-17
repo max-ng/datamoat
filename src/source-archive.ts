@@ -55,6 +55,19 @@ export type SourceArchivePendingCleanupResult = {
   errors: Array<{ archive: string; file?: string; error: string }>
 }
 
+export type SourceArchiveSummary = {
+  chunks: number
+  rawRecords: number
+  rawBytes: number
+  firstRawHash: string
+  lastRawHash: string
+  fingerprint: string
+}
+
+export type SourceArchiveCopyResult = SourceArchiveSummary & {
+  copiedChunks: number
+}
+
 function archiveDirFromRoot(rawArchiveRoot: string, source: Source, sessionUid: string): string {
   return path.join(rawArchiveRoot, source, sessionUid)
 }
@@ -89,6 +102,10 @@ function pendingEntryPath(source: Source, sessionUid: string, chunkId: string): 
 
 function sha256Hex(data: Buffer | string): string {
   return crypto.createHash('sha256').update(data).digest('hex')
+}
+
+function countJsonlRecords(bytes: Buffer): number {
+  return bytes.toString('utf8').split('\n').filter(line => line.trim().length > 0).length
 }
 
 function chunkKey(chunk: SourceArchiveChunk): string {
@@ -387,6 +404,123 @@ export async function readSourceArchiveRawRecordsFromRoot(sessionId: string, raw
     records.push(...recordsFromChunk(source, chunk, raw))
   }
   return records
+}
+
+function emptyArchiveSummary(): SourceArchiveSummary {
+  return {
+    chunks: 0,
+    rawRecords: 0,
+    rawBytes: 0,
+    firstRawHash: '',
+    lastRawHash: '',
+    fingerprint: '',
+  }
+}
+
+function summarizeArchiveChunks(chunks: SourceArchiveChunk[]): SourceArchiveSummary {
+  if (chunks.length === 0) return emptyArchiveSummary()
+  let rawRecords = 0
+  let rawBytes = 0
+  const fingerprints: string[] = []
+  for (const chunk of chunks) {
+    rawRecords += Math.max(0, Number(chunk.recordCount || 0))
+    rawBytes += Math.max(0, Number(chunk.rawBytes || 0))
+    fingerprints.push([
+      chunk.id,
+      chunk.sourcePath,
+      chunk.startOffset,
+      chunk.endOffset,
+      chunk.rawSha256,
+      chunk.recordFormat || '',
+      chunk.recordCount ?? '',
+    ].join('\0'))
+  }
+  return {
+    chunks: chunks.length,
+    rawRecords,
+    rawBytes,
+    firstRawHash: chunks[0]?.rawSha256 || '',
+    lastRawHash: chunks[chunks.length - 1]?.rawSha256 || '',
+    fingerprint: sha256Hex(fingerprints.join('\n')),
+  }
+}
+
+export async function summarizeSourceArchiveFromRoot(
+  sessionId: string,
+  rawArchiveRoot: string,
+  source: Source,
+  sessionUid: string,
+): Promise<SourceArchiveSummary> {
+  if (!hasArchiveIndex(rawArchiveRoot, source, sessionUid)) return emptyArchiveSummary()
+  const manifest = await readManifestFromRoot(sessionId, rawArchiveRoot, source, sessionUid)
+  return summarizeArchiveChunks(manifest.chunks)
+}
+
+export async function copySourceArchiveFromRoot(
+  sourceSessionId: string,
+  sourceRawArchiveRoot: string,
+  destinationSessionId: string,
+  source: Source,
+  sourceUid: string,
+  destinationUid: string,
+): Promise<SourceArchiveCopyResult> {
+  if (!hasArchiveIndex(sourceRawArchiveRoot, source, sourceUid)) {
+    return { ...emptyArchiveSummary(), copiedChunks: 0 }
+  }
+
+  const sourceManifest = await readManifestFromRoot(sourceSessionId, sourceRawArchiveRoot, source, sourceUid)
+  const destinationManifest = await readManifest(destinationSessionId, source, destinationUid)
+  const existing = new Set(destinationManifest.chunks.map(chunk => chunkKey(chunk)))
+  let copiedChunks = 0
+  let rawRecords = 0
+  let rawBytes = 0
+  const copied: SourceArchiveChunk[] = []
+
+  for (const chunk of sourceManifest.chunks) {
+    const encryptedPath = chunkPathFromRoot(sourceRawArchiveRoot, source, sourceUid, chunk.id)
+    if (!fs.existsSync(encryptedPath)) {
+      throw new Error(`raw archive chunk missing: ${source}/${sourceUid}/${chunk.id}`)
+    }
+    const compressed = await decryptBytesForSession(sourceSessionId, fs.readFileSync(encryptedPath))
+    if (sha256Hex(compressed) !== chunk.compressedSha256) {
+      throw new Error(`raw archive compressed hash mismatch: ${source}/${sourceUid}/${chunk.id}`)
+    }
+    const raw = zlib.gunzipSync(compressed)
+    if (sha256Hex(raw) !== chunk.rawSha256) {
+      throw new Error(`raw archive hash mismatch: ${source}/${sourceUid}/${chunk.id}`)
+    }
+
+    const recordCount = Math.max(0, Number(chunk.recordCount || 0)) || countJsonlRecords(raw)
+    const normalizedChunk: SourceArchiveChunk = { ...chunk, recordCount }
+    rawRecords += recordCount
+    rawBytes += Math.max(0, Number(chunk.rawBytes || raw.length))
+    copied.push(normalizedChunk)
+    const key = chunkKey(normalizedChunk)
+    if (existing.has(key)) continue
+
+    const encrypted = await encryptBytesForSession(destinationSessionId, compressed)
+    writePrivateBytes(chunkPath(source, destinationUid, chunk.id), encrypted)
+    destinationManifest.chunks.push(normalizedChunk)
+    existing.add(key)
+    copiedChunks += 1
+  }
+
+  if (copiedChunks > 0) {
+    await writeManifest(destinationSessionId, {
+      version: 1,
+      source,
+      sessionUid: destinationUid,
+      chunks: dedupeChunks(destinationManifest.chunks),
+    })
+  }
+
+  const summary = summarizeArchiveChunks(copied)
+  return {
+    ...summary,
+    rawRecords,
+    rawBytes,
+    copiedChunks,
+  }
 }
 
 export async function forEachSourceArchiveRawRecordBatch(

@@ -43,6 +43,7 @@ import { authConfigHasTouchId, shouldExposeTouchIdUnlock, touchIdFailureNeedsPas
 import { IS_MAC, secureEnclaveStatus, backgroundCaptureSecretDelete } from '../keychain'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from '../logging'
 import { scheduleVaultDuplicateMaintenance } from '../vault-maintenance'
+import { scheduleVaultLineRepair } from '../vault-line-repair'
 import {
   appendAnnotationOps,
   buildAnnotationOp,
@@ -775,9 +776,11 @@ async function activateVault(
   options: {
     skipBackgroundCaptureSetup?: boolean
     skipBackgroundCaptureStart?: boolean
+    deferBackgroundCaptureStart?: boolean
     skipWatcherStart?: boolean
     suppressCaptureWarning?: boolean
     parserReparse?: 'await' | 'background' | 'skip'
+    initialCaptureQueueTimeoutMs?: number
     bootstrapImportProgress?: (progress: BootstrapImportProgress) => void
     setupProgress?: (progress: Partial<SetupActivationProgress>) => void
   } = {},
@@ -794,6 +797,7 @@ async function activateVault(
   writeLog('info', 'auth', 'activate_vault_started', {
     skipBackgroundCaptureSetup: !!options.skipBackgroundCaptureSetup,
     skipBackgroundCaptureStart: !!options.skipBackgroundCaptureStart,
+    deferBackgroundCaptureStart: !!options.deferBackgroundCaptureStart,
     skipWatcherStart: !!options.skipWatcherStart,
     suppressCaptureWarning: !!options.suppressCaptureWarning,
   })
@@ -885,10 +889,65 @@ async function activateVault(
     writeAuditEvent('storage', 'state_storage_migrated', stateMigration)
   }
   let backgroundStarted = false
+  let backgroundStartDeferred = false
   if (options.skipBackgroundCaptureStart) {
     writeLog('info', 'capture', 'background_capture_start_skipped', {
       reason: 'recovery_unlock',
     })
+  } else if (options.deferBackgroundCaptureStart) {
+    backgroundStartDeferred = true
+    const parserReparseMode = options.parserReparse ?? 'background'
+    const deferredAt = new Date().toISOString()
+    writeLog('info', 'auth', 'activate_vault_step', {
+      step: 'background_start_deferred',
+      parserReparse: parserReparseMode,
+      initialCaptureQueueTimeoutMs: options.initialCaptureQueueTimeoutMs,
+    })
+    updateHealth('capture', {
+      configured: backgroundConfigured,
+      running: false,
+      deferredStartAt: deferredAt,
+      lastSkippedAt: null,
+      lastSkippedReason: null,
+      lastErrorAt: null,
+      lastError: null,
+    })
+    updateHealth('daemon', {
+      captureRunning: false,
+      captureStartDeferredAt: deferredAt,
+    })
+    setTimeout(() => {
+      void startBackgroundCapture({
+        parserReparse: parserReparseMode,
+        initialQueueTimeoutMs: options.initialCaptureQueueTimeoutMs,
+      })
+        .then(started => {
+          writeLog('info', 'auth', 'activate_vault_step', {
+            step: 'background_start_deferred_done',
+            backgroundStarted: started,
+          })
+          updateHealth('capture', {
+            running: started,
+            deferredStartedAt: new Date().toISOString(),
+            lastErrorAt: started ? null : new Date().toISOString(),
+            lastError: started ? null : 'deferred background capture did not start',
+          })
+          updateHealth('daemon', {
+            captureRunning: started,
+          })
+        })
+        .catch(error => {
+          writeLog('warn', 'capture', 'background_capture_deferred_start_failed', { error })
+          updateHealth('capture', {
+            running: false,
+            lastErrorAt: new Date().toISOString(),
+            lastError: error instanceof Error ? error.message : String(error),
+          })
+          updateHealth('daemon', {
+            captureRunning: false,
+          })
+        })
+    }, 0)
   } else {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'background_start_start' })
     const visibleSessions = Math.max(0, Number(readPublicStatus()?.totalSessions || 0))
@@ -908,10 +967,13 @@ async function activateVault(
       progressText: visibleSessions > 0 ? 'indexing' : 'scanning',
       stepText: visibleSessions > 0 ? 'Indexing sessions' : 'Scanning local records',
     })
-    backgroundStarted = await startBackgroundCapture({ parserReparse: options.parserReparse ?? 'background' })
+    backgroundStarted = await startBackgroundCapture({
+      parserReparse: options.parserReparse ?? 'background',
+      initialQueueTimeoutMs: options.initialCaptureQueueTimeoutMs,
+    })
     writeLog('info', 'auth', 'activate_vault_step', { step: 'background_start_done', backgroundStarted })
   }
-  if (!backgroundStarted && !options.skipWatcherStart) {
+  if (!backgroundStarted && !backgroundStartDeferred && !options.skipWatcherStart) {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_start' })
     writeLog('info', 'parser-reparse', 'foreground_watcher_reparse_deferred')
     const visibleSessions = Math.max(0, Number(readPublicStatus()?.totalSessions || 0))
@@ -931,7 +993,7 @@ async function activateVault(
       progressText: visibleSessions > 0 ? 'indexing' : 'scanning',
       stepText: visibleSessions > 0 ? 'Indexing sessions' : 'Scanning local records',
     })
-    await startWatchers('vault')
+    await startWatchers('vault', { initialQueueTimeoutMs: options.initialCaptureQueueTimeoutMs })
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_done' })
   } else if (!backgroundStarted && options.skipWatcherStart) {
     writeLog('info', 'auth', 'activate_vault_step', { step: 'watchers_start_deferred' })
@@ -969,17 +1031,18 @@ async function activateVault(
   scheduleReferencedAttachmentBackfillAfterUnlock('unlock-idle')
   scheduleSourceArchivePendingCleanup('unlock-idle')
   scheduleVaultDuplicateMaintenance('unlock-idle')
+  scheduleVaultLineRepair('unlock-idle')
   updateHealth('daemon', {
     locked: false,
     unlockedAt: new Date().toISOString(),
-    captureRunning: backgroundStarted,
+    captureRunning: backgroundStarted || backgroundStartDeferred,
     bootstrapImportedFiles: bootstrapImport.importedFiles,
     bootstrapImportedMessages: bootstrapImport.importedMessages,
     bootstrapRemainingFiles: bootstrapImport.remainingFiles,
   })
   updateHealth('capture', {
     configured: backgroundConfigured,
-    running: backgroundStarted,
+    running: backgroundStarted || backgroundStartDeferred,
   })
   report({
     phase: 'done',
@@ -992,13 +1055,14 @@ async function activateVault(
     ...stateMigration,
     backgroundConfigured,
     backgroundStarted,
+    backgroundStartDeferred,
     bootstrapImportedFiles: bootstrapImport.importedFiles,
     bootstrapImportedMessages: bootstrapImport.importedMessages,
     bootstrapRemainingFiles: bootstrapImport.remainingFiles,
   })
   const captureWarning = options.suppressCaptureWarning
     ? null
-    : backgroundStarted
+    : backgroundStarted || backgroundStartDeferred
     ? null
     : 'Background capture is unavailable right now on this install. DataMoat will continue capturing only while the vault stays unlocked until the local OS secret store becomes available again.'
   return { backgroundConfigured, backgroundStarted, captureWarning }
@@ -1120,6 +1184,7 @@ async function activateVaultForSetup(
   return activateVault(helperSessionId, {
     suppressCaptureWarning: true,
     parserReparse: 'skip',
+    initialCaptureQueueTimeoutMs: 0,
     bootstrapImportProgress,
     setupProgress,
   })
@@ -1581,6 +1646,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     res.json({
       ...saveUiPreferences({
         language: req.body?.language,
+        theme: req.body?.theme,
         readableMessageFormatting: req.body?.readableMessageFormatting,
       }),
       supportedLanguages: SUPPORTED_UI_LANGUAGES,
@@ -2023,7 +2089,9 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       const flow = pendingAuth.flow
       clearPendingAuth(res)
       try {
-        const activation = await activateVault(helperSessionId)
+        const activation = await activateVault(helperSessionId, {
+          deferBackgroundCaptureStart: true,
+        })
         if (flow === 'password_totp') scheduleTouchIdRepairAfterUnlock(helperSessionId, 'password_totp_unlock')
         clearAuthAttempts()
         recordAuthSuccess('totp')
@@ -2106,7 +2174,9 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     }
 
     try {
-      const activation = await activateVault(helperSessionId)
+      const activation = await activateVault(helperSessionId, {
+        deferBackgroundCaptureStart: true,
+      })
       scheduleTouchIdRepairAfterUnlock(helperSessionId, 'password_unlock')
       clearAuthAttempts()
       recordAuthSuccess('password')
@@ -2202,7 +2272,9 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         beginPendingAuth(helperSessionId, 'touchid_totp', res)
         return res.json({ ok: false, needsTotp: true })
       }
-      const activation = await activateVault(helperSessionId)
+      const activation = await activateVault(helperSessionId, {
+        deferBackgroundCaptureStart: true,
+      })
       clearAuthAttempts()
       recordAuthSuccess('touchid')
       issueSession(res, 'touchid')
@@ -2863,6 +2935,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         const helperSessionId = getVaultSessionId()
         if (!helperSessionId) return res.status(500).json({ error: 'transferred vault key unavailable', job })
         const activation = await activateVault(helperSessionId, {
+          initialCaptureQueueTimeoutMs: mode === 'adopt' ? 0 : undefined,
           setupProgress: mode === 'adopt' ? updateSetupActivationProgress : undefined,
         })
         clearAuthAttempts()
@@ -2934,15 +3007,17 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
 
     const reason = updateBlockReason(status)
     const isCurrent = reason === 'already up to date'
-    const lastResult = status.behind > 0 && !reason
+    const lastResult = (status.behind > 0 || status.needsReinstall) && !reason
       ? 'available'
       : isCurrent
         ? 'up-to-date'
         : 'blocked'
 
-    const message = !reason
-      ? `${status.behind} update${status.behind === 1 ? '' : 's'} available on origin/${status.branch}`
-      : reason
+    const message = status.needsReinstall && status.reinstallReason
+      ? status.reinstallReason
+      : (!reason
+        ? `${status.behind} update${status.behind === 1 ? '' : 's'} available on origin/${status.branch}`
+        : reason)
 
     res.json(writeUpdateState({
       running: isUpdateRunning(),
@@ -4110,13 +4185,19 @@ function initialUiLanguage(): string {
   return readUiPreferences().language
 }
 
+function initialUiTheme(): string {
+  return readUiPreferences().theme
+}
+
 function localizedIndexHTML(): string | null {
   const language = initialUiLanguage()
+  const theme = initialUiTheme()
   try {
     const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
     return html
-      .replace('<html lang="en">', `<html lang="${language}">`)
+      .replace('<html lang="en">', `<html lang="${language}" data-theme="${theme}">`)
       .replace("let appLanguage = 'en'", `let appLanguage = ${JSON.stringify(language)}`)
+      .replace("let appTheme = 'dark'", `let appTheme = ${JSON.stringify(theme)}`)
   } catch (error) {
     writeLog('warn', 'ui', 'localized_index_html_failed', { error })
     return null

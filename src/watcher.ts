@@ -401,6 +401,9 @@ let offsetsPromise: Promise<OffsetState> | null = null
 let processQueue = Promise.resolve()
 let processQueueRunning = false
 type WatcherMode = 'vault' | 'bootstrap'
+type StartWatchersOptions = {
+  initialQueueTimeoutMs?: number
+}
 let watcherMode: WatcherMode = 'vault'
 let watcherStartupProgress: WatcherStartupProgress = {
   running: false,
@@ -437,7 +440,10 @@ type ProcessJob = {
 const pendingProcessJobs: ProcessJob[] = []
 
 const WATCHER_READY_TIMEOUT_MS = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_READY_TIMEOUT_MS, 10_000)
-const WATCHER_INITIAL_QUEUE_TIMEOUT_MS = nonNegativeTimeoutMs(process.env.DATAMOAT_WATCHER_INITIAL_QUEUE_TIMEOUT_MS, 0)
+// Normal startup should not wait for the whole historical no-op scan before
+// unlock. First-run setup passes 0 explicitly so the main UI opens with the
+// complete captured session list instead of incrementing from a partial count.
+const WATCHER_INITIAL_QUEUE_TIMEOUT_MS = nonNegativeTimeoutMs(process.env.DATAMOAT_WATCHER_INITIAL_QUEUE_TIMEOUT_MS, 2_000)
 const WATCHER_YIELD_EVERY_LINES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_YIELD_EVERY_LINES, 100)
 const WATCHER_MAX_BATCH_BYTES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_MAX_BATCH_BYTES, 512 * 1024)
 const WATCHER_MAX_RECORD_BYTES = positiveTimeoutMs(process.env.DATAMOAT_WATCHER_MAX_RECORD_BYTES, 32 * 1024 * 1024)
@@ -1138,7 +1144,7 @@ async function loadWatcherOffsets(mode: WatcherMode): Promise<OffsetState> {
   return mode === 'bootstrap' ? loadBootstrapOffsetState() : loadOffsets()
 }
 
-export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> {
+export async function startWatchers(mode: WatcherMode = 'vault', options: StartWatchersOptions = {}): Promise<void> {
   if (watchersStarted && watcherMode === mode) return
   if (watchersStarted && watcherMode !== mode) await stopWatchers()
   watcherMode = mode
@@ -1228,11 +1234,14 @@ export async function startWatchers(mode: WatcherMode = 'vault'): Promise<void> 
     running: watcherStartupProgress.processedSessions < watcherStartupProgress.queuedSessions,
     watcherCount: activeWatchers.length,
   })
+  const initialQueueTimeoutMs = Number.isFinite(options.initialQueueTimeoutMs) && options.initialQueueTimeoutMs! >= 0
+    ? options.initialQueueTimeoutMs!
+    : WATCHER_INITIAL_QUEUE_TIMEOUT_MS
   const queueStatus = await waitForStartupPhase(
     'initial_queue',
     processQueue,
-    WATCHER_INITIAL_QUEUE_TIMEOUT_MS,
-    { mode, watcherCount: activeWatchers.length },
+    initialQueueTimeoutMs,
+    { mode, watcherCount: activeWatchers.length, initialQueueTimeoutMs },
   )
   if (queueStatus === 'completed') {
     updateWatcherStartupProgress({
@@ -1312,6 +1321,14 @@ function startProcessQueue(): void {
   if (processQueueRunning) return
   processQueueRunning = true
   processQueue = drainProcessQueue()
+}
+
+// Queues a full reprocess of one watched source file through the normal
+// capture queue (serialized with live capture jobs). Used by vault line repair
+// after it wipes a damaged session and resets the file's offset to zero.
+export function requestSourceFileReprocess(filePath: string, source: Source): void {
+  if (!fs.existsSync(filePath)) return
+  queueProcessFile(filePath, source, 'change')
 }
 
 function nextProcessJob(): ProcessJob | undefined {

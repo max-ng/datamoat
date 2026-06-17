@@ -410,6 +410,13 @@ function readBackgroundMaintenanceState(): BackgroundMaintenanceState | null {
   }
 }
 
+// Lets vault line repair defer while duplicate maintenance is mid-run, so the
+// two never rewrite the same session file concurrently.
+export function isBackgroundMaintenanceRunning(): boolean {
+  if (scheduledMaintenance) return true
+  return readBackgroundMaintenanceState()?.status === 'running'
+}
+
 function mergeSessionCompactResult(totals: VaultMaintenanceResult, result: VaultSessionCompactResult): void {
   totals.sessionsChecked += 1
   totals.rawSessionsChecked += 1

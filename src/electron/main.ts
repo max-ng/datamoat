@@ -3,7 +3,7 @@ import * as child_process from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
 import { diskRuntimeBuildId, currentRuntimeBuildId, ensureDaemonRunning, findDaemonPids, resolveActivePort, stopDaemonPids } from '../runtime'
-import { HEALTH_FILE, PUBLIC_STATUS_FILE } from '../config'
+import { HEALTH_FILE, PUBLIC_STATUS_FILE, STATE_DIR } from '../config'
 import { isSetupDone } from '../auth'
 import { disableBootstrapCapture, enableBootstrapCapture, isBootstrapCaptureEnabled, loadBootstrapCaptureState, preflightBootstrapCaptureDetailed } from '../bootstrap-capture'
 import { detectInstallContext } from '../install-context'
@@ -62,6 +62,7 @@ let trayOnlyLaunch = process.env.DATAMOAT_TRAY_ONLY === '1'
   || remoteNoScreenLaunch
 const runtimeIcon = resolveRuntimeIcon()
 const trayTemplateAsset = process.platform === 'darwin' ? resolveTrayTemplateAsset() : null
+const TRANSFER_IMPORT_JOB_FILE = path.join(STATE_DIR, 'transfer-import-job.json')
 
 const smokeRemoteDebugPort = process.env.DATAMOAT_ELECTRON_SMOKE === '1'
   ? (process.env.DATAMOAT_ELECTRON_REMOTE_DEBUG_PORT || process.argv.find(arg => arg.startsWith('--remote-debugging-port='))?.split('=')[1] || '')
@@ -1006,6 +1007,12 @@ function readJsonFile<T>(filePath: string): T | null {
   }
 }
 
+function transferImportJobIsActive(): boolean {
+  const job = readJsonFile<any>(TRANSFER_IMPORT_JOB_FILE)
+  if (!job || job.done === true) return false
+  return job.phase !== 'completed' && job.phase !== 'failed' && job.phase !== 'cancelled'
+}
+
 function currentTrayStatus(): TrayStatus {
   const health = readJsonFile<any>(HEALTH_FILE)
   const publicStatus = readJsonFile<any>(PUBLIC_STATUS_FILE)
@@ -1150,6 +1157,14 @@ async function ensureExistingWindowRuntime(win: BrowserWindow, reason: string, f
 
 function ensureDaemonRecoveredInBackground(reason: string): void {
   if (quitRequested) return
+  if (transferImportJobIsActive()) {
+    updateHealth('electron', {
+      daemonRecoverySkippedAt: new Date().toISOString(),
+      daemonRecoverySkippedReason: reason,
+      daemonRecoverySkippedCause: 'transfer-import-active',
+    })
+    return
+  }
   void (async () => {
     try {
       const runtime = await ensureHealthyRuntime(reason)
@@ -1171,6 +1186,7 @@ function ensureDaemonRecoveredInBackground(reason: string): void {
 }
 
 async function revealMainWindow(): Promise<void> {
+  console.error('[DM-DIAG] revealMainWindow entry usableWindow=', !!usableWindow(), 'mainWindowCreation=', !!mainWindowCreation)
   if (mainWindowCreation) {
     revealAfterWindowCreation = true
     try {
@@ -1184,10 +1200,17 @@ async function revealMainWindow(): Promise<void> {
   if (!win) {
     trayOnlyLaunch = false
     setMacActivation('regular')
-    await createMainWindow(true)
+    console.error('[DM-DIAG] revealMainWindow -> createMainWindow(true) [no existing window]')
+    try {
+      await createMainWindow(true)
+      console.error('[DM-DIAG] revealMainWindow -> createMainWindow returned OK; renderer should be up')
+    } catch (e) {
+      console.error('[DM-DIAG] revealMainWindow -> createMainWindow THREW:', e instanceof Error ? e.stack || e.message : String(e))
+    }
     return
   }
 
+  console.error('[DM-DIAG] revealMainWindow -> existing window branch; isVisible=', (()=>{try{return win.isVisible()}catch{return 'err'}})())
   setMacActivation('regular')
   setDockVisibility(true)
   let runtimeLoaded = await ensureExistingWindowRuntime(win, 'reveal-main-window')
@@ -1298,7 +1321,9 @@ async function createMainWindow(showOnReady = true): Promise<void> {
 }
 
 async function createMainWindowInner(showOnReady = true): Promise<void> {
+  console.error('[DM-DIAG] createMainWindowInner entry showOnReady=', showOnReady, 'revealAfter=', revealAfterWindowCreation)
   const runtime = await ensureHealthyRuntime('create-window')
+  console.error('[DM-DIAG] createMainWindowInner ensureHealthyRuntime url=', runtime.url, 'port=', runtime.port)
   updateHealth('electron', { running: true, port: runtime.port, startedAt: new Date().toISOString() })
   if (process.platform === 'darwin') {
     app.dock?.setIcon(runtimeIcon)
@@ -1335,11 +1360,13 @@ async function createMainWindowInner(showOnReady = true): Promise<void> {
   })
 
   win.once('ready-to-show', () => {
+    console.error('[DM-DIAG] ready-to-show fired usable=', windowIsUsable(win), 'showOnReady=', showOnReady, 'revealAfter=', revealAfterWindowCreation)
     if (!windowIsUsable(win)) return
     if (showOnReady || revealAfterWindowCreation) {
       setDockVisibility(true)
       try {
         win.show()
+        console.error('[DM-DIAG] ready-to-show -> win.show() called; isVisible=', (()=>{try{return win.isVisible()}catch{return 'err'}})())
         if (process.platform === 'linux') {
           win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
         }
@@ -1392,6 +1419,7 @@ async function createMainWindowInner(showOnReady = true): Promise<void> {
   })
 
   const loaded = await loadRuntimeUrl(win, runtime.url, 'create-window')
+  console.error('[DM-DIAG] loadRuntimeUrl loaded=', loaded, 'isVisible=', (()=>{try{return win.isVisible()}catch{return 'err'}})())
   if (!loaded && (showOnReady || revealAfterWindowCreation)) {
     setTimeout(() => {
       if (!windowIsUsable(win)) return
@@ -1734,6 +1762,7 @@ function resolveInstallChoiceOnStartup(): 'continue' | 'quit' {
   }
 
   const state = detectDualInstallState()
+  console.error('[DM-DIAG] installChoice state eligible=', state.eligible, 'hasBoth=', state.hasBoth, 'currentVariant=', state.currentVariant, 'storedChoice=', JSON.stringify(state.storedChoice), 'trayOnlyLaunch=', trayOnlyLaunch)
   if (!state.eligible || !state.hasBoth) return 'continue'
 
   const storedChoiceIsCurrent = installChoiceMatchesState(state.storedChoice, state)
@@ -1935,7 +1964,8 @@ if (rejectWindowsSystemLaunchIfNeeded()) {
   installDesktopIpc()
 
   app.on('second-instance', (_event, argv) => {
-    if (relaunchIfRunningFromReplacedBundle('second-instance')) return
+    console.error('[DM-DIAG] second-instance fired argv=', JSON.stringify(argv))
+    if (relaunchIfRunningFromReplacedBundle('second-instance')) { console.error('[DM-DIAG] second-instance -> relaunch (build replaced)'); return }
     applyUiLanguageOverrideFromArgv(argv, 'second-instance')
     if (argvRequestsRemoteNoScreen(argv)) {
       if (!usableWindow() && !mainWindowCreation) {
@@ -1951,9 +1981,11 @@ if (rejectWindowsSystemLaunchIfNeeded()) {
 
     trayOnlyLaunch = false
     if (resolveInstallChoiceOnStartup() === 'quit') {
+      console.error('[DM-DIAG] second-instance -> install choice QUIT')
       app.quit()
       return
     }
+    console.error('[DM-DIAG] second-instance -> revealMainWindow()')
     void revealMainWindow()
   })
 
@@ -2017,12 +2049,15 @@ if (rejectWindowsSystemLaunchIfNeeded()) {
     }
 
     app.on('activate', async () => {
-      if (relaunchIfRunningFromReplacedBundle('activate')) return
+      console.error('[DM-DIAG] activate fired')
+      if (relaunchIfRunningFromReplacedBundle('activate')) { console.error('[DM-DIAG] activate -> relaunch (build replaced)'); return }
       trayOnlyLaunch = false
       if (resolveInstallChoiceOnStartup() === 'quit') {
+        console.error('[DM-DIAG] activate -> install choice QUIT')
         app.quit()
         return
       }
+      console.error('[DM-DIAG] activate -> revealMainWindow()')
       await revealMainWindow()
     })
   }).catch(error => {

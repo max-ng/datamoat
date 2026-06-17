@@ -99,6 +99,10 @@ if [[ "$(uname)" == "Linux" ]]; then
 fi
 
 mkdir -p "$HOME/.datamoat/state"
+SOURCE_COMMIT=""
+if git -C "$SOURCE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  SOURCE_COMMIT="$(git -C "$SOURCE_DIR" rev-parse HEAD 2>/dev/null || true)"
+fi
 
 if [ "$BOOTSTRAP_CAPTURE" -eq 1 ]; then
   if ! "$NODE_BIN" -e "const m=require('$INSTALL_DIR/dist/bootstrap-capture.js'); Promise.resolve(m.preflightBootstrapCapture()).then(ok=>process.exit(ok?0:1)).catch(()=>process.exit(1))"; then
@@ -117,6 +121,7 @@ cat > "$HOME/.datamoat/state/install-source.json" << EOF
   "sourceRoot": "${SOURCE_DIR}",
   "nodeBin": "${NODE_BIN}",
   "scriptLauncherBin": "${SOURCE_APP_BIN}",
+  "sourceCommit": "${SOURCE_COMMIT}",
   "installedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "mode": "source-copy"
 }

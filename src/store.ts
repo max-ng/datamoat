@@ -667,15 +667,18 @@ export async function upsertSession(session: Session): Promise<void> {
 }
 
 export async function appendMessages(session: Session, messages: Message[]): Promise<void> {
+  await appendSerializedMessages(session, messages.map(message => JSON.stringify(message)))
+}
+
+export async function appendSerializedMessages(session: Session, serialized: string[]): Promise<void> {
   const filePath = path.join(VAULT_DIR, session.vaultPath)
   const dir = path.dirname(filePath)
   ensurePrivateDir(dir)
-  if (messages.length === 0) {
+  if (serialized.length === 0) {
     if (!fs.existsSync(filePath)) writePrivateText(filePath, '')
     return
   }
 
-  const serialized = messages.map(message => JSON.stringify(message))
   const encrypted = await encryptLinesForSession(requireWriteSession(), serialized)
   fs.appendFileSync(filePath, `${encrypted.join('\n')}\n`, { encoding: 'utf8', mode: 0o600 })
   try {
@@ -702,12 +705,13 @@ export function makeRawPath(source: Source, sessionUid: string): string {
 }
 
 function rawRecordDedupeKey(record: RawRecord): string {
-  return JSON.stringify({
-    sourcePath: record.sourcePath || '',
-    sourceByteOffset: record.sourceByteOffset ?? null,
-    rawHash: record.rawHash || '',
-    raw: record.raw ?? null,
-  })
+  return [
+    record.source || '',
+    record.sourcePath || '',
+    record.sourceByteOffset ?? '',
+    record.rawHash || '',
+    record.capturedAt || '',
+  ].join('\0')
 }
 
 function dedupeRawRecords(records: RawRecord[]): RawRecord[] {
@@ -731,12 +735,15 @@ function parseRawRecordLine(line: string): RawRecord | null {
 }
 
 export async function appendRawRecords(source: Source, sessionUid: string, records: RawRecord[]): Promise<void> {
-  if (records.length === 0) return
+  await appendSerializedRawRecords(source, sessionUid, records.map(record => JSON.stringify(record)))
+}
+
+export async function appendSerializedRawRecords(source: Source, sessionUid: string, serialized: string[]): Promise<void> {
+  if (serialized.length === 0) return
   const filePath = path.join(RAW_DIR, makeRawPath(source, sessionUid))
   const dir = path.dirname(filePath)
   ensurePrivateDir(dir)
 
-  const serialized = records.map(record => JSON.stringify(record))
   const encrypted = await encryptLinesForSession(requireWriteSession(), serialized)
   fs.appendFileSync(filePath, `${encrypted.join('\n')}\n`, { encoding: 'utf8', mode: 0o600 })
   try {

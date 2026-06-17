@@ -18,13 +18,15 @@ import {
   INSTALL_CHOICE_FILE,
   INSTALL_INFO_FILE,
   OFFSETS_FILE,
+  RAW_ARCHIVE_DIR,
+  RAW_DIR,
   SESSIONS_FILE,
   STATE_DIR,
   VAULT_DIR,
 } from './config'
 import {
-  appendMessages,
-  appendRawRecords,
+  appendSerializedMessages,
+  appendSerializedRawRecords,
   ensureDirs,
   getVaultSessionId,
   hasVaultSession,
@@ -50,7 +52,11 @@ import {
   transferManifestPath,
   transferStateManifestPath,
 } from './transfer-export'
-import { readSourceArchiveRawRecordsFromRoot } from './source-archive'
+import {
+  copySourceArchiveFromRoot,
+  summarizeSourceArchiveFromRoot,
+  type SourceArchiveSummary,
+} from './source-archive'
 import { dedupeAndSortOps, mergeAnnotationOps } from './annotations'
 import type { AnnotationOp } from './annotations'
 import { writeAuditEvent, writeLog } from './logging'
@@ -94,9 +100,18 @@ const WINDOWS_BOOTSTRAP_CAPTURE_SECRET_FILE = path.join(
 type SourceSessionPayload = {
   session: Session
   messages: Message[]
+  messageLines: string[]
   rawRecords: RawRecord[]
+  legacyRawRecordLines: string[]
+  archiveSummary: SourceArchiveSummary
+  rawRecordCount: number
   identity: string
   basicIdentity: string
+}
+
+type SourceJsonLinePayload<T> = {
+  values: T[]
+  lines: string[]
 }
 
 type SourceValidationResult = {
@@ -483,20 +498,28 @@ async function readSourceProtectedJson<T>(root: string, helperSessionId: string,
   }
 }
 
-async function readSourceJsonLines<T>(filePath: string, helperSessionId: string): Promise<T[]> {
-  if (!fs.existsSync(filePath)) return []
+async function readSourceJsonLinePayload<T>(filePath: string, helperSessionId: string): Promise<SourceJsonLinePayload<T>> {
+  if (!fs.existsSync(filePath)) return { values: [], lines: [] }
   const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean)
-  if (lines.length === 0) return []
+  if (lines.length === 0) return { values: [], lines: [] }
   const decoded = lines[0].startsWith('{')
     ? lines
     : await decryptLinesForSession(helperSessionId, lines)
-  return decoded.map(line => {
+  const values: T[] = []
+  const validLines: string[] = []
+  for (const line of decoded) {
     try {
-      return JSON.parse(line) as T
+      values.push(JSON.parse(line) as T)
+      validLines.push(line)
     } catch {
-      return null
+      /* skip malformed legacy lines */
     }
-  }).filter((value): value is T => value !== null)
+  }
+  return { values, lines: validLines }
+}
+
+async function readSourceJsonLines<T>(filePath: string, helperSessionId: string): Promise<T[]> {
+  return (await readSourceJsonLinePayload<T>(filePath, helperSessionId)).values
 }
 
 function relativeVaultPath(root: string, relativePath: string): string {
@@ -522,8 +545,8 @@ async function readSourceSessions(root: string, helperSessionId: string): Promis
   return sessions.map(normalizeSessionIdentity)
 }
 
-function shaObject(value: unknown): string {
-  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex')
+function shaText(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex')
 }
 
 function basicSessionIdentity(session: Session): string {
@@ -538,11 +561,29 @@ function basicSessionIdentity(session: Session): string {
     .digest('hex')
 }
 
-function transferSessionIdentity(session: Session, rawRecords: RawRecord[], messages: Message[]): string {
-  const firstRaw = rawRecords[0]?.rawHash ?? ''
-  const lastRaw = rawRecords[rawRecords.length - 1]?.rawHash ?? ''
-  const firstMessage = messages[0] ? shaObject(messages[0]) : ''
-  const lastMessage = messages[messages.length - 1] ? shaObject(messages[messages.length - 1]) : ''
+function messageIdentity(message: Message | undefined): string {
+  if (!message) return ''
+  return [
+    message.id,
+    message.role,
+    message.timestamp,
+    message.model ?? '',
+    message.rawRef?.rawHash ?? '',
+  ].join('\0')
+}
+
+function transferSessionIdentity(
+  session: Session,
+  rawRecords: RawRecord[],
+  archiveSummary: SourceArchiveSummary,
+  messages: Message[],
+  messageLines: string[],
+): string {
+  const firstRaw = rawRecords[0]?.rawHash || archiveSummary.firstRawHash || ''
+  const lastRaw = archiveSummary.lastRawHash || rawRecords[rawRecords.length - 1]?.rawHash || ''
+  const firstMessage = messageLines[0] ? shaText(messageLines[0]) : messageIdentity(messages[0])
+  const lastMessage = messageLines[messageLines.length - 1] ? shaText(messageLines[messageLines.length - 1]) : messageIdentity(messages[messages.length - 1])
+  const rawRecordCount = rawRecords.length + Math.max(0, Number(archiveSummary.rawRecords || 0))
   return crypto
     .createHash('sha256')
     .update([
@@ -553,7 +594,8 @@ function transferSessionIdentity(session: Session, rawRecords: RawRecord[], mess
       session.id,
       firstRaw,
       lastRaw,
-      String(rawRecords.length),
+      String(rawRecordCount),
+      archiveSummary.fingerprint || '',
       firstMessage,
       lastMessage,
       String(messages.length),
@@ -583,21 +625,27 @@ function rewriteMessageForDestination(message: Message, sourceUid: string, desti
   }
 }
 
-function rewriteRawRecordForDestination(record: RawRecord, destinationSession: Session): RawRecord {
-  return {
-    ...record,
-    source: destinationSession.source,
-    sourcePath: record.sourcePath || destinationSession.originalPath,
-  }
+function serializedMessagesForDestination(payload: SourceSessionPayload, destinationUid: string): string[] {
+  if (payload.session.uid === destinationUid) return payload.messageLines
+  const needle = `"sessionUid":"${payload.session.uid}"`
+  const replacement = `"sessionUid":"${destinationUid}"`
+  return payload.messageLines.map(line => line.includes(needle) ? line.split(needle).join(replacement) : line)
+}
+
+function cleanupFailedDestinationSession(destinationSession: Session): void {
+  try { fs.rmSync(path.join(VAULT_DIR, destinationSession.vaultPath), { force: true }) } catch { /* non-fatal */ }
+  try { fs.rmSync(path.join(RAW_DIR, destinationSession.source, `${destinationSession.uid}.jsonl`), { force: true }) } catch { /* non-fatal */ }
+  try { fs.rmSync(path.join(RAW_ARCHIVE_DIR, destinationSession.source, destinationSession.uid), { recursive: true, force: true }) } catch { /* non-fatal */ }
 }
 
 function rawRecordDedupeKey(record: RawRecord): string {
-  return JSON.stringify({
-    sourcePath: record.sourcePath || '',
-    sourceByteOffset: record.sourceByteOffset ?? null,
-    rawHash: record.rawHash || '',
-    raw: record.raw ?? null,
-  })
+  return [
+    record.source || '',
+    record.sourcePath || '',
+    record.sourceByteOffset ?? '',
+    record.rawHash || '',
+    record.capturedAt || '',
+  ].join('\0')
 }
 
 function dedupeRawRecords(records: RawRecord[]): RawRecord[] {
@@ -644,20 +692,24 @@ async function readSourceSessionPayload(root: string, helperSessionId: string, s
   if (!fs.existsSync(sourceVaultPath)) {
     throw new Error(`missing vault file for session ${session.uid}`)
   }
-  const messages = await readSourceJsonLines<Message>(sourceVaultPath, helperSessionId)
-  const legacyRawRecords = await readSourceJsonLines<RawRecord>(rawFilePath, helperSessionId)
-  const archiveRawRecords = await readSourceArchiveRawRecordsFromRoot(
+  const messagePayload = await readSourceJsonLinePayload<Message>(sourceVaultPath, helperSessionId)
+  const legacyRawRecordPayload = await readSourceJsonLinePayload<RawRecord>(rawFilePath, helperSessionId)
+  const archiveSummary = await summarizeSourceArchiveFromRoot(
     helperSessionId,
     path.join(root, 'vault', 'raw-archive'),
     session.source,
     session.uid,
   )
-  const rawRecords = dedupeRawRecords([...legacyRawRecords, ...archiveRawRecords])
+  const rawRecords = dedupeRawRecords(legacyRawRecordPayload.values)
   return {
     session,
-    messages,
+    messages: messagePayload.values,
+    messageLines: messagePayload.lines,
     rawRecords,
-    identity: transferSessionIdentity(session, rawRecords, messages),
+    legacyRawRecordLines: legacyRawRecordPayload.lines,
+    archiveSummary,
+    rawRecordCount: rawRecords.length + Math.max(0, Number(archiveSummary.rawRecords || 0)),
+    identity: transferSessionIdentity(session, rawRecords, archiveSummary, messagePayload.values, messagePayload.lines),
     basicIdentity: basicSessionIdentity(session),
   }
 }
@@ -802,15 +854,7 @@ async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: Trans
       continue
     }
 
-    let payload: SourceSessionPayload
-    try {
-      payload = await readSourceSessionPayload(source.root, source.helperSessionId, sourceSession)
-    } catch (error) {
-      nextJob.failed.sessions += 1
-      nextJob.lastError = safeError(error)
-      writeJob(nextJob)
-      continue
-    }
+    const payload = await readSourceSessionPayload(source.root, source.helperSessionId, sourceSession)
 
     if (
       importsState.sessionIdentities[payload.identity]
@@ -819,7 +863,7 @@ async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: Trans
       nextJob.skipped.sessions += 1
       nextJob.skipped.duplicates += 1
       nextJob.skipped.messages += payload.messages.length
-      nextJob.skipped.rawRecords += payload.rawRecords.length
+      nextJob.skipped.rawRecords += payload.rawRecordCount
       writeJob(nextJob)
       continue
     }
@@ -835,13 +879,33 @@ async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: Trans
       messageCount: payload.messages.length || sourceSession.messageCount,
     })
     const destinationMessages = payload.messages.map(message => rewriteMessageForDestination(message, sourceSession.uid, destinationUid))
-    const destinationRawRecords = payload.rawRecords.map(record => rewriteRawRecordForDestination(record, destinationSession))
-    collectAttachmentIds(destinationMessages, neededAttachmentIds)
-
-    await appendMessages(destinationSession, destinationMessages)
-    await appendRawRecords(destinationSession.source, destinationSession.uid, destinationRawRecords)
-    mergedSessions.push(destinationSession)
-    await saveSessions(mergedSessions)
+    const destinationMessageLines = serializedMessagesForDestination(payload, destinationUid)
+    const destinationLegacyRawRecordLines = payload.legacyRawRecordLines
+    let importedRawRecords = destinationLegacyRawRecordLines.length
+    try {
+      collectAttachmentIds(destinationMessages, neededAttachmentIds)
+      await appendSerializedMessages(destinationSession, destinationMessageLines)
+      await appendSerializedRawRecords(destinationSession.source, destinationSession.uid, destinationLegacyRawRecordLines)
+      const currentSessionId = getVaultSessionId()
+      if (!currentSessionId) throw new Error('current vault is locked')
+      const archiveCopy = await copySourceArchiveFromRoot(
+        source.helperSessionId,
+        path.join(source.root, 'vault', 'raw-archive'),
+        currentSessionId,
+        sourceSession.source,
+        sourceSession.uid,
+        destinationSession.uid,
+      )
+      importedRawRecords += archiveCopy.rawRecords
+      mergedSessions.push(destinationSession)
+      await saveSessions(mergedSessions)
+    } catch (error) {
+      cleanupFailedDestinationSession(destinationSession)
+      existingUids.delete(destinationUid)
+      const mergedIndex = mergedSessions.findIndex(session => session.uid === destinationUid)
+      if (mergedIndex >= 0) mergedSessions.splice(mergedIndex, 1)
+      throw error
+    }
 
     const importedAt = nowIso()
     const record: TransferImportedSessionRecord = {
@@ -865,7 +929,7 @@ async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: Trans
 
     nextJob.imported.sessions += 1
     nextJob.imported.messages += destinationMessages.length
-    nextJob.imported.rawRecords += destinationRawRecords.length
+    nextJob.imported.rawRecords += importedRawRecords
     writeJob(nextJob)
   }
 

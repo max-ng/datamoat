@@ -14,6 +14,7 @@ export type InstallInfo = {
   sourceRoot?: string
   nodeBin?: string
   scriptLauncherBin?: string
+  sourceCommit?: string
   installedAt?: string
   previousMode?: InstallMode
   packagedAppPath?: string

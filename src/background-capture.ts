@@ -35,6 +35,7 @@ let parserReparseScheduled = false
 
 export type StartBackgroundCaptureOptions = {
   parserReparse?: 'await' | 'background' | 'skip'
+  initialQueueTimeoutMs?: number
 }
 
 function backgroundCaptureKeychainAccount(config: AuthConfig): string {
@@ -408,7 +409,7 @@ export async function startBackgroundCapture(options: StartBackgroundCaptureOpti
       lastSkippedReason: 'background_capture_start_skipped',
     })
   }
-  await startWatchers('vault')
+  await startWatchers('vault', { initialQueueTimeoutMs: options.initialQueueTimeoutMs })
   updateHealth('capture', {
     configured: true,
     running: true,
