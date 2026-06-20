@@ -21,22 +21,31 @@ Language: [English](./README.md) | [Português (Brasil)](./README.pt-BR.md) | [�
 Official website: [https://datamoat.org](https://datamoat.org)
 GitHub repo: [https://github.com/max-ng/datamoat](https://github.com/max-ng/datamoat)
 
-## Protect, export, back up, analyze, search, and reuse everything you build with ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw
+## Do 10x more with AI — without starting from zero every time
 
-Local encrypted backup archive for sessions, images, files/PDFs, and `SKILL.md` folders.
+DataMoat is a private AI workspace that saves everything you do with AI, so you can find it, reuse it, and do more.
 
-> DataMoat keeps your AI work history local and encrypted, preserving raw source records intact and building a normalized layer for analysis, search, export, reuse, handoff, and private AI memory.
->
-> **Your most valuable future AI data is already disappearing.**
-> Download DataMoat now to see how much ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw work history you can still capture.
-
-**Core backup scope:** DataMoat backs up supported **skills + sessions + attachments** into the same encrypted local memory archive. Skills are saved as full folder snapshots, not just names.
-
-**The people and companies that own their AI data will win the future.**
-
-DataMoat is an AI work history memory archive for people and teams working across ChatGPT exports, Claude CLI, Claude Desktop, Codex CLI, Codex app, Cursor, DeepSeek and Qwen through Claude Code GUI workflows, OpenClaw, and other AI tools. It preserves the full working record: sessions, locally stored thinking tokens and reasoning blocks when present, prompts, responses, tool output, files, attachments, metadata, skills folder contents, and original source records on the same machine, so your work stays reviewable, protected, reusable, and easier to hand off later.
+For people and teams, every AI task becomes part of a private system that gets more useful over time.
 
 ![DataMoat sessions, skills backup, and encrypted local memory archive UI](.github/assets/screenshot.png)
+
+## What You Can Do
+
+- **Export:** Claude, Codex, Cursor, ChatGPT exports, DeepSeek, Qwen, and OpenClaw data.
+- **Full coverage:** Supported sessions, tool outputs, versioned attachments, images, files, and `SKILL.md` skills.
+- **Backup:** Encrypted raw archives are compressed; real source-record tests measured about 60% of original source bytes.
+- **Search:** Full-text search across prompts, messages, metadata, and supported tool outputs.
+- **Analyze:** Answer questions like "How did we solve this bug before?" or "Why did the AI make this decision?"
+- **Audit:** Hash-chained local audit checks with redacted diagnostics.
+- **Reuse:** No more repeating work; export context for your own RAG, internal database, or handoff.
+- **Customization:** Bookmark important messages and sessions.
+- **Free:** Personal use and internal company use are allowed by the Additional Use Grant.
+- **Decentralized local ownership:** No one else can access or own your archive without your permission.
+- **Protection:** AES-256-GCM, 24-word BIP39 recovery phrase, and Secure Enclave-backed unlock on supported Macs.
+
+Know more: [website](https://datamoat.org), [how storage works](#how-datamoat-stores-your-work), [supported sources](#supported-today), [security](#security-at-a-glance), [install](#install).
+
+DM me or open an issue with feedback so we can build a better AI future together.
 
 ## How DataMoat Stores Your Work
 
