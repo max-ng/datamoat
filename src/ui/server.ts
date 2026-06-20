@@ -31,6 +31,16 @@ import {
 import { Message, Session, Source } from '../types'
 import { DATAMOAT_ROOT, UI_PORT_RANGE } from '../config'
 import {
+  buildCleanExport,
+  emptyAssets,
+  extForAttachment,
+
+  renderChatViewerHtml,
+  slugify as exportSlugify,
+  type ExportAsset,
+  type ExportAssets,
+} from '../chat-export-html'
+import {
   isSetupDone, loadAuthConfig, saveAuthConfig,
   generateTOTPSecret, verifyTOTP, generateMnemonic,
   sha256, totpURL,
@@ -318,6 +328,28 @@ let setupActivationProgress: SetupActivationProgress = {
   done: false,
   updatedAt: null,
 }
+
+const UI_FONT_FILES: Record<string, string> = {
+  'JetBrainsMono-Regular.ttf': path.join(__dirname, 'fonts', 'JetBrainsMono-Regular.ttf'),
+  'Onest.ttf': path.join(__dirname, 'fonts', 'Onest.ttf'),
+}
+
+const UI_FONT_FACE_CSS = `
+  @font-face {
+    font-family: 'Onest';
+    src: url('/fonts/Onest.ttf') format('truetype');
+    font-weight: 400 900;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono';
+    src: url('/fonts/JetBrainsMono-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
+`
 
 type SetupInitPayload = {
   setupNonce: string
@@ -1623,6 +1655,17 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
   app.use(express.json())
   app.use(express.urlencoded({ extended: false }))
 
+  app.get('/fonts/:fontName', (req, res) => {
+    const fontName = String(req.params.fontName || '')
+    const fontPath = UI_FONT_FILES[fontName]
+    if (!fontPath || !fs.existsSync(fontPath)) {
+      return res.status(404).send('font not found')
+    }
+    res.setHeader('Content-Type', 'font/ttf')
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    res.sendFile(fontPath)
+  })
+
   app.get('/api/meta', (_req, res) => {
     res.json({
       pid: process.pid,
@@ -2496,6 +2539,30 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
       messageCount: messages.length,
       text: formatContextPackForClipboard(session, messages, throughIndex),
     })
+  })
+
+  app.post('/api/session/:id/export', requireAuth, async (req, res) => {
+    const sessions = await loadSessions()
+    const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
+    if (!session) return res.status(404).json({ error: 'not found' })
+    try {
+      const total = Math.max(0, Number(session.messageCount || 0))
+      const messages = total > 0 ? await readMessagesForUI(session, { offset: 0, limit: total }) : []
+      const result = await exportChatToFolder(session, messages)
+      // Reveal the folder + open the viewer so the user immediately sees the result.
+      await openPathWithSystem(result.dir).catch(() => {})
+      await openPathWithSystem(result.viewerPath).catch(() => {})
+      res.json({
+        ok: true,
+        dir: result.dir,
+        messageCount: messages.length,
+        imageCount: result.imageCount,
+        fileCount: result.fileCount,
+      })
+    } catch (error) {
+      writeLog('warn', 'export', 'failed', { error })
+      res.status(500).json({ error: error instanceof Error ? error.message : 'export failed' })
+    }
   })
 
   app.get('/api/session/:id/branch/:branchId', requireAuth, async (req, res) => {
@@ -3407,6 +3474,88 @@ function formatContextPackForClipboard(session: Session, messages: Message[], th
   return `${header.join('\n')}${messages.map(formatContextMessage).join('\n\n')}\n`
 }
 
+// "Export this chat" — writes a shareable folder (viewer.html + chat.json +
+// chat.md + files/) under ~/DataMoat Exports/. Home root is not a macOS
+// TCC-protected location, so writing here never prompts the user.
+const EXPORTS_DIR = path.join(os.homedir(), 'DataMoat Exports')
+const EXPORT_INLINE_MAX_BYTES = 1_500_000      // embed images up to ~1.5MB each
+const EXPORT_INLINE_TOTAL_BUDGET = 20_000_000  // ...up to ~20MB embedded total
+
+interface ChatExportResult {
+  dir: string
+  viewerPath: string
+  imageCount: number
+  fileCount: number
+}
+
+function collectAttachmentRefs(messages: Message[]): Array<{ id: string; name?: string; mediaType?: string }> {
+  const seen = new Set<string>()
+  const refs: Array<{ id: string; name?: string; mediaType?: string }> = []
+  const add = (id?: string, name?: string, mediaType?: string): void => {
+    if (!id || seen.has(id)) return
+    seen.add(id)
+    refs.push({ id, name, mediaType })
+  }
+  for (const msg of messages) {
+    for (const block of msg.content || []) {
+      if (block.type === 'image' || block.type === 'file') add(block.attachmentId, block.attachmentName, block.mediaType)
+      if (Array.isArray(block.attachmentIds)) for (const id of block.attachmentIds) add(id)
+    }
+  }
+  return refs
+}
+
+async function exportChatToFolder(session: Session, messages: Message[]): Promise<ChatExportResult> {
+  const title = titleForSession(session) || session.title || session.id
+  const exportId = exportSlugify(session.id || session.uid || 'chat')
+  const slug = `datamoat-chat-export-${exportId}`
+  fs.mkdirSync(EXPORTS_DIR, { recursive: true })
+  const outDir = path.join(EXPORTS_DIR, slug)
+  const filesDir = path.join(outDir, 'files')
+  fs.mkdirSync(filesDir, { recursive: true })
+
+  const assets: ExportAssets = emptyAssets()
+  let inlineBudget = EXPORT_INLINE_TOTAL_BUDGET
+  let seq = 0
+  for (const ref of collectAttachmentRefs(messages)) {
+    const meta = attachmentMetadata(ref.id)
+    if (!meta) continue
+    seq += 1
+    const mediaType = ref.mediaType || meta.mediaType || 'application/octet-stream'
+    const ext = extForAttachment(mediaType, ref.name)
+    const base = ref.name ? exportSlugify(ref.name.replace(/\.[^.]+$/, '')) : `attachment-${String(seq).padStart(3, '0')}`
+    const name = `${String(seq).padStart(3, '0')}-${base}.${ext}`
+    const destPath = path.join(filesDir, name)
+    const written = await writeAttachmentToFile(ref.id, destPath)
+    if (!written) { seq -= 1; continue }
+    const size = fs.statSync(destPath).size
+    const isImage = /^image\//.test(mediaType)
+    let dataUri = ''
+    if (isImage && size <= EXPORT_INLINE_MAX_BYTES && inlineBudget - size >= 0) {
+      dataUri = `data:${mediaType};base64,${fs.readFileSync(destPath).toString('base64')}`
+      inlineBudget -= size
+    }
+    const asset: ExportAsset = { id: ref.id, name, size, mediaType, isImage, dataUri }
+    assets.list.push(asset)
+    assets.byId[ref.id] = asset
+    assets.byName[name] = asset
+  }
+
+  const fileFor = (id?: string): string | null => (id && assets.byId[id]) ? assets.byId[id].name : null
+  const clean = buildCleanExport(session, messages, fileFor, title)
+  const viewerPath = path.join(outDir, 'viewer.html')
+  fs.writeFileSync(viewerPath, renderChatViewerHtml(clean, assets))
+  fs.writeFileSync(path.join(outDir, 'chat.json'), JSON.stringify(clean, null, 2))
+
+  const imageCount = assets.list.filter(a => a.isImage).length
+  writeAuditEvent('export', 'chat_exported', {
+    sessionUid: session.uid,
+    messageCount: messages.length,
+    attachmentCount: assets.list.length,
+  })
+  return { dir: outDir, viewerPath, imageCount, fileCount: assets.list.length - imageCount }
+}
+
 async function readMessagesForUI(session: Session, options: ReadMessagesForUIOptions = {}): Promise<Message[]> {
   const limit = typeof options.limit === 'number' ? Math.max(0, Math.floor(options.limit)) : 0
   const offset = typeof options.offset === 'number' ? Math.max(0, Math.floor(options.offset)) : 0
@@ -4213,11 +4362,12 @@ function setupPageHTML(): string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DataMoat — Setup</title>
 <style>
+${UI_FONT_FACE_CSS}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg: #0b0f14; --surface: rgba(15,22,31,0.94); --surface-2: #111a24; --border: #223041;
     --accent: #74b6a5; --accent2: #8abf9b; --text: #e8edf3;
-    --muted: #8d98a8; --danger: #f05d54; --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace; --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    --muted: #8d98a8; --danger: #f05d54; --mono: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei UI', 'Noto Sans CJK SC', 'Noto Sans CJK TC', monospace; --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
   }
   @keyframes dmSetupPulse {
     0% { box-shadow: 0 0 0 0 rgba(116,182,165,0.28); }
@@ -6012,15 +6162,34 @@ async function setupTransferImport() {
     if (phase === 'failed') return [null, 'Restore failed', job?.lastError || 'DataMoat could not complete the transfer.', 'Restore failed', 'failed'];
     return [null, 'Working…', 'DataMoat is restoring the copied folder.', 'Restoring folder', 'working'];
   };
+  // settled = true once we navigate away, show an error, or confirm the job failed.
+  // The overlay must never close while settled is false.
+  let settled = false;
+  let transferProgressTimer = null;
+  const finishWithError = (message) => {
+    if (settled) return;
+    settled = true;
+    clearInterval(transferProgressTimer);
+    overlay.classList.remove('show');
+    el.error.textContent = message;
+    el.error.style.display = '';
+    setSetupTransferBusy(false);
+  };
   const pollTransferProgress = async () => {
+    if (settled) return;
     try {
       const status = await apiFetch('/api/transfer/import/status');
       if (status.ok) {
         const job = await status.json();
+        if (job?.phase === 'failed' && !job?.done) {
+          finishWithError(job.lastError || 'Restore failed');
+          return;
+        }
         const args = transferPhaseText(job);
         setOverlayProgress(args[0], args[1], args[2], args[3], args[4]);
       }
     } catch {}
+    if (settled) return;
     try {
       const progress = await apiFetch('/api/setup/progress');
       if (progress.ok) {
@@ -6037,17 +6206,21 @@ async function setupTransferImport() {
         }
       }
     } catch {}
+    if (settled) return;
     try {
       const meta = await apiFetch('/api/meta');
       const data = await meta.json();
       if (data?.route === 'app' || data?.route === 'unlock') {
+        if (settled) return;
+        settled = true;
+        clearInterval(transferProgressTimer);
         window.location.replace(data.route === 'app' ? '/?setup=' + Date.now() : '/unlock?setup=' + Date.now());
       }
     } catch {}
   };
   overlay.classList.add('show');
   setOverlayProgress(8, 'Checking copied folder…', 'DataMoat is validating the copied folder and removing old machine-bound unlock methods.', 'Restoring DataMoat folder');
-  const transferProgressTimer = setInterval(pollTransferProgress, 1000);
+  transferProgressTimer = setInterval(pollTransferProgress, 1000);
   void pollTransferProgress();
   try {
     const body = usePhrase
@@ -6058,17 +6231,20 @@ async function setupTransferImport() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }));
+    if (settled) return;
+    settled = true;
+    clearInterval(transferProgressTimer);
     _setupCommitted = true;
     setOverlayProgress(100, 'Restore complete', 'Opening DataMoat now.', 'Restore complete');
     window.location.replace('/?setup=' + Date.now());
   } catch (err) {
+    // Network drop (TypeError): server may still be running — keep overlay, let poll handle it.
+    if (err instanceof TypeError) return;
+    // Server returned a definitive error: check if actually succeeded first.
     if (await syncSetupRoute(true)) return;
-    overlay.classList.remove('show');
-    el.error.textContent = err instanceof Error ? err.message : String(err);
-    el.error.style.display = '';
+    finishWithError(err instanceof Error ? err.message : String(err));
   } finally {
-    clearInterval(transferProgressTimer);
-    setSetupTransferBusy(false);
+    if (settled) setSetupTransferBusy(false);
   }
 }
 
@@ -6647,18 +6823,19 @@ function unlockPageHTML(): string {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DataMoat — Unlock</title>
 <style>
+${UI_FONT_FACE_CSS}
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg: #07090d; --surface: #0d1117; --border: #1e2530;
     --accent: #74b6a5; --accent2: #8abf9b; --text: #c9d1d9;
-    --muted: #586069; --danger: #f85149; --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, 'Liberation Mono', monospace;
+    --muted: #586069; --danger: #f85149; --mono: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei UI', 'Noto Sans CJK SC', 'Noto Sans CJK TC', monospace; --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
   }
   @keyframes dmUnlockPulse {
     0% { box-shadow: 0 0 0 0 rgba(116,182,165,0.28); }
     42% { box-shadow: 0 0 0 4px rgba(116,182,165,0.14); }
     100% { box-shadow: 0 0 0 0 rgba(116,182,165,0); }
   }
-  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); }
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
   .logo { font-size: 11px; letter-spacing: 4px; color: #74b6a5; text-transform: uppercase; margin-bottom: 40px; }
   .logo span { color: var(--muted); }
@@ -6763,13 +6940,13 @@ function unlockPageHTML(): string {
   body {
     background: #191919;
     color: rgba(255,255,255,0.82);
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--sans);
   }
   body {
     padding: 24px;
   }
   .logo {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--sans);
     font-size: 14px;
     font-weight: 650;
     letter-spacing: 0;
@@ -6801,7 +6978,7 @@ function unlockPageHTML(): string {
   .divider,
   .totp-big,
   .recovery-input {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--sans);
     letter-spacing: 0;
     text-transform: none;
   }
@@ -6864,7 +7041,7 @@ function unlockPageHTML(): string {
     border-color: #3a3a3a;
     border-radius: 6px;
     color: rgba(255,255,255,0.86);
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    font-family: var(--sans);
   }
   .pw-input:focus,
   .totp-big:focus,
@@ -7238,7 +7415,7 @@ async function loadUnlockOptions() {
         : unlockTr('touchOnly');
     }
     restoreTouchIdHint();
-    if (d.touchIdRefreshRequired) {
+    if (d.touchIdRefreshRequired && d.touchIdEnabled) {
       showTouchIdRefreshRequired(unlockTr('refreshNote'));
       return;
     }
@@ -7613,8 +7790,9 @@ function markdownPageHTML(title: string, markdown: string, version: string): str
 <meta charset="UTF-8">
 <title>DataMoat — ${title}</title>
 <style>
+${UI_FONT_FACE_CSS}
   *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-  :root{--bg:#191919;--surface:#202020;--surface2:#252525;--border:#2f2f2f;--accent:#74b6a5;--accent2:#8abf9b;--warn:#d9730d;--text:rgba(255,255,255,0.82);--muted:rgba(255,255,255,0.48);--mono:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif;--sans:-apple-system,BlinkMacSystemFont,'SF Pro Text','Helvetica Neue',Arial,sans-serif}
+  :root{--bg:#191919;--surface:#202020;--surface2:#252525;--border:#2f2f2f;--accent:#74b6a5;--accent2:#8abf9b;--warn:#d9730d;--text:rgba(255,255,255,0.82);--muted:rgba(255,255,255,0.48);--mono:'JetBrains Mono','PingFang SC','Microsoft YaHei UI','Noto Sans CJK SC','Noto Sans CJK TC',monospace;--sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,'PingFang SC','Microsoft YaHei UI',sans-serif}
   html,body{background:var(--bg);color:var(--text);font-family:var(--sans);line-height:1.7}
   .topbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:14px;z-index:10}
   .topbar a{font-family:var(--sans);font-size:13px;letter-spacing:0;color:var(--muted);text-decoration:none}

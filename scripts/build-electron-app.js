@@ -879,6 +879,9 @@ async function packageWindows() {
 }
 
 function writeWindowsPortableScripts(appRoot) {
+  // wscript.exe (GUI subsystem) has no console, so DataMoat's AttachConsole(-1)
+  // finds no parent console and fails silently — no console window appears.
+  // The VBS is written inline to %TEMP% so no extra files appear next to DataMoat.exe.
   const installScript = [
     '@echo off',
     'setlocal',
@@ -893,8 +896,12 @@ function writeWindowsPortableScripts(appRoot) {
     'mkdir "%STARTUP_DIR%" >nul 2>nul',
     '> "%STARTUP_VBS%" echo Set shell = CreateObject("WScript.Shell")',
     '>> "%STARTUP_VBS%" echo shell.Run """" ^& "%APP_EXE%" ^& """ --datamoat-tray-only", 0, False',
-    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p=$env:APP_EXE; Start-Process -FilePath $p -WorkingDirectory (Split-Path -Parent $p)"',
-    'exit /b %ERRORLEVEL%',
+    'set "TMP_VBS=%TEMP%\\dm-%RANDOM%.vbs"',
+    '> "%TMP_VBS%" echo Set shell = CreateObject("WScript.Shell")',
+    '>> "%TMP_VBS%" echo shell.Run """" ^& "%APP_EXE%" ^& """", 1, False',
+    'wscript.exe //nologo "%TMP_VBS%"',
+    'del "%TMP_VBS%" >nul 2>nul',
+    'exit /b 0',
     '',
   ].join('\r\n')
 
@@ -906,8 +913,12 @@ function writeWindowsPortableScripts(appRoot) {
     '  echo DataMoat.exe was not found next to this script.',
     '  exit /b 1',
     ')',
-    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p=$env:APP_EXE; Start-Process -FilePath $p -WorkingDirectory (Split-Path -Parent $p)"',
-    'exit /b %ERRORLEVEL%',
+    'set "TMP_VBS=%TEMP%\\dm-%RANDOM%.vbs"',
+    '> "%TMP_VBS%" echo Set shell = CreateObject("WScript.Shell")',
+    '>> "%TMP_VBS%" echo shell.Run """" ^& "%APP_EXE%" ^& """", 1, False',
+    'wscript.exe //nologo "%TMP_VBS%"',
+    'del "%TMP_VBS%" >nul 2>nul',
+    'exit /b 0',
     '',
   ].join('\r\n')
 
@@ -919,8 +930,12 @@ function writeWindowsPortableScripts(appRoot) {
     '  echo DataMoat.exe was not found next to this script.',
     '  exit /b 1',
     ')',
-    'powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p=$env:APP_EXE; Start-Process -FilePath $p -ArgumentList \'--datamoat-remote-no-screen\' -WorkingDirectory (Split-Path -Parent $p) -WindowStyle Hidden"',
-    'exit /b %ERRORLEVEL%',
+    'set "TMP_VBS=%TEMP%\\dm-%RANDOM%.vbs"',
+    '> "%TMP_VBS%" echo Set shell = CreateObject("WScript.Shell")',
+    '>> "%TMP_VBS%" echo shell.Run """" ^& "%APP_EXE%" ^& """ --datamoat-remote-no-screen", 0, False',
+    'wscript.exe //nologo "%TMP_VBS%"',
+    'del "%TMP_VBS%" >nul 2>nul',
+    'exit /b 0',
     '',
   ].join('\r\n')
 

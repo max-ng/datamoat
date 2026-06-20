@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('datamoatDesktop', {
   chatgptExport: {
     selectSource: () => ipcRenderer.invoke('datamoat:chatgptExport:selectSource'),
   },
+  clipboard: {
+    write: (text: string) => ipcRenderer.invoke('datamoat:clipboard:write', text),
+  },
 })
 
 export {}

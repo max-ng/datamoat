@@ -1,4 +1,4 @@
-import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Menu, Tray, dialog, nativeImage, screen, session, shell, ipcMain, type OpenDialogOptions } from 'electron'
+import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Menu, Tray, clipboard, dialog, nativeImage, screen, session, shell, ipcMain, type OpenDialogOptions } from 'electron'
 import * as child_process from 'child_process'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -1268,7 +1268,10 @@ function installSessionPolicy(): void {
 }
 
 function installWindowPolicy(win: BrowserWindow): void {
-  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
 
   win.webContents.on('will-navigate', (event, url) => {
     if (!allowedOrigin || !url.startsWith(allowedOrigin)) {
@@ -1921,6 +1924,10 @@ function installDesktopIpc(): void {
   })
   ipcMain.handle('datamoat:update:openLatest', async () => {
     return await openPackagedReleasePage()
+  })
+  ipcMain.handle('datamoat:clipboard:write', async (_event, text: unknown) => {
+    clipboard.writeText(typeof text === 'string' ? text : String(text ?? ''))
+    return { ok: true }
   })
   ipcMain.handle('datamoat:transfer:selectFolder', async () => {
     const owner = usableWindow()

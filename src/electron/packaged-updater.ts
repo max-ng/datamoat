@@ -64,6 +64,7 @@ type OpenLatestResult = {
   url: string
   state?: UpdateState
   manualUpdateStarted?: boolean
+  upToDate?: boolean
   version?: string
   assetName?: string
 }
@@ -790,16 +791,18 @@ async function installLatestWindowsManualUpdate(): Promise<OpenLatestResult> {
   const allowSameVersion = process.env.DATAMOAT_WINDOWS_UPDATE_ALLOW_SAME_VERSION === '1'
   if (!resolved.version) throw new Error('latest Windows update does not include a version')
   if (!allowSameVersion && compareVersions(resolved.version, currentVersion) <= 0) {
+    // Already on the latest (or newer) version. Do not open a browser to an
+    // older release page - that looks like DataMoat is pushing a downgrade.
+    // Just report up-to-date and let the UI confirm it.
     const state = packagedUpdateStatePatch({
       running: false,
       supported: true,
       lastCheckedAt: new Date().toISOString(),
       lastResult: 'up-to-date',
       availableVersion: resolved.version,
-      message: `already on version ${currentVersion}; opened latest release page`,
+      message: `already on the latest version ${currentVersion}`,
     })
-    await shell.openExternal(resolved.releaseUrl)
-    return { ok: true, url: resolved.releaseUrl, state, manualUpdateStarted: false, version: resolved.version, assetName: resolved.assetName }
+    return { ok: true, url: '', state, manualUpdateStarted: false, upToDate: true, version: resolved.version, assetName: resolved.assetName }
   }
 
   const updateRoot = path.join(os.tmpdir(), `datamoat-windows-update-${Date.now()}`)

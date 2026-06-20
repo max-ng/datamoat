@@ -1168,6 +1168,8 @@ function cleanMachineBoundTransferredState(root: string): void {
   if (config) {
     delete config.touchIdWrappedVaultKey
     config.touchIdEnabled = false
+    delete config.touchIdRefreshRequired
+    delete config.touchIdRefreshRequiredAt
     delete config.backgroundWrappedVaultKey
     delete config.backgroundWrapSalt
     delete config.backgroundKeychainAccount

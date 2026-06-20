@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DataMoat</title>
 <style>
+  @font-face {
+    font-family: 'Onest';
+    src: url('/fonts/Onest.ttf') format('truetype');
+    font-weight: 400 900;
+    font-style: normal;
+    font-display: swap;
+  }
+  @font-face {
+    font-family: 'JetBrains Mono';
+    src: url('/fonts/JetBrainsMono-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+  }
   :root {
     color-scheme: dark;
     --bg:        #171717;
@@ -48,19 +62,26 @@
     --warning-bg: #1a1408;
     --warning-border: #4a380c;
     --warning-text: #e0b870;
-    --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
-    --font-mono: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+    --meta-bg: rgba(255,255,255,0.035);
+    --meta-bg-hover: rgba(255,255,255,0.055);
+    --meta-border: rgba(255,255,255,0.075);
+    --meta-text: rgba(255,255,255,0.38);
+    --meta-strong: rgba(255,255,255,0.58);
+    --sidebar-bg: var(--bg);
+    --content-bg: var(--surface);
+    --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
+    --font-mono: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei UI', 'Noto Sans CJK SC', 'Noto Sans CJK TC', monospace;
   }
   html[data-theme="light"] {
     color-scheme: light;
     --bg:        #ffffff;
-    --surface:   #f3f3f3;
-    --surface2:  #e9e9e9;
-    --surface3:  #dddddd;
+    --surface:   #ffffff;
+    --surface2:  #f5f5f5;
+    --surface3:  #ececec;
     --panel:     #ffffff;
     --panel2:    #f7f7f7;
-    --border:    #e0e0e0;
-    --border2:   #cfcfcf;
+    --border:    #e8e8e8;
+    --border2:   #d7d7d7;
     --text:      #1f1f1f;
     --muted:     #8b8b8b;
     --muted2:    #5f6368;
@@ -69,10 +90,10 @@
     --think-text:   #4d8d7d;
     --input-bg: #ffffff;
     --input-focus-bg: #ffffff;
-    --control-bg: #f7f7f7;
-    --control-hover-bg: #ececec;
-    --control-active-bg: #e4e4e4;
-    --code-bg: #f4f4f4;
+    --control-bg: #ffffff;
+    --control-hover-bg: #f2f2f2;
+    --control-active-bg: #e9e9e9;
+    --code-bg: #f6f6f6;
     --tooltip-bg: #ffffff;
     --modal-backdrop: rgba(245, 245, 245, 0.72);
     --shadow-strong: rgba(0, 0, 0, 0.14);
@@ -85,6 +106,13 @@
     --warning-bg: #fff6df;
     --warning-border: #ead19b;
     --warning-text: #755a1d;
+    --meta-bg: rgba(0,0,0,0.035);
+    --meta-bg-hover: rgba(0,0,0,0.055);
+    --meta-border: rgba(0,0,0,0.075);
+    --meta-text: rgba(0,0,0,0.40);
+    --meta-strong: rgba(0,0,0,0.62);
+    --sidebar-bg: #fbfbfb;
+    --content-bg: #ffffff;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
@@ -104,6 +132,8 @@
     font-family: var(--font-sans);
     font-size: 13px;
     line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
     height: 100vh;
     display: flex;
     flex-direction: column;
@@ -146,7 +176,7 @@
   .logo {
     display: inline-flex;
     align-items: baseline;
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 14px;
     font-weight: 600;
     color: var(--accent);
@@ -208,6 +238,8 @@
   .filter-btn {
     font-family: var(--font-sans);
     font-size: 13px;
+    font-weight: 600;
+    line-height: 1.2;
     padding: 5px 9px;
     border-radius: 5px;
     border: 1px solid transparent;
@@ -217,6 +249,11 @@
     transition: background 0.12s ease, color 0.12s ease;
     letter-spacing: 0;
     white-space: nowrap;
+  }
+  .filter-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.14em;
   }
   .filter-btn[data-src="claude-cli"],
   .filter-btn[data-src="claude-app"] {
@@ -246,7 +283,7 @@
   .filter-btn[data-src].active {
     background: var(--surface2);
     border-color: transparent;
-    font-weight: 650;
+    font-weight: 600;
   }
   .filter-btn[data-src="all"].active {
     color: var(--text);
@@ -492,6 +529,7 @@
     align-items: center;
     gap: 9px;
     color: var(--muted);
+    font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 600;
   }
@@ -501,17 +539,20 @@
   }
   .overview-title {
     color: var(--text);
+    font-family: var(--font-mono);
     font-size: 30px;
     line-height: 1.12;
     font-weight: 700;
   }
   .overview-sub {
     color: var(--muted2);
+    font-family: var(--font-mono);
     font-size: 14px;
   }
   .overview-section-label {
     margin: 2px 0 -6px;
     color: var(--muted);
+    font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
@@ -687,7 +728,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    background: var(--bg);
+    background: var(--content-bg);
   }
   .session-tabs {
     flex: 0 0 auto;
@@ -697,7 +738,7 @@
     gap: 1px;
     padding: 4px 8px 0;
     border-bottom: 1px solid var(--border);
-    background: var(--surface);
+    background: var(--content-bg);
     overflow-x: auto;
     scrollbar-width: none;
   }
@@ -726,10 +767,10 @@
     background: var(--surface2);
   }
   .session-tab.active {
-    background: var(--bg);
+    background: var(--content-bg);
     color: var(--text);
     border-color: var(--border);
-    border-bottom-color: var(--bg);
+    border-bottom-color: var(--content-bg);
   }
   .session-tab-title {
     min-width: 0;
@@ -766,23 +807,34 @@
     min-width: 264px;
     max-width: min(620px, 52vw);
     border-right: 1px solid var(--border);
-    background: var(--surface);
+    background: var(--sidebar-bg);
     overflow-y: auto;
-    flex-shrink: 0;
+    flex: 0 0 var(--dm-sidebar-width, 330px);
     height: 100%;
     min-height: 0;
     overscroll-behavior: contain;
+    contain: layout paint style;
+    transform: translateZ(0);
+    will-change: width, flex-basis;
+    transition: width 140ms cubic-bezier(.2,.8,.2,1), flex-basis 140ms cubic-bezier(.2,.8,.2,1), min-width 140ms cubic-bezier(.2,.8,.2,1), max-width 140ms cubic-bezier(.2,.8,.2,1);
+    scrollbar-width: none;
   }
-  .session-list::-webkit-scrollbar { width: 4px; }
+  .session-list::-webkit-scrollbar { width: 0; height: 0; display: none; }
   .session-list::-webkit-scrollbar-track { background: transparent; }
   .session-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .session-list-body {
+    min-width: 264px;
+    content-visibility: auto;
+    contain-intrinsic-size: 1px 1400px;
+    transition: opacity 80ms ease, transform 140ms cubic-bezier(.2,.8,.2,1);
+  }
   .sidebar-resizer {
     position: relative;
     flex: 0 0 7px;
     width: 7px;
     min-width: 7px;
     height: 100%;
-    background: var(--surface);
+    background: var(--sidebar-bg);
     border-right: 1px solid var(--border);
     cursor: col-resize;
     touch-action: none;
@@ -814,7 +866,7 @@
     align-items: center;
     gap: 2px;
     padding: 6px 8px;
-    background: var(--surface);
+    background: var(--sidebar-bg);
     border-bottom: 1px solid var(--border);
   }
   .panel-mode-btn {
@@ -833,6 +885,42 @@
   .panel-mode-btn:hover { background: var(--surface2); color: var(--text); }
   .panel-mode-btn.active { background: var(--surface2); color: var(--text); border-color: var(--border2); }
   .panel-mode-btn svg { width: 15px; height: 15px; }
+  .panel-collapse-btn { margin-left: auto; }
+  .layout.sidebar-collapsed .session-list {
+    flex-basis: 44px;
+    width: 44px;
+    min-width: 44px;
+    max-width: 44px;
+    overflow: hidden;
+  }
+  .layout.sidebar-collapsed .sidebar-resizer {
+    flex-basis: 0;
+    width: 0;
+    min-width: 0;
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .layout.sidebar-collapsed .session-list > :not(.panel-mode-bar) {
+    content-visibility: hidden;
+    opacity: 0;
+    transform: translateX(-8px);
+    visibility: hidden;
+    pointer-events: none;
+  }
+  .layout.sidebar-collapsed .panel-mode-bar {
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 5px;
+    border-bottom: 0;
+  }
+  .layout.sidebar-collapsed .panel-mode-btn:not(.panel-collapse-btn) {
+    display: none;
+  }
+  .layout.sidebar-collapsed .panel-collapse-btn {
+    margin-left: 0;
+    margin-top: 0;
+  }
 
   .folder-group-header {
     display: flex;
@@ -970,7 +1058,7 @@
   .source-dot.chatgpt-export { background: var(--chatgpt); }
 
   .session-model {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 12px;
     color: var(--muted);
     flex: 1;
@@ -979,7 +1067,7 @@
     white-space: nowrap;
   }
   .thinking-badge {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--think-text);
     border: 1px solid var(--think-border);
@@ -989,9 +1077,10 @@
     flex-shrink: 0;
   }
   .session-cwd {
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 13px;
     color: var(--text);
+    line-height: 1.42;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1006,7 +1095,7 @@
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--panel2);
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--accent);
     max-width: 100%;
@@ -1023,9 +1112,9 @@
   .search-excerpt {
     font-size: 11px;
     color: var(--muted);
-    line-height: 1.4;
+    line-height: 1.36;
     margin: 3px 0;
-    font-family: var(--font-sans);
+    font-family: var(--font-mono);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1034,8 +1123,8 @@
   }
   .session-meta {
     display: flex;
-    justify-content: space-between;
-    font-family: var(--font-sans);
+    justify-content: flex-end;
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--muted);
   }
@@ -1047,6 +1136,9 @@
     min-height: 0;
     display: flex;
     overflow: hidden;
+    /* Inherit the global theme vars so the conversation pane follows
+       light/dark like the rest of the app instead of forcing dark. */
+    background: var(--bg);
   }
   .conversation-shell.split-active .conversation {
     flex-basis: 50%;
@@ -1057,16 +1149,15 @@
   }
   .conversation {
     flex: 1;
-    overflow-y: auto;
-    padding: 0 32px 24px;
+    overflow: hidden;
+    padding: 0;
     height: 100%;
     min-height: 0;
-    overscroll-behavior: contain;
-    scrollbar-gutter: stable;
-    scrollbar-color: var(--border2) transparent;
+    background: var(--content-bg);
+    position: relative;
   }
   #conversation-split {
-    background: var(--bg);
+    background: var(--content-bg);
   }
   #conversation-split[hidden] {
     display: none;
@@ -1098,7 +1189,7 @@
     justify-content: center;
     border-left: 1px solid rgba(116, 182, 165, 0.42);
     background: rgba(116, 182, 165, 0.10);
-    color: rgba(255,255,255,0.78);
+    color: var(--text);
     font-family: var(--font-sans);
     font-size: 13px;
     backdrop-filter: blur(2px);
@@ -1225,13 +1316,15 @@
 
   .conv-header {
     position: sticky;
-    top: 0;
+    top: 14px;
     z-index: 20;
-    margin: 0 -32px 24px;
-    padding: 24px 32px 16px;
-    background: var(--bg);
-    border-bottom: 1px solid var(--border);
-    box-shadow: 0 10px 18px var(--shadow-strong);
+    width: min(420px, 38vw);
+    margin: 14px 0 16px auto;
+    padding: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: 0 18px 42px var(--shadow-strong);
   }
   .conv-header-toggle-zone {
     appearance: none;
@@ -1256,11 +1349,12 @@
     box-shadow: inset 0 1px 0 rgba(0, 200, 160, 0.5);
   }
   .conv-header.is-hidden {
-    min-height: 10px;
+    min-height: 8px;
+    width: min(260px, 30vw);
     margin-bottom: 10px;
-    padding: 10px 32px 0;
+    padding: 8px 12px;
     box-shadow: none;
-    border-bottom-color: rgba(33, 48, 64, 0.65);
+    border-color: var(--border);
   }
   .conv-header.is-hidden .conv-header-toggle-zone {
     height: 100%;
@@ -1276,16 +1370,17 @@
   }
   .conv-title-row {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 8px;
+    flex-wrap: wrap;
     margin-bottom: 8px;
   }
   .conv-title {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 13px;
+    font-weight: 650;
     color: var(--text);
-    flex: 1;
+    flex: 1 1 calc(100% - 132px);
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1294,14 +1389,14 @@
   }
   .conv-meta-row {
     display: flex;
-    align-items: center;
-    gap: 12px;
+    align-items: flex-start;
+    gap: 8px;
     flex-wrap: wrap;
-    margin-bottom: 8px;
+    margin-bottom: 0;
   }
   .conv-badges {
     display: flex;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
     align-items: center;
   }
@@ -1311,6 +1406,7 @@
     flex-wrap: nowrap;
     align-items: center;
     flex-shrink: 0;
+    margin-left: auto;
   }
   .copy-inline-status {
     min-width: 0;
@@ -1330,19 +1426,20 @@
     transform: translateY(0);
   }
   .conv-title-row .session-search-tools {
-    margin-left: auto;
-    justify-content: flex-end;
-    flex: 0 1 420px;
-    min-width: 220px;
+    order: 3;
+    margin-left: 0;
+    justify-content: stretch;
+    flex: 1 1 100%;
+    min-width: 0;
   }
   .conv-title-row .session-search-input {
-    width: min(360px, 34vw);
+    width: 100%;
   }
   .conv-meta-row .session-search-nav {
-    margin-left: auto;
-    justify-content: flex-end;
-    flex: 0 1 520px;
-    max-width: min(520px, 48vw);
+    margin-left: 0;
+    justify-content: flex-start;
+    flex: 1 1 100%;
+    max-width: 100%;
   }
   .conv-action-btn {
     border: 1px solid var(--border2);
@@ -1409,7 +1506,7 @@
     transform: translateY(0);
   }
   .badge {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-size: 10px;
     padding: 3px 8px;
     border-radius: 5px;
@@ -1423,6 +1520,239 @@
   .badge.openclaw    { color: var(--openclaw); border-color: rgba(162,138,187,0.24); background: rgba(162,138,187,0.09); }
   .badge.cursor      { color: var(--cursor); border-color: rgba(183,154,106,0.24); background: rgba(183,154,106,0.09); }
   .badge.chatgpt-export { color: var(--chatgpt); border-color: rgba(116,182,165,0.24); background: rgba(116,182,165,0.09); }
+  .conversation-shell.split-active .conv-header {
+    position: relative;
+    top: auto;
+    width: auto;
+    margin: 0 -32px 16px;
+    padding: 14px 18px 12px;
+    border-width: 0 0 1px;
+    border-radius: 0;
+    background: var(--content-bg);
+    box-shadow: none;
+  }
+  .conversation-shell.split-active .conv-header.is-hidden {
+    width: auto;
+    margin: 0 -32px 10px;
+    padding: 8px 18px 0;
+  }
+  .conversation-shell.split-active .conv-title-row {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .conversation-shell.split-active .conv-title {
+    flex: 1 1 100%;
+  }
+  .conversation-shell.split-active .conv-title-row .session-search-tools {
+    flex: 1 1 100%;
+  }
+  .conversation-shell.split-active .conv-actions {
+    margin-left: 0;
+  }
+  .conv-frame {
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 44px;
+    align-items: stretch;
+    background: var(--content-bg);
+  }
+  .conv-frame.no-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .conv-main {
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-color: var(--border2) transparent;
+    padding: 30px 22px 80px;
+  }
+  .conv-main::-webkit-scrollbar { width: 4px; }
+  .conv-main::-webkit-scrollbar-track { background: transparent; }
+  .conv-main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+  .conv-side-toolbar {
+    position: relative;
+    min-height: 0;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 6px;
+    border-left: 1px solid var(--border);
+    background: var(--sidebar-bg);
+    z-index: 22;
+  }
+  .conv-side-toolbar .conv-action-btn {
+    width: 30px;
+    height: 30px;
+    border-color: transparent;
+    background: transparent;
+    color: var(--muted2);
+  }
+  .conv-side-toolbar .conv-action-btn:hover,
+  .conv-side-toolbar .conv-action-btn.active {
+    background: var(--control-hover-bg);
+    border-color: var(--border);
+    color: var(--text);
+  }
+  .conv-action-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+  .conv-side-toolbar .copy-inline-status {
+    position: absolute;
+    top: 14px;
+    right: 42px;
+    max-width: 240px;
+    padding: 5px 8px;
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    background: var(--tooltip-bg);
+    box-shadow: 0 12px 32px var(--shadow-strong);
+    pointer-events: none;
+  }
+  .conv-side-toolbar .icon-action-btn::after {
+    top: 50%;
+    right: calc(100% + 8px);
+    transform: translate(4px, -50%);
+  }
+  .conv-side-toolbar .icon-action-btn:hover::after,
+  .conv-side-toolbar .icon-action-btn:focus-visible::after {
+    transform: translate(0, -50%);
+  }
+  .conv-frame .conv-header {
+    position: relative;
+    top: auto;
+    width: auto;
+    max-width: 840px;
+    margin: 0 auto 26px;
+    padding: 14px 0 20px;
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .conv-frame .conv-header-toggle-zone {
+    display: none;
+  }
+  .conv-frame .conv-header.is-hidden {
+    min-height: 0;
+    width: auto;
+    max-width: 840px;
+    margin: 0 auto 8px;
+    padding: 0;
+    border: 0;
+  }
+  .conv-frame .conv-title-row {
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+  .conv-frame .conv-title {
+    flex: 1 1 auto;
+    font-size: 23px;
+    line-height: 1.2;
+    font-weight: 650;
+  }
+  .conv-frame .conv-meta-row {
+    align-items: center;
+    gap: 8px;
+  }
+  .conv-frame .conv-badges {
+    gap: 6px;
+  }
+  .conv-meta-line {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .conv-meta-line span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .conv-meta-line span + span::before {
+    content: '·';
+    margin-right: 7px;
+    color: var(--muted);
+    opacity: 0.65;
+  }
+  .conv-search-strip {
+    position: sticky;
+    top: 0;
+    z-index: 19;
+    display: none;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 14px;
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: var(--control-bg);
+  }
+  .conv-search-strip.is-open {
+    display: flex;
+  }
+  .conv-search-strip .session-search-tools {
+    flex: 1 1 220px;
+    min-width: 0;
+  }
+  .conv-search-strip .session-search-input {
+    width: 100%;
+    height: 28px;
+  }
+  .conv-search-strip .session-search-nav {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .conv-search-close {
+    width: 24px;
+    height: 24px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 17px;
+    line-height: 1;
+  }
+  .conv-search-close:hover {
+    background: var(--control-hover-bg);
+    color: var(--text);
+  }
+  .conversation-shell.split-active .conv-frame {
+    grid-template-columns: minmax(0, 1fr) 38px;
+  }
+  .conversation-shell.split-active .conv-main {
+    padding: 14px 18px 24px;
+  }
+  .conversation-shell.split-active .conv-side-toolbar {
+    width: 38px;
+    height: 100%;
+    padding: 10px 4px;
+  }
+  .conversation-shell.split-active .conv-side-toolbar .conv-action-btn {
+    width: 28px;
+    height: 28px;
+  }
+  .conversation-shell.split-active .conv-frame .conv-header {
+    margin: 0 0 10px;
+    padding: 0 0 10px;
+    background: transparent;
+    border-width: 0 0 1px;
+  }
   .conversation-map {
     margin: 0 0 18px;
     border: 1px solid rgba(0, 200, 160, 0.28);
@@ -1455,7 +1785,7 @@
     gap: 8px;
   }
   .conversation-map-stat {
-    border: 1px solid rgba(255,255,255,0.08);
+    border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--control-bg);
     padding: 5px 8px;
@@ -1521,7 +1851,7 @@
     font-size: 12px;
   }
   .session-skills {
-    margin-top: 12px;
+    margin: 16px 0 18px;
     border: 1px solid var(--border2);
     border-radius: 6px;
     background: var(--surface);
@@ -1653,31 +1983,83 @@
     white-space: nowrap;
   }
   /* ── Messages ── */
-  .message { margin-bottom: 20px; }
+  .message {
+    display: flex;
+    gap: 14px;
+    position: relative;
+    max-width: 840px;
+    margin: 0 auto 26px;
+    padding-left: 0;
+  }
+  .message::before {
+    content: none;
+  }
+  .msg-rail {
+    width: 3px;
+    border-radius: 3px;
+    flex: none;
+    background: var(--border2);
+  }
+  .message.user .msg-rail { background: var(--accent2); }
+  .message.assistant .msg-rail { background: var(--accent); }
+  .message.tool .msg-rail { background: var(--warn); }
+  .message.system .msg-rail { background: #d080ff; }
+  .msg-body {
+    min-width: 0;
+    flex: 1;
+  }
+  .message-header-actions {
+    margin-left: auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .message:hover .message-header-actions,
+  .message-header-actions:focus-within,
+  .message-header-actions .msg-anno-bar.has-active {
+    opacity: 1;
+  }
+  .message-header-actions .msg-anno-bar {
+    opacity: 1;
+    margin-left: 0;
+  }
+  .message-header-actions .message-action-btn {
+    width: 22px;
+    height: 20px;
+    background: transparent;
+    border-color: transparent;
+  }
+  .message-header-actions .message-action-btn:hover:not(:disabled) {
+    background: var(--panel2);
+    border-color: var(--border);
+  }
   .message.tool,
   .message.system {
-    padding-left: 12px;
-    border-left: 2px solid var(--border2);
+    padding-left: 0;
+    border-left: 0;
   }
   .message-role {
-    font-family: var(--font-mono);
-    font-size: 10px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: none;
     color: var(--muted);
-    margin-bottom: 6px;
+    margin-bottom: 7px;
     display: flex;
-    align-items: center;
-    gap: 8px;
+    align-items: baseline;
+    gap: 10px;
   }
   .message-role.user  { color: var(--accent2); }
   .message-role.assistant { color: var(--accent); }
   .message-role.tool { color: var(--warn); }
   .message-role.system { color: #d080ff; }
   .msg-time {
-    font-size: 10px;
+    font-size: 11.5px;
     color: var(--muted);
-    font-weight: 300;
+    font-weight: 400;
   }
   .message-action-btn {
     border: 1px solid var(--border2);
@@ -1712,10 +2094,10 @@
     border-color: rgba(116, 182, 165, 0.56);
   }
   .thinking-block {
-    background: var(--think-bg);
-    border: 1px solid var(--think-border);
-    border-radius: 6px;
-    margin-bottom: 10px;
+    background: rgba(255,255,255,0.015);
+    border: 1px dashed var(--border2);
+    border-radius: 8px;
+    margin: 0.6em 0;
     overflow: hidden;
   }
   .thinking-toggle {
@@ -1725,9 +2107,10 @@
     padding: 8px 12px;
     cursor: pointer;
     user-select: none;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--think-text);
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    color: var(--muted2);
+    font-weight: 600;
   }
   .thinking-toggle:hover { background: var(--control-hover-bg); }
   .thinking-arrow {
@@ -1739,13 +2122,13 @@
   .thinking-content {
     display: none;
     padding: 10px 14px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--think-text);
-    line-height: 1.7;
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    color: var(--muted2);
+    line-height: 1.62;
     white-space: pre-wrap;
     word-break: break-word;
-    border-top: 1px solid var(--think-border);
+    border-top: 1px dashed var(--border2);
     max-height: 400px;
     overflow-y: auto;
   }
@@ -1757,40 +2140,41 @@
   .attr-strip {
     display: flex;
     flex-wrap: wrap;
-    gap: 6px 10px;
+    gap: 5px 7px;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 10px;
-    color: var(--muted);
+    font-size: 9.5px;
+    color: var(--meta-text);
     margin-bottom: 6px;
-    line-height: 1.6;
+    line-height: 1.45;
   }
   .attr-chip {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    padding: 1px 6px;
+    gap: 3px;
+    padding: 1px 5px;
     border-radius: 3px;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--muted);
+    background: var(--meta-bg);
+    border: 1px solid var(--meta-border);
+    color: var(--meta-text);
   }
-  .attr-chip .k { color: var(--muted); opacity: 0.65; }
-  .attr-chip .v { color: var(--text); }
+  .attr-chip .k { color: var(--meta-text); opacity: 0.82; }
+  .attr-chip .v { color: var(--meta-strong); }
   .attr-details {
-    background: var(--surface);
-    border: 1px solid var(--border);
+    background: var(--meta-bg);
+    border: 1px solid var(--meta-border);
     border-radius: 4px;
     margin: 6px 0 8px;
     overflow: hidden;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 10px;
+    color: var(--meta-text);
   }
   .attr-details summary {
-    padding: 5px 10px;
+    padding: 4px 9px;
     cursor: pointer;
     user-select: none;
-    color: var(--muted);
+    color: var(--meta-text);
     list-style: none;
     display: flex;
     align-items: center;
@@ -1804,9 +2188,9 @@
     display: inline-block;
   }
   .attr-details[open] summary::before { transform: rotate(90deg); }
-  .attr-details summary:hover { background: var(--control-hover-bg); }
+  .attr-details summary:hover { background: var(--meta-bg-hover); }
   .attr-details > .attr-body {
-    border-top: 1px solid var(--border);
+    border-top: 1px solid var(--meta-border);
     padding: 8px 12px;
     display: grid;
     grid-template-columns: max-content 1fr;
@@ -1815,12 +2199,12 @@
     overflow-y: auto;
   }
   .attr-body > .k {
-    color: var(--muted);
-    opacity: 0.7;
+    color: var(--meta-text);
+    opacity: 0.78;
     white-space: nowrap;
   }
   .attr-body > .v {
-    color: var(--text);
+    color: var(--meta-strong);
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -1836,7 +2220,7 @@
   }
   .attr-body details summary {
     cursor: pointer;
-    color: var(--muted);
+    color: var(--meta-text);
     padding: 0;
     list-style: none;
   }
@@ -1854,68 +2238,98 @@
   /* Turn-summary block for Claude `result` events. Renders cost / duration /
      stop reason / full usage breakdown that the extractor used to drop. */
   .turn-summary {
-    background: var(--info-bg);
-    border: 1px solid var(--info-border);
+    background: var(--meta-bg);
+    border: 1px solid var(--meta-border);
     border-radius: 5px;
-    padding: 8px 12px;
+    padding: 6px 10px;
     margin: 6px 0;
     font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--info-text);
+    font-size: 10.5px;
+    color: var(--meta-text);
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 10px;
     align-items: center;
   }
   .turn-summary .ts-label { opacity: 0.65; }
-  .turn-summary .ts-value { color: var(--info-strong); }
+  .turn-summary .ts-value { color: var(--meta-strong); }
 
   /* Rate-limit strip for `rate_limit_event`. */
   .rate-limit-strip {
-    background: var(--warning-bg);
-    border: 1px solid var(--warning-border);
+    background: var(--meta-bg);
+    border: 1px solid var(--meta-border);
     border-radius: 5px;
-    padding: 8px 12px;
+    padding: 6px 10px;
     margin: 6px 0;
     font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--warning-text);
+    font-size: 10.5px;
+    color: var(--meta-text);
     display: flex;
     flex-wrap: wrap;
-    gap: 14px;
+    gap: 10px;
   }
 
   .text-block {
-    font-size: 14px;
+    font-family: var(--font-sans);
+    font-size: 15px;
+    font-weight: 400;
     color: var(--text);
-    line-height: 1.7;
+    line-height: 1.62;
+    letter-spacing: 0;
+    word-spacing: 0;
     white-space: pre-wrap;
-    word-break: break-word;
+    word-break: normal;
+    overflow-wrap: anywhere;
+    font-size-adjust: none;
   }
   .text-block code {
     font-family: var(--font-mono);
-    font-size: 12px;
-    background: var(--surface);
+    font-size: 0.88em;
+    background: var(--panel2);
     border: 1px solid var(--border);
     padding: 1px 5px;
-    border-radius: 3px;
+    border-radius: 4px;
     color: var(--accent);
   }
   .text-block.readable {
     white-space: normal;
+  }
+  .text-block.readable strong {
+    font-size: inherit;
+    color: var(--text);
+    font-weight: 700;
+  }
+  .text-block.readable em {
+    font-size: inherit;
+    color: var(--text);
+    font-style: italic;
+  }
+  .text-block.readable a {
+    font-size: inherit;
+    color: var(--accent);
+    text-decoration: underline;
+    text-decoration-color: rgba(116, 182, 165, 0.46);
+    text-underline-offset: 2px;
+  }
+  .text-block.readable a:hover {
+    color: var(--accent2);
+    text-decoration-color: currentColor;
   }
   .text-block.readable p,
   .text-block.readable ul,
   .text-block.readable ol,
   .text-block.readable blockquote,
   .text-block.readable table {
-    margin: 8px 0;
+    font-size: inherit;
+    line-height: inherit;
+    margin: 0.5em 0;
   }
+  .text-block.readable p:first-child { margin-top: 0; }
   .text-block.readable h1,
   .text-block.readable h2,
   .text-block.readable h3,
   .text-block.readable h4 {
-    margin: 12px 0 6px;
+    margin: 1em 0 0.3em;
     font-size: 15px;
     line-height: 1.45;
     color: var(--text);
@@ -1933,14 +2347,16 @@
     color: var(--muted);
   }
   .text-block.readable pre.markdown-code {
-    margin: 8px 0;
-    padding: 10px 12px;
-    border-radius: 5px;
-    border: 1px solid var(--border2);
-    background: var(--code-bg);
+    margin: 0.6em 0;
+    padding: 12px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--panel);
     color: var(--text);
     overflow-x: auto;
     white-space: pre;
+    font-size: 12.5px;
+    line-height: 1.5;
   }
   .text-block.readable pre.markdown-code code {
     border: 0;
@@ -1968,67 +2384,87 @@
   }
 
   .tool-block {
-    background: var(--surface);
-    border: 1px solid var(--border2);
-    border-radius: 5px;
-    padding: 8px 12px;
-    margin: 6px 0;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0;
+    margin: 0.7em 0;
     font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--muted);
+    font-size: 12.5px;
+    color: var(--muted2);
   }
   details.tool-block {
     overflow: hidden;
+    padding: 0;
+  }
+  details.tool-block:not([open]) {
+    background: var(--panel);
+    border-color: var(--border);
+    border-radius: 8px;
+    padding: 0;
+    margin: 0.7em 0;
+  }
+  details.tool-block:not([open]) > summary.tool-meta {
+    border-bottom: 0;
   }
   .tool-block > summary.tool-meta {
     cursor: pointer;
     list-style: none;
     user-select: none;
     margin-bottom: 0;
-    min-height: 24px;
+    min-height: 0;
+    line-height: 1.35;
+    padding: 8px 13px;
+    background: var(--panel2);
+    border-bottom: 1px solid var(--border);
   }
   .tool-block > summary.tool-meta::-webkit-details-marker { display: none; }
   .tool-block > summary.tool-meta::before {
-    content: '▶';
-    color: var(--muted);
-    font-size: 8px;
-    transition: transform 0.15s;
-    flex-shrink: 0;
+    content: none;
   }
   .tool-block[open] > summary.tool-meta {
-    margin-bottom: 8px;
+    margin-bottom: 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--meta-border);
   }
   .tool-block[open] > summary.tool-meta::before {
-    transform: rotate(90deg);
+    transform: none;
   }
   .tool-block > summary.tool-meta:hover {
-    color: var(--text);
+    color: var(--meta-strong);
   }
   .tool-block.search-opened {
     border-color: rgba(255, 213, 74, 0.34);
   }
-  .tool-mini-label {
-    margin-left: auto;
-    color: var(--muted);
-    font-family: var(--font-sans);
-    font-size: 10px;
-  }
-  .tool-block[open] .tool-mini-label {
-    display: none;
-  }
-  .tool-name { color: var(--warn); font-weight: 500; }
+  .tool-mini-label { display: none; }
+  .tool-name { color: var(--warn); font-weight: 650; opacity: 0.92; }
   .tool-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
+    gap: 6px;
+    margin-bottom: 4px;
     flex-wrap: wrap;
   }
   .tool-kind {
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--muted);
+    font-size: inherit;
+    letter-spacing: 0;
+    text-transform: none;
+    color: inherit;
+  }
+  .tool-ic {
+    color: var(--warn);
+    margin-right: 3px;
+  }
+  .tool-card.result {
+    background: rgba(116,182,165,0.04);
+  }
+  .tool-card .detail-pre {
+    border: 0;
+    margin: 0;
+    background: transparent;
+    color: var(--text);
+    white-space: pre;
+    overflow: auto;
   }
   .attachment-open-btn {
     display: inline-flex;
@@ -2064,7 +2500,7 @@
     text-align: left;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: var(--control-bg);
+    background: var(--panel);
     color: var(--text);
     cursor: pointer;
     font-family: var(--font-sans);
@@ -2150,28 +2586,36 @@
   .inline-data-image-preview img {
     max-width: 100%;
     max-height: 480px;
-    border-radius: 4px;
+    border-radius: 8px;
     border: 1px solid var(--border);
     display: block;
   }
+  .attachment-block img {
+    max-width: 100% !important;
+    max-height: 520px !important;
+    border-radius: 8px !important;
+    border: 1px solid var(--border) !important;
+    display: block !important;
+    margin: 0.7em 0 !important;
+  }
   .detail-block {
-    margin: 8px 0;
-    border: 1px solid var(--border);
+    margin: 5px 0 2px;
+    border: 1px solid var(--meta-border);
     border-radius: 5px;
     overflow: hidden;
-    background: var(--control-bg);
+    background: transparent;
   }
   .detail-block summary {
     cursor: pointer;
     list-style: none;
-    padding: 8px 10px;
+    padding: 5px 8px;
     font-family: var(--font-mono);
-    font-size: 11px;
-    color: var(--text);
+    font-size: 10.5px;
+    color: var(--meta-strong);
     user-select: none;
   }
   .detail-block summary::-webkit-details-marker { display: none; }
-  .detail-block summary:hover { background: var(--control-hover-bg); }
+  .detail-block summary:hover { background: var(--meta-bg-hover); }
   .detail-block.raw-image-output:not([open]) {
     border-color: rgba(116, 182, 165, 0.22);
   }
@@ -2187,15 +2631,15 @@
   }
   .detail-pre {
     margin: 0;
-    padding: 10px 12px 12px;
-    border-top: 1px solid var(--border);
+    padding: 12px 14px;
+    border-top: 1px solid var(--meta-border);
     white-space: pre-wrap;
     word-break: break-word;
     overflow-x: auto;
     font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.6;
-    color: var(--text);
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--meta-strong);
   }
   .other-block {
     background: var(--control-bg);
@@ -2213,12 +2657,12 @@
   .usage-line {
     font-family: var(--font-mono);
     font-size: 10px;
-    color: var(--muted);
-    margin-top: 6px;
-    display: flex;
-    gap: 12px;
+    color: var(--meta-text);
+    margin-top: 3px;
+    display: none;
+    gap: 10px;
   }
-  .usage-line span { color: var(--text); }
+  .usage-line span { color: var(--meta-strong); }
 
   /* ── Empty states ── */
   .empty {
@@ -3293,6 +3737,56 @@
     border-radius: 8px;
     background: var(--code-bg);
   }
+
+  /* Keep app chrome readable while code-like data stays in the mono face. */
+  header,
+  header *,
+  .weekly-strip,
+  .weekly-strip *,
+  .session-tabs,
+  .session-tabs *,
+  .session-list,
+  .session-list *,
+  .conv-header,
+  .conv-header *,
+  .overview-shell,
+  .overview-shell *,
+  .conversation-map,
+  .conversation-map *,
+  .settings-panel,
+  .settings-panel *,
+  .recovery-reset-panel,
+  .recovery-reset-panel *,
+  .empty,
+  .empty *,
+  .no-session,
+  .no-session *,
+  .message-role,
+  .message-role * {
+    font-family: var(--font-sans);
+  }
+
+  .tool-block,
+  .tool-block *,
+  .other-block,
+  .attr-strip,
+  .attr-strip *,
+  .attr-details,
+  .attr-details *,
+  .turn-summary,
+  .turn-summary *,
+  .rate-limit-strip,
+  .rate-limit-strip *,
+  .usage-line,
+  .usage-line *,
+  .detail-pre,
+  .skill-file-content pre,
+  .skill-file-content pre *,
+  code,
+  pre {
+    font-family: var(--font-mono);
+  }
+
   @media (max-width: 820px) {
     .conv-title-row {
       flex-wrap: wrap;
@@ -3389,12 +3883,12 @@
   </div>
   <div class="filters">
     <button class="filter-btn active" data-src="all">all</button>
-    <button class="filter-btn" data-src="claude-cli">claude cli</button>
+    <button class="filter-btn" data-src="claude-cli" aria-label="claude cli"><span class="filter-label"><span>claude</span><span>cli</span></span></button>
     <button class="filter-btn" data-src="codex-cli">codex</button>
-    <button class="filter-btn" data-src="claude-app">claude app</button>
+    <button class="filter-btn" data-src="claude-app" aria-label="claude app"><span class="filter-label"><span>claude</span><span>app</span></span></button>
     <button class="filter-btn" data-src="openclaw">openclaw</button>
     <button class="filter-btn" data-src="cursor">cursor</button>
-    <button class="filter-btn" data-src="chatgpt-export">chatgpt-export</button>
+    <button class="filter-btn" data-src="chatgpt-export" aria-label="chatgpt export"><span class="filter-label"><span>chatgpt</span><span>export</span></span></button>
   </div>
   <div class="stat" id="stat">loading…</div>
   <div class="header-actions">
@@ -3591,7 +4085,7 @@
                   <div class="settings-label" id="release-notes-title">New in this version</div>
                   <div class="settings-value" id="release-notes-subtitle">What changed in the installed DataMoat version.</div>
                 </div>
-                <div class="release-notes-version" id="release-notes-version">v2.0.10</div>
+                <div class="release-notes-version" id="release-notes-version">v2.0.11</div>
               </div>
               <ul class="release-notes-list" id="release-notes-list"></ul>
             </div>
@@ -3800,6 +4294,7 @@ let searchAutoLoadHoldUntil = 0
 let searchScrollRetryTimer = null
 let searchScrollCancelled = false
 let sessionSearchQ = ''
+let sessionSearchOpen = false
 let sessionSearchTimer = null
 let sessionSearchSeq = 0
 let splitSessionId = null
@@ -3858,11 +4353,13 @@ const SESSION_PAGE_SIZE = 500
 const SEARCH_CONTEXT_BEFORE = 80
 const CONVERSATION_HEADER_HIDDEN_KEY = 'dm_conversation_header_hidden'
 const SIDEBAR_WIDTH_KEY = 'dm_sidebar_width_px'
+const SIDEBAR_COLLAPSED_KEY = 'dm_sidebar_collapsed'
 const SIDEBAR_DEFAULT_WIDTH = 330
 const SIDEBAR_MIN_WIDTH = 264
 const SIDEBAR_MAX_WIDTH = 720
 const TOOL_COLLAPSED_KEY = 'dm_tool_blocks_collapsed'
 let conversationHeaderHidden = localStorage.getItem(CONVERSATION_HEADER_HIDDEN_KEY) === '1'
+let sidebarCollapsed = localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
 let toolBlocksCollapsedByDefault = localStorage.getItem(TOOL_COLLAPSED_KEY) === '1'
 let toolBlockOpenState = {}
 let suppressToolBlockToggleState = false
@@ -3901,19 +4398,18 @@ const SOURCE_LABELS = {
   'claude-app': 'Claude App',
   'openclaw': 'OpenClaw',
   'cursor': 'Cursor',
-  'chatgpt-export': 'chatgpt-export',
+  'chatgpt-export': 'chatgpt export',
 }
 
-const CURRENT_RELEASE_NOTES_VERSION = '2.0.10'
+const CURRENT_RELEASE_NOTES_VERSION = '2.0.11'
 const CURRENT_RELEASE_NOTES = {
   en: [
-    "Collapse and expand tool output blocks with a button for a cleaner conversation view.",
-    "Switch between dark and light themes.",
-    "Bookmark important sessions and individual messages, vote answers up or down, and review those saved items from the sidebar.",
-    "Duplicate conversations from Claude resume/fork are merged into one clean session while the original records are preserved.",
-    "Transfer import stays stable during long imports — closing Settings no longer cancels the background refresh or bounces you unexpectedly.",
-    "Keeps pace with the latest versions of the AI tools DataMoat backs up.",
-    "More reliable downloads and update checks, so you always get the right build.",
+    "Refreshes the desktop UI with cleaner conversation layout, bundled JetBrains Mono styling, quieter metadata rows, and better light/dark theme consistency.",
+    "Adds chat export tools for portable DataMoat conversation exports: HTML viewer, clean JSON, Markdown context pack, and attachments.",
+    "Fixes packaged Windows copy-to-clipboard by using Electron's native clipboard bridge with browser fallback.",
+    "Fixes Windows manual update checks so DataMoat no longer opens an older release page or looks like it is offering a downgrade.",
+    "Hardens Windows no-screen/startup launchers so command windows do not stay open or kill tray/background capture when closed.",
+    "Fixes Windows transfer/restore setup edge cases: no overlay bounce on network drops, and Mac Touch ID refresh prompts stay hidden on Windows.",
   ],
 }
 
@@ -4074,10 +4570,13 @@ const appText = {
 	    searchingThisConversation: 'searching this conversation...',
 	    matchesFor: 'matches for "{query}"',
 	    copyAllContextTip: 'Copy full context pack',
+	    exportChatTip: 'Export this chat (folder + viewer)',
 	    jumpLatestTip: 'Jump to latest message',
 	    copyThroughContextTip: 'Copy context through this message',
 	    copiedThroughNotice: 'Copied {count} messages as a context pack.',
 	    copiedAllNotice: 'Copied all {count} messages as a context pack.',
+	    exportingNotice: 'Exporting…',
+	    exportedNotice: 'Exported {count} messages',
 	    endOfConversation: 'End of conversation',
 	  },
   'zh-CN': {
@@ -4200,10 +4699,13 @@ const appText = {
 	    searchingThisConversation: '正在搜索这个对话...',
 	    matchesFor: '“{query}”的匹配项',
 	    copyAllContextTip: '复制完整上下文包',
+	    exportChatTip: '导出此对话（文件夹 + 查看器）',
 	    jumpLatestTip: '跳到最新消息',
 	    copyThroughContextTip: '复制到这条消息为止的上下文',
 	    copiedThroughNotice: '已复制 {count} 条消息为上下文包。',
 	    copiedAllNotice: '已复制全部 {count} 条消息为上下文包。',
+	    exportingNotice: '正在导出…',
+	    exportedNotice: '已导出 {count} 条消息',
 	    endOfConversation: '对话已到底',
 	  },
   ja: {
@@ -4326,10 +4828,13 @@ const appText = {
 	    searchingThisConversation: 'この会話を検索中...',
 	    matchesFor: '「{query}」の一致',
 	    copyAllContextTip: 'コンテキストパック全体をコピー',
+	    exportChatTip: 'このチャットをエクスポート（フォルダ + ビューア）',
 	    jumpLatestTip: '最新メッセージへ移動',
 	    copyThroughContextTip: 'このメッセージまでのコンテキストをコピー',
 	    copiedThroughNotice: '{count} 件のメッセージをコンテキストパックとしてコピーしました。',
 	    copiedAllNotice: '全 {count} 件のメッセージをコンテキストパックとしてコピーしました。',
+	    exportingNotice: 'エクスポート中…',
+	    exportedNotice: '{count} 件のメッセージをエクスポートしました',
 	    endOfConversation: '会話の最後です',
 	  },
 }
@@ -5904,6 +6409,14 @@ const ANNO_ICONS = {
   bookmarkFill: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M6 4h12v17l-6-4.5L6 21Z"/></svg>',
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 11v9H4v-9Zm3 9h7.5a2 2 0 0 0 2-1.7l1-6A2 2 0 0 0 18.5 10H14V5.5A2.5 2.5 0 0 0 11.5 3L10 9.5Z"/></svg>',
   down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 13V4h3v9Zm-3-9H6.5a2 2 0 0 0-2 1.7l-1 6A2 2 0 0 0 5.5 14H10v4.5A2.5 2.5 0 0 0 12.5 21L14 14.5Z"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>',
+  sidebarCollapse: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="3"/><path d="M10 5v14"/></svg>',
+  sidebarExpand: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="3"/><path d="M10 5v14"/></svg>',
+  toolExpanded: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10"/><path d="M7 12h10"/><path d="M7 17h10"/></svg>',
+  toolCollapsed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h8"/><path d="m8 12 4 4 4-4"/><path d="M8 18h8"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M5 15V6a1 1 0 0 1 1-1h9"/></svg>',
+  latest: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="m6 13 6 6 6-6"/></svg>',
+  exportChat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/></svg>',
 }
 
 async function loadAnnotationSummary() {
@@ -6027,6 +6540,12 @@ function renderPanelModeBar() {
         role="tab" aria-selected="${panelMode === mode ? 'true' : 'false'}" title="${escAttr(label)}" aria-label="${escAttr(label)}">
         ${ANNO_ICONS[icon]}
       </button>`).join('')}
+    <button class="panel-mode-btn panel-collapse-btn${sidebarCollapsed ? ' active' : ''}" type="button" data-sidebar-collapse
+      title="${sidebarCollapsed ? 'Expand conversation list' : 'Collapse conversation list'}"
+      aria-label="${sidebarCollapsed ? 'Expand conversation list' : 'Collapse conversation list'}"
+      aria-pressed="${sidebarCollapsed ? 'true' : 'false'}">
+      ${sidebarCollapsed ? ANNO_ICONS.sidebarExpand : ANNO_ICONS.sidebarCollapse}
+    </button>
   </div>`
 }
 
@@ -6044,25 +6563,21 @@ function renderSessionListItem(s) {
   const safeModel = esc(s.model)
   const safeCwd = esc(sessionDisplayTitle(s, s.id.slice(0,16)+'…'))
   const sourceLabel = sessionSourceLabel(s)
-  const safeSourceLabel = esc(s.sourceAccount ? `${sourceLabel} · ${s.sourceAccount}` : sourceLabel)
-  const safeSourceAccount = s.sourceAccount
-    ? `<div class="session-account"><span class="session-account-label">account</span><span class="session-account-value">${esc(s.sourceAccount)}</span></div>`
-    : ''
+  const sourceTitle = s.sourceAccount ? `${sourceLabel} · ${s.sourceAccount}` : sourceLabel
+  const safeSourceTitle = escAttr(sourceTitle)
   const bookmarked = !!annoSummary.sessions?.[sessionKey]?.bookmark
   return `
-  <div class="${itemClasses}" data-session-id="${safeSessionId}" tabindex="0" role="button" aria-label="Open session ${safeSessionId}">
+  <div class="${itemClasses}" data-session-id="${safeSessionId}" tabindex="0" role="button" aria-label="Open ${safeSourceTitle} session ${safeSessionId}">
     <div class="session-header">
-      <span class="source-dot ${s.source}"></span>
+      <span class="source-dot ${s.source}" title="${safeSourceTitle}"></span>
       <span class="session-model">${safeModel}</span>
       ${s.hasThinking ? '<span class="thinking-badge">thinking</span>' : ''}
       ${s.graph?.branchCount ? `<span class="thinking-badge">${fmtNumber(s.graph.branchCount)} branches</span>` : ''}
       ${bookmarked ? `<span class="session-bookmark-flag" title="Bookmarked">${ANNO_ICONS.bookmarkFill}</span>` : ''}
     </div>
     <div class="session-cwd">${safeCwd}</div>
-    ${safeSourceAccount}
     ${excerpt ? `<div class="search-excerpt">${esc(excerpt)}</div>` : ''}
     <div class="session-meta">
-      <span>${safeSourceLabel}</span>
       <span>${s.messageCount} msgs · ${reltime(s.lastTimestamp)}</span>
     </div>
   </div>`
@@ -6196,7 +6711,7 @@ function renderList() {
   } else {
     body = filtered.map(renderSessionListItem).join('')
   }
-  list.innerHTML = modeBar + body
+  list.innerHTML = `${modeBar}<div class="session-list-body">${body}</div>`
   list.scrollTop = preservedScrollTop
 }
 
@@ -6264,6 +6779,7 @@ function clearActiveSession() {
   activeSearchTarget = null
   activeSearchNav = null
   sessionSearchQ = ''
+  sessionSearchOpen = false
   clearTimeout(sessionSearchTimer)
   sessionSearchSeq += 1
   closeSplitPane()
@@ -6763,6 +7279,7 @@ async function selectSession(id, options = {}) {
   const searchHit = options.searchHit || null
   const searchQuery = String(options.query || searchQ || '').trim()
   sessionSearchQ = searchHit ? searchQuery : ''
+  sessionSearchOpen = !!searchHit
   activeSearchTarget = searchHit
     ? {
         sessionId: id,
@@ -6902,23 +7419,49 @@ function renderSessionSearchControls() {
   </div>`
 }
 
-function renderConversationActions(session, pageInfo) {
+function renderSessionSearchIdleNav() {
+  return `<div class="session-search-nav"><span>${sessionSearchQ.length >= 2 ? 'searching this conversation' : 'type to search this conversation'}</span></div>`
+}
+
+function renderConversationSearchStrip(splitPane = false) {
+  if (splitPane) return ''
+  const open = sessionSearchOpen || sessionSearchQ.length >= 2 || !!activeSearchNav || !!activeSearchTarget
+  const nav = renderSearchNav() || renderSessionSearchIdleNav()
+  return `<div class="conv-search-strip${open ? ' is-open' : ''}"${open ? '' : ' hidden'}>
+    ${renderSessionSearchControls()}
+    ${nav}
+    <button class="conv-search-close" type="button" data-session-search-close title="Close search" aria-label="Close search">×</button>
+  </div>`
+}
+
+function renderConversationActions(session, pageInfo, opts = {}) {
+  const splitPane = opts.splitPane === true
+  if (splitPane) {
+    return `<div class="conv-side-toolbar conv-actions" aria-label="Conversation tools">
+      <button class="conv-action-btn icon-action-btn" type="button" data-close-split-pane data-tip="Close split pane" title="Close split pane" aria-label="Close split pane">×</button>
+    </div>`
+  }
   if (activeBranchData) return ''
   const total = Number(pageInfo?.totalMessages || session.messageCount || 0)
   const copyDisabled = total <= 0
   const copyLabel = appTr('copyAllContextTip')
   const latestLabel = appTr('jumpLatestTip')
   const toolLabel = toolBlocksCollapsedByDefault ? 'Expand tool contents' : 'Minimize tool contents'
+  const searchOpen = sessionSearchOpen || sessionSearchQ.length >= 2 || !!activeSearchNav || !!activeSearchTarget
+  const searchLabel = searchOpen ? 'Hide conversation search' : 'Search this conversation'
   const sessionKey = session.uid || session.id
   const bookmarked = sessionKey === activeId
     ? !!activeAnnotations.bookmark
     : !!annoSummary.sessions?.[sessionKey]?.bookmark
-  return `<div class="conv-actions">
-    <button class="conv-action-btn icon-action-btn${toolBlocksCollapsedByDefault ? ' active' : ''}" type="button" data-tool-collapse-all aria-pressed="${toolBlocksCollapsedByDefault ? 'true' : 'false'}" data-tip="${escAttr(toolLabel)}" title="${escAttr(toolLabel)}" aria-label="${escAttr(toolLabel)}">${toolBlocksCollapsedByDefault ? '▥' : '▤'}</button>
+  const exportLabel = appTr('exportChatTip')
+  return `<div class="conv-side-toolbar conv-actions" aria-label="Conversation tools">
+    <button class="conv-action-btn icon-action-btn" type="button" data-session-export data-tip="${escAttr(exportLabel)}" title="${escAttr(exportLabel)}" aria-label="${escAttr(exportLabel)}"${total <= 0 ? ' disabled' : ''}>${ANNO_ICONS.exportChat}</button>
+    <button class="conv-action-btn icon-action-btn${searchOpen ? ' active' : ''}" type="button" data-session-search-toggle aria-pressed="${searchOpen ? 'true' : 'false'}" data-tip="${escAttr(searchLabel)}" title="${escAttr(searchLabel)}" aria-label="${escAttr(searchLabel)}">${ANNO_ICONS.search}</button>
+    <button class="conv-action-btn icon-action-btn${toolBlocksCollapsedByDefault ? ' active' : ''}" type="button" data-tool-collapse-all aria-pressed="${toolBlocksCollapsedByDefault ? 'true' : 'false'}" data-tip="${escAttr(toolLabel)}" title="${escAttr(toolLabel)}" aria-label="${escAttr(toolLabel)}">${toolBlocksCollapsedByDefault ? ANNO_ICONS.toolCollapsed : ANNO_ICONS.toolExpanded}</button>
     <button class="conv-action-btn icon-action-btn conv-bookmark-btn${bookmarked ? ' active' : ''}" type="button" data-session-bookmark="${escAttr(sessionKey)}" data-tip="Bookmark session" title="Bookmark session" aria-label="Bookmark session">${bookmarked ? ANNO_ICONS.bookmarkFill : ANNO_ICONS.bookmark}</button>
-    <button class="conv-action-btn icon-action-btn" type="button" data-session-copy-full data-tip="${escAttr(copyLabel)}" title="${escAttr(copyLabel)}" aria-label="${escAttr(copyLabel)}"${copyDisabled ? ' disabled' : ''}>⧉</button>
+    <button class="conv-action-btn icon-action-btn" type="button" data-session-copy-full data-tip="${escAttr(copyLabel)}" title="${escAttr(copyLabel)}" aria-label="${escAttr(copyLabel)}"${copyDisabled ? ' disabled' : ''}>${ANNO_ICONS.copy}</button>
     <span class="copy-inline-status" role="status" aria-live="polite"></span>
-    <button class="conv-action-btn icon-action-btn" type="button" data-session-jump-latest data-tip="${escAttr(latestLabel)}" title="${escAttr(latestLabel)}" aria-label="${escAttr(latestLabel)}"${total <= 0 ? ' disabled' : ''}>↓</button>
+    <button class="conv-action-btn icon-action-btn" type="button" data-session-jump-latest data-tip="${escAttr(latestLabel)}" title="${escAttr(latestLabel)}" aria-label="${escAttr(latestLabel)}"${total <= 0 ? ' disabled' : ''}>${ANNO_ICONS.latest}</button>
   </div>`
 }
 
@@ -6946,11 +7489,29 @@ function applySidebarWidth(value, persist = false) {
   return width
 }
 
+function applySidebarCollapsed(collapsed, persist = false) {
+  sidebarCollapsed = !!collapsed
+  document.querySelector('.layout')?.classList.toggle('sidebar-collapsed', sidebarCollapsed)
+  document.querySelectorAll('[data-sidebar-collapse]').forEach(button => {
+    button.classList.toggle('active', sidebarCollapsed)
+    button.setAttribute('aria-pressed', sidebarCollapsed ? 'true' : 'false')
+    button.setAttribute('title', sidebarCollapsed ? 'Expand conversation list' : 'Collapse conversation list')
+    button.setAttribute('aria-label', sidebarCollapsed ? 'Expand conversation list' : 'Collapse conversation list')
+    button.innerHTML = sidebarCollapsed ? ANNO_ICONS.sidebarExpand : ANNO_ICONS.sidebarCollapse
+  })
+  if (persist) localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0')
+}
+
+function toggleSidebarCollapsed() {
+  applySidebarCollapsed(!sidebarCollapsed, true)
+}
+
 function initSidebarResize() {
   const handle = document.getElementById('sidebar-resizer')
   const layout = handle?.closest('.layout')
   if (!handle || !layout) return
   applySidebarWidth(localStorage.getItem(SIDEBAR_WIDTH_KEY) || SIDEBAR_DEFAULT_WIDTH)
+  applySidebarCollapsed(sidebarCollapsed)
   let dragging = false
   const setFromPointer = event => {
     const layoutRect = layout.getBoundingClientRect()
@@ -7018,79 +7579,87 @@ function renderConversationMarkup(session, messages, opts = {}) {
 
   const srcClass = session.source
   const safeTitle = esc(sessionDisplayTitle(session, session.id))
-  const safeSource = esc(session.source)
-  const safeSourceAccount = session.sourceAccount ? `<span class="badge ${srcClass}">${esc(session.sourceAccount)}</span>` : ''
   const safeModel = esc(session.model)
   const safeVersion = esc(session.appVersion)
+  const sourceInfo = session.sourceAccount ? `${session.source} · ${session.sourceAccount}` : session.source
+  const metaTitle = escAttr(`source: ${sourceInfo}`)
   const splitPane = opts.splitPane === true
-  const titleTools = splitPane
-    ? `<button class="conversation-split-close" type="button" data-close-split-pane aria-label="Close split pane">×</button>`
-    : `${renderSessionSearchControls()}${renderConversationActions(session, opts.pageInfo)}`
+  const toolbar = renderConversationActions(session, opts.pageInfo, { splitPane })
   return `
-    <div class="conv-header${conversationHeaderHidden ? ' is-hidden' : ''}">
-      <button class="conv-header-toggle-zone" type="button" data-conv-header-toggle aria-label="Toggle conversation details"></button>
-      <div class="conv-title-row">
-        <div class="conv-title">${safeTitle}</div>
-        ${titleTools}
-      </div>
-      <div class="conv-meta-row">
-        <div class="conv-badges">
-          <span class="badge ${srcClass}">${safeSource}</span>
-          ${safeSourceAccount}
-          <span class="badge">${safeModel}</span>
-          ${session.appVersion ? `<span class="badge">v${safeVersion}</span>` : ''}
-          <span class="badge">${session.messageCount} messages</span>
-          <span class="badge">${fmtDate(session.firstTimestamp)}</span>
+    <div class="conv-frame${toolbar ? '' : ' no-toolbar'}">
+      <div class="conv-main">
+        <div class="conv-header" data-source="${escAttr(srcClass)}">
+          <button class="conv-header-toggle-zone" type="button" data-conv-header-toggle aria-label="Toggle conversation details"></button>
+          <div class="conv-title-row">
+            <div class="conv-title">${safeTitle}</div>
+          </div>
+          <div class="conv-meta-row">
+            <div class="conv-meta-line" title="${metaTitle}" aria-label="${metaTitle}">
+              <span>${safeModel}</span>
+              ${session.appVersion ? `<span>v${safeVersion}</span>` : ''}
+              <span>${session.messageCount} messages</span>
+              <span>${fmtDate(session.firstTimestamp)}</span>
+            </div>
+          </div>
         </div>
-        ${splitPane ? '' : renderSearchNav()}
+        ${renderConversationSearchStrip(splitPane)}
+        ${splitPane ? '' : renderBranchBanner()}
+        ${splitPane ? '' : renderConversationMap(session)}
+        ${renderSessionSkillsPanel(session, messages)}
+        ${messages.map((message, index) => renderMessage(message, (opts.pageInfo?.offset || 0) + index)).join('')}
       </div>
+      ${toolbar}
     </div>
-    ${splitPane ? '' : renderBranchBanner()}
-    ${splitPane ? '' : renderConversationMap(session)}
-    ${renderSessionSkillsPanel(session, messages)}
-    ${messages.map((message, index) => renderMessage(message, (opts.pageInfo?.offset || 0) + index)).join('')}
   `
+}
+
+function conversationScrollHost(root = document.getElementById('conversation')) {
+  if (!root) return null
+  if (root.classList?.contains('conv-main')) return root
+  return root.querySelector?.('.conv-main') || root
 }
 
 function renderConversation(session, messages, opts = {}) {
   const conv = document.getElementById('conversation')
+  const previousHost = conversationScrollHost(conv)
   const resetScroll = !!opts.resetScroll
   const scrollToBottom = !!opts.scrollToBottom
   const smoothScrollToBottom = opts.scrollToBottom === 'smooth'
-  const prevScrollTop = conv.scrollTop
-  const prevScrollHeight = conv.scrollHeight
-  const nearBottom = prevScrollHeight - (conv.clientHeight + prevScrollTop) < 80
+  const prevScrollTop = previousHost?.scrollTop || 0
+  const prevScrollHeight = previousHost?.scrollHeight || 0
+  const nearBottom = previousHost ? prevScrollHeight - (previousHost.clientHeight + prevScrollTop) < 80 : false
 
   conv.innerHTML = renderConversationMarkup(session, messages, opts)
+  const scrollHost = conversationScrollHost(conv)
 
   if (!messages || messages.length === 0) {
-    if (resetScroll) conv.scrollTop = 0
+    if (resetScroll && scrollHost) scrollHost.scrollTop = 0
     conversationWasAtBottom = false
     return
   }
   if (smoothScrollToBottom) {
-    conv.scrollTop = 0
+    scrollHost.scrollTop = 0
     requestAnimationFrame(() => {
-      conv.scrollTo({ top: conv.scrollHeight, behavior: 'smooth' })
+      scrollHost.scrollTo({ top: scrollHost.scrollHeight, behavior: 'smooth' })
       window.setTimeout(() => showConversationBottomHint(true), 650)
     })
   } else if (scrollToBottom) {
-    conv.scrollTop = conv.scrollHeight
+    scrollHost.scrollTop = scrollHost.scrollHeight
     requestAnimationFrame(() => {
-      conv.scrollTop = conv.scrollHeight
+      scrollHost.scrollTop = scrollHost.scrollHeight
       showConversationBottomHint(true)
     })
   } else if (resetScroll) {
-    conv.scrollTop = 0
+    scrollHost.scrollTop = 0
     conversationWasAtBottom = false
     hideConversationBottomHint()
-    requestAnimationFrame(() => { conv.scrollTop = 0 })
+    requestAnimationFrame(() => { scrollHost.scrollTop = 0 })
   } else if (nearBottom) {
-    conv.scrollTop = conv.scrollHeight
+    scrollHost.scrollTop = scrollHost.scrollHeight
   } else {
-    conv.scrollTop = prevScrollTop
+    scrollHost.scrollTop = prevScrollTop
   }
-  requestAnimationFrame(() => maybeAutoLoadConversation(conv))
+  requestAnimationFrame(() => maybeAutoLoadConversation(scrollHost))
 }
 
 function closeSplitPane() {
@@ -7124,7 +7693,8 @@ async function openSplitSession(sessionId) {
   if (!shell || !pane) return
   shell.classList.add('split-active')
   pane.hidden = false
-  pane.scrollTop = 0
+  const initialPaneHost = conversationScrollHost(pane)
+  if (initialPaneHost) initialPaneHost.scrollTop = 0
   pane.innerHTML = '<div class="no-session"><div class="no-session-text">loading…</div></div>'
   renderSessionTabs()
   try {
@@ -7152,7 +7722,8 @@ async function openSplitSession(sessionId) {
     } finally {
       suppressSearchHighlight = false
     }
-    pane.scrollTop = 0
+    const paneHost = conversationScrollHost(pane)
+    if (paneHost) paneHost.scrollTop = 0
   } catch (error) {
     if (seq !== splitLoadSeq || splitSessionId !== sessionId) return
     pane.innerHTML = `<div class="no-session"><div class="no-session-text">${esc(error instanceof Error ? error.message : String(error))}</div></div>`
@@ -7175,8 +7746,9 @@ function hideSplitDropIndicator() {
 }
 
 function conversationIsAtBottom(el = document.getElementById('conversation')) {
-  if (!el) return false
-  return el.scrollHeight - (el.scrollTop + el.clientHeight) < 8
+  const host = conversationScrollHost(el)
+  if (!host) return false
+  return host.scrollHeight - (host.scrollTop + host.clientHeight) < 8
 }
 
 function placeConversationBottomHint() {
@@ -7224,13 +7796,14 @@ function updateConversationBottomState(el = document.getElementById('conversatio
 }
 
 function maybeAutoLoadConversation(el = document.getElementById('conversation')) {
-  if (!el || !activePageInfo?.paginated || loadingMoreMessages || jumpingToLatest) return
+  const host = conversationScrollHost(el)
+  if (!host || !activePageInfo?.paginated || loadingMoreMessages || jumpingToLatest) return
   if (Date.now() < searchAutoLoadHoldUntil) return
-  if (activePageInfo.hasPrevious && el.scrollTop < 600) {
+  if (activePageInfo.hasPrevious && host.scrollTop < 600) {
     void loadEarlierConversation()
     return
   }
-  if (activePageInfo.hasMore && el.scrollHeight - (el.scrollTop + el.clientHeight) < 600) {
+  if (activePageInfo.hasMore && host.scrollHeight - (host.scrollTop + host.clientHeight) < 600) {
     void loadMoreConversation()
   }
 }
@@ -7239,8 +7812,8 @@ async function loadMoreConversation() {
   if (!activeId || !activePageInfo?.hasMore || loadingMoreMessages) return
   loadingMoreMessages = true
   const seq = activeLoadSeq
-  const scrollHost = document.getElementById('conversation')
-  const prevScrollTop = scrollHost.scrollTop
+  const scrollHost = conversationScrollHost()
+  const prevScrollTop = scrollHost?.scrollTop || 0
   try {
     const res = await apiFetch(`/api/session/${encodeURIComponent(activeId)}?offset=${activePageInfo.nextOffset}&limit=${SESSION_PAGE_SIZE}`)
     const { session, messages, hasMore, totalMessages, nextOffset, limit } = await res.json()
@@ -7267,7 +7840,10 @@ async function loadMoreConversation() {
       loadedMessages: activeMessages.length,
     }
     renderConversation(session, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
-    requestAnimationFrame(() => { scrollHost.scrollTop = prevScrollTop })
+    requestAnimationFrame(() => {
+      const nextHost = conversationScrollHost()
+      if (nextHost) nextHost.scrollTop = prevScrollTop
+    })
   } finally {
     loadingMoreMessages = false
   }
@@ -7277,9 +7853,9 @@ async function loadEarlierConversation() {
   if (!activeId || !activePageInfo?.hasPrevious || loadingMoreMessages) return
   loadingMoreMessages = true
   const seq = activeLoadSeq
-  const scrollHost = document.getElementById('conversation')
-  const prevScrollTop = scrollHost.scrollTop
-  const prevScrollHeight = scrollHost.scrollHeight
+  const scrollHost = conversationScrollHost()
+  const prevScrollTop = scrollHost?.scrollTop || 0
+  const prevScrollHeight = scrollHost?.scrollHeight || 0
   const currentOffset = Math.max(0, Number(activePageInfo.offset || 0))
   const pageOffset = Math.max(0, currentOffset - SESSION_PAGE_SIZE)
   const pageLimit = Math.max(1, currentOffset - pageOffset)
@@ -7310,7 +7886,8 @@ async function loadEarlierConversation() {
     }
     renderConversation(session, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
     requestAnimationFrame(() => {
-      scrollHost.scrollTop = scrollHost.scrollHeight - prevScrollHeight + prevScrollTop
+      const nextHost = conversationScrollHost()
+      if (nextHost) nextHost.scrollTop = nextHost.scrollHeight - prevScrollHeight + prevScrollTop
     })
   } finally {
     loadingMoreMessages = false
@@ -7321,7 +7898,7 @@ async function jumpActiveSessionToLatest(button) {
   if (!activeId || jumpingToLatest) return
   const total = Math.max(0, Number(activePageInfo?.totalMessages || activeSessionData?.messageCount || 0))
   if (total === 0) return
-  const conv = document.getElementById('conversation')
+  const conv = conversationScrollHost()
   if (!activePageInfo?.paginated) {
     if (conv) {
       conv.scrollTop = conv.scrollHeight
@@ -7376,6 +7953,7 @@ async function jumpActiveSessionToLatest(button) {
     activeSearchTarget = null
     activeSearchNav = null
     sessionSearchQ = ''
+    sessionSearchOpen = false
     renderConversation(session, messages, { scrollToBottom: true, pageInfo: activePageInfo })
   } catch (error) {
     showNotice(error instanceof Error ? error.message : String(error), { isError: true })
@@ -7392,6 +7970,7 @@ async function loadChatGptBranch(branchId) {
   activeSearchTarget = null
   activeSearchNav = null
   sessionSearchQ = ''
+  sessionSearchOpen = false
   const conv = document.getElementById('conversation')
   conv.innerHTML = '<div class="no-session"><div class="no-session-text">loading branch...</div></div>'
   try {
@@ -7462,22 +8041,86 @@ async function loadSessionSearchMatches(sessionId, query, initialHit, seq) {
   }
 }
 
-function focusSessionSearchInput() {
+function focusSessionSearchInput(force = false) {
+  if (!force && document.activeElement?.id === 'search') return
   requestAnimationFrame(() => {
     const input = document.querySelector('input[data-session-search]')
     if (!(input instanceof HTMLInputElement)) return
-    input.focus()
+    input.focus({ preventScroll: true })
     const end = input.value.length
     input.setSelectionRange(end, end)
   })
 }
 
+function sessionSearchVisible() {
+  return sessionSearchOpen || sessionSearchQ.length >= 2 || !!activeSearchNav || !!activeSearchTarget
+}
+
+function updateSessionSearchToggleButtons(open = sessionSearchVisible()) {
+  const label = open ? 'Hide conversation search' : 'Search this conversation'
+  document.querySelectorAll('button[data-session-search-toggle]').forEach(button => {
+    button.classList.toggle('active', open)
+    button.setAttribute('aria-pressed', open ? 'true' : 'false')
+    button.setAttribute('aria-label', label)
+    button.title = label
+    button.dataset.tip = label
+  })
+}
+
+function syncSessionSearchStrip(options = {}) {
+  const open = sessionSearchVisible()
+  const strips = document.querySelectorAll('#conversation .conv-search-strip')
+  strips.forEach(strip => {
+    strip.hidden = !open
+    strip.classList.toggle('is-open', open)
+    const input = strip.querySelector('input[data-session-search]')
+    if (input instanceof HTMLInputElement) {
+      if (input.value !== sessionSearchQ) input.value = sessionSearchQ
+      input.classList.toggle('search-active', sessionSearchQ.length >= 2)
+    }
+    if (options.updateNav) {
+      const nav = strip.querySelector('.session-search-nav')
+      const nextNav = renderSearchNav() || renderSessionSearchIdleNav()
+      if (nav) nav.outerHTML = nextNav
+    }
+  })
+  updateSessionSearchToggleButtons(open)
+  if (open && options.focus) focusSessionSearchInput(true)
+}
+
+function setSessionSearchOpen(open, focus = false) {
+  const hadRenderedSearch = sessionSearchQ.length >= 2 || !!activeSearchNav || !!activeSearchTarget
+  sessionSearchOpen = !!open
+  if (!sessionSearchOpen) {
+    clearTimeout(sessionSearchTimer)
+    sessionSearchSeq += 1
+    sessionSearchQ = ''
+    activeSearchTarget = null
+    activeSearchNav = null
+  }
+  if (activeSessionData) {
+    syncSessionSearchStrip({ focus, updateNav: true })
+    if (!sessionSearchOpen && hadRenderedSearch) {
+      requestAnimationFrame(() => {
+        if (!activeSessionData || sessionSearchOpen || sessionSearchQ.length >= 2) return
+        renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+      })
+    }
+  }
+}
+
 function clearSessionSearchResults() {
+  const hadRenderedSearch = !!activeSearchTarget || !!activeSearchNav
   activeSearchTarget = null
   activeSearchNav = null
   if (activeSessionData) {
-    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
-    focusSessionSearchInput()
+    syncSessionSearchStrip({ focus: true, updateNav: true })
+    if (hadRenderedSearch) {
+      requestAnimationFrame(() => {
+        if (!activeSessionData || activeSearchTarget || activeSearchNav) return
+        renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
+      })
+    }
   }
 }
 
@@ -7493,8 +8136,7 @@ async function runSessionSearch(sessionId, query, loadSeq, searchSeq) {
     loading: true,
   }
   if (activeSessionData) {
-    renderConversation(activeSessionData, activeMessages, { resetScroll: false, pageInfo: activePageInfo })
-    focusSessionSearchInput()
+    syncSessionSearchStrip({ focus: true, updateNav: true })
   }
 
   try {
@@ -7535,6 +8177,7 @@ async function runSessionSearch(sessionId, query, loadSeq, searchSeq) {
 
 function handleSessionSearchInput(value) {
   sessionSearchQ = String(value || '').trim()
+  sessionSearchOpen = true
   document.querySelectorAll('.session-search-input').forEach(input => {
     input.classList.toggle('search-active', sessionSearchQ.length >= 2)
   })
@@ -7658,6 +8301,14 @@ async function openLocalVideoFile(button) {
 }
 
 async function writeClipboardText(text) {
+  if (window.datamoatDesktop?.clipboard?.write) {
+    try {
+      await window.datamoatDesktop.clipboard.write(text)
+      return
+    } catch {
+      // fall through to the browser clipboard paths below
+    }
+  }
   try { window.focus() } catch {}
   if (navigator.clipboard?.writeText) {
     try {
@@ -7706,6 +8357,31 @@ async function copyContextThroughMessage(button) {
 	    markMessageFocusFromButton(button)
 	    showCopyInlineStatus(copiedMessage)
     setTimeout(() => { if (button.isConnected) button.classList.remove('copied') }, 1600)
+  } catch (error) {
+    showNotice(error instanceof Error ? error.message : String(error), { isError: true })
+  } finally {
+    button.disabled = false
+  }
+}
+
+async function exportActiveSession(button) {
+  if (!activeId || !button) return
+  const total = Math.max(0, Number(activePageInfo?.totalMessages || activeSessionData?.messageCount || activeMeta?.messageCount || 0))
+  if (total <= 0) return
+  button.disabled = true
+  showCopyInlineStatus(appTr('exportingNotice') || 'Exporting…')
+  try {
+    const data = await jsonOrThrow(await apiFetch(`/api/session/${encodeURIComponent(activeId)}/export`, { method: 'POST' }))
+    button.classList.add('copied')
+    const parts = []
+    if (data.imageCount) parts.push(`${fmtNumber(data.imageCount)} image${data.imageCount === 1 ? '' : 's'}`)
+    if (data.fileCount) parts.push(`${fmtNumber(data.fileCount)} file${data.fileCount === 1 ? '' : 's'}`)
+    const extra = parts.length ? ` + ${parts.join(', ')}` : ''
+    const msg = appFmt('exportedNotice', { count: fmtNumber(data.messageCount || 0) }) + extra
+    button.dataset.tip = msg
+    button.title = msg
+    showCopyInlineStatus(msg)
+    setTimeout(() => { if (button.isConnected) button.classList.remove('copied') }, 2000)
   } catch (error) {
     showNotice(error instanceof Error ? error.message : String(error), { isError: true })
   } finally {
@@ -7880,75 +8556,82 @@ function offsetTopInsideScrollHost(target, host) {
   return host.scrollTop + targetRect.top - hostRect.top
 }
 
-function conversationViewportAnchor(conv) {
-  if (!conv) return null
-  const convRect = conv.getBoundingClientRect()
-  const stickyOffset = conversationStickyTopOffset(conv)
-  const probeY = Math.min(convRect.bottom - 18, convRect.top + stickyOffset + Math.max(80, Math.floor((conv.clientHeight - stickyOffset) * 0.28)))
-  const probeX = Math.min(convRect.right - 24, convRect.left + Math.max(48, Math.floor(conv.clientWidth * 0.22)))
+function conversationViewportAnchor(root) {
+  const host = conversationScrollHost(root)
+  if (!host) return null
+  const hostRect = host.getBoundingClientRect()
+  const stickyOffset = conversationStickyTopOffset(host)
+  const probeY = Math.min(hostRect.bottom - 18, hostRect.top + stickyOffset + Math.max(80, Math.floor((host.clientHeight - stickyOffset) * 0.28)))
+  const probeX = Math.min(hostRect.right - 24, hostRect.left + Math.max(48, Math.floor(host.clientWidth * 0.22)))
   let node = document.elementFromPoint(probeX, probeY)
-  const elementAnchor = node instanceof Element
-    ? node.closest('#conversation details.tool-block[data-tool-block-key], #conversation .text-block, #conversation .other-block, #conversation .message[data-message-index]')
+  let elementAnchor = node instanceof Element
+    ? node.closest('details.tool-block[data-tool-block-key], .text-block, .other-block, .message[data-message-index]')
     : null
-  let message = node instanceof Element ? node.closest('#conversation .message[data-message-index]') : null
-  if (!message) message = conv.querySelector('.message[data-message-index]')
-  if (!(message instanceof HTMLElement)) return { scrollTop: conv.scrollTop }
+  if (elementAnchor && !host.contains(elementAnchor)) elementAnchor = null
+  let message = node instanceof Element ? node.closest('.message[data-message-index]') : null
+  if (message && !host.contains(message)) message = null
+  if (!message) message = host.querySelector('.message[data-message-index]')
+  if (!(message instanceof HTMLElement)) return { scrollTop: host.scrollTop }
   const anchoredElement = elementAnchor instanceof HTMLElement ? elementAnchor : message
   return {
     element: anchoredElement,
     messageIndex: message.dataset.messageIndex,
-    top: anchoredElement.getBoundingClientRect().top - convRect.top,
-    scrollTop: conv.scrollTop,
+    top: anchoredElement.getBoundingClientRect().top - hostRect.top,
+    scrollTop: host.scrollTop,
   }
 }
 
-function restoreConversationViewport(anchor, conv = document.getElementById('conversation')) {
-  if (!conv || !anchor) return
-  if (anchor.element instanceof HTMLElement && anchor.element.isConnected) {
+function restoreConversationViewport(anchor, root = document.getElementById('conversation')) {
+  const host = conversationScrollHost(root)
+  if (!host || !anchor) return
+  if (anchor.element instanceof HTMLElement && anchor.element.isConnected && host.contains(anchor.element)) {
     const rect = anchor.element.getBoundingClientRect()
     if (rect.width > 0 && rect.height > 0) {
-      const convRect = conv.getBoundingClientRect()
-      const nextTop = rect.top - convRect.top
-      conv.scrollTop += nextTop - anchor.top
+      const hostRect = host.getBoundingClientRect()
+      const nextTop = rect.top - hostRect.top
+      host.scrollTop += nextTop - anchor.top
       return
     }
   }
   if (anchor.messageIndex !== undefined) {
-    const message = conv.querySelector(`.message[data-message-index="${cssEscape(String(anchor.messageIndex))}"]`)
+    const message = host.querySelector(`.message[data-message-index="${cssEscape(String(anchor.messageIndex))}"]`)
     if (message instanceof HTMLElement) {
-      const convRect = conv.getBoundingClientRect()
-      const nextTop = message.getBoundingClientRect().top - convRect.top
-      conv.scrollTop += nextTop - anchor.top
+      const hostRect = host.getBoundingClientRect()
+      const nextTop = message.getBoundingClientRect().top - hostRect.top
+      host.scrollTop += nextTop - anchor.top
       return
     }
   }
-  if (Number.isFinite(anchor.scrollTop)) conv.scrollTop = anchor.scrollTop
+  if (Number.isFinite(anchor.scrollTop)) host.scrollTop = anchor.scrollTop
 }
 
-function preserveConversationViewport(mutator, conv = document.getElementById('conversation')) {
-  const anchor = conversationViewportAnchor(conv)
+function preserveConversationViewport(mutator, root = document.getElementById('conversation')) {
+  const anchor = conversationViewportAnchor(root)
   mutator()
-  restoreConversationViewport(anchor, conv)
-  requestAnimationFrame(() => restoreConversationViewport(anchor, conv))
+  restoreConversationViewport(anchor, root)
+  requestAnimationFrame(() => restoreConversationViewport(anchor, root))
 }
 
-function conversationStickyTopOffset(conv) {
-  const convRect = conv.getBoundingClientRect()
-  const headerRect = conv.querySelector('.conv-header')?.getBoundingClientRect()
+function conversationStickyTopOffset(root) {
+  const host = conversationScrollHost(root)
+  if (!host) return 0
+  const hostRect = host.getBoundingClientRect()
+  const headerRect = host.querySelector('.conv-header')?.getBoundingClientRect()
   return headerRect
-    ? Math.max(0, Math.min(headerRect.bottom - convRect.top, conv.clientHeight * 0.45))
+    ? Math.max(0, Math.min(headerRect.bottom - hostRect.top, host.clientHeight * 0.45))
     : 0
 }
 
 function scrollConversationMessageForBookmark(messageIndex, opts = {}) {
-  const conv = document.getElementById('conversation')
-  const card = conv?.querySelector(`.message[data-message-index="${messageIndex}"]`)
-  if (!conv || !(card instanceof HTMLElement)) return null
-  const stickyOffset = conversationStickyTopOffset(conv)
-  const visibleHeight = Math.max(0, conv.clientHeight - stickyOffset - 36)
+  const root = document.getElementById('conversation')
+  const host = conversationScrollHost(root)
+  const card = host?.querySelector(`.message[data-message-index="${cssEscape(String(messageIndex))}"]`)
+  if (!host || !(card instanceof HTMLElement)) return null
+  const stickyOffset = conversationStickyTopOffset(host)
+  const visibleHeight = Math.max(0, host.clientHeight - stickyOffset - 36)
   if (card.getBoundingClientRect().height > visibleHeight) {
-    const top = offsetTopInsideScrollHost(card, conv)
-    conv.scrollTo({ top: Math.max(0, top - stickyOffset - 18), behavior: 'auto' })
+    const top = offsetTopInsideScrollHost(card, host)
+    host.scrollTo({ top: Math.max(0, top - stickyOffset - 18), behavior: 'auto' })
   } else {
     card.scrollIntoView({ block: 'center' })
   }
@@ -7987,21 +8670,22 @@ function scheduleAnnotationMessageJump(sessionId, messageIndex, seq) {
 
 function scrollToSearchTarget() {
   if (!activeSearchTarget) return
-  const conv = document.getElementById('conversation')
-  expandSearchTargetToolBlock(conv)
-  const message = conv?.querySelector(`[data-message-index="${activeSearchTarget.messageIndex}"]`)
+  const root = document.getElementById('conversation')
+  const host = conversationScrollHost(root)
+  expandSearchTargetToolBlock(host)
+  const message = host?.querySelector(`[data-message-index="${cssEscape(String(activeSearchTarget.messageIndex))}"]`)
   const currentHit = visibleSearchHit(message?.querySelector('.search-hit-mark.current'))
   const firstHit = visibleSearchHit(message?.querySelector('.search-hit-mark'))
   const target = currentHit || firstHit || message
-  if (!conv || !target) return
-  const convRect = conv.getBoundingClientRect()
-  const headerRect = conv.querySelector('.conv-header')?.getBoundingClientRect()
+  if (!host || !target) return
+  const hostRect = host.getBoundingClientRect()
+  const headerRect = host.querySelector('.conv-header')?.getBoundingClientRect()
   const stickyOffset = headerRect
-    ? Math.max(0, Math.min(headerRect.bottom - convRect.top, conv.clientHeight * 0.45))
+    ? Math.max(0, Math.min(headerRect.bottom - hostRect.top, host.clientHeight * 0.45))
     : 96
-  const visibleTargetY = stickyOffset + Math.max(90, Math.floor((conv.clientHeight - stickyOffset) * 0.34))
-  const top = offsetTopInsideScrollHost(target, conv)
-  conv.scrollTo({ top: Math.max(0, top - visibleTargetY), behavior: 'auto' })
+  const visibleTargetY = stickyOffset + Math.max(90, Math.floor((host.clientHeight - stickyOffset) * 0.34))
+  const top = offsetTopInsideScrollHost(target, host)
+  host.scrollTo({ top: Math.max(0, top - visibleTargetY), behavior: 'auto' })
 }
 
 function toolBlockKey(messageIndex, blockIndex) {
@@ -8009,21 +8693,18 @@ function toolBlockKey(messageIndex, blockIndex) {
 }
 
 function toolBlockShouldOpen(messageIndex, blockIndex, highlightTarget) {
-  if (highlightTarget) return true
-  const key = toolBlockKey(messageIndex, blockIndex)
-  if (Object.prototype.hasOwnProperty.call(toolBlockOpenState, key)) return !!toolBlockOpenState[key]
-  return !toolBlocksCollapsedByDefault
+  return true
 }
 
 function renderToolBlock(kind, name, messageIndex, blockIndex, highlightTarget, bodyHtml) {
   const key = toolBlockKey(messageIndex, blockIndex)
   const open = toolBlockShouldOpen(messageIndex, blockIndex, highlightTarget)
-  const classes = `tool-block${highlightTarget ? ' search-opened' : ''}`
+  const resultClass = /result|output/i.test(kind) ? ' result' : ''
+  const classes = `tool-block tool-card${resultClass}${highlightTarget ? ' search-opened' : ''}`
+  const icon = resultClass ? '↳' : '⚙'
   return `<details class="${classes}" data-tool-block-key="${escAttr(key)}" data-message-index="${escAttr(String(messageIndex))}" data-block-index="${escAttr(String(blockIndex))}"${open ? ' open' : ''}>
     <summary class="tool-meta">
-      <span class="tool-kind">${esc(kind)}</span>
-      <span class="tool-name">${esc(name || 'tool')}</span>
-      <span class="tool-mini-label">mini</span>
+      <span class="tool-ic">${icon}</span><span class="tool-kind">${esc(kind)}</span>${name ? ` &middot; <b class="tool-name">${esc(name)}</b>` : ''}
     </summary>
     ${bodyHtml}
   </details>`
@@ -8062,7 +8743,7 @@ function updateToolCollapseButtons() {
     button.setAttribute('aria-label', label)
     button.title = label
     button.dataset.tip = label
-    button.textContent = toolBlocksCollapsedByDefault ? '▥' : '▤'
+    button.innerHTML = toolBlocksCollapsedByDefault ? ANNO_ICONS.toolCollapsed : ANNO_ICONS.toolExpanded
   })
 }
 
@@ -8149,6 +8830,41 @@ function referencedAttachmentByPath(referencedAttachments) {
   return new Map(attachments.map(item => [normalizeReferencedDisplayPath(item.originalPath), item]))
 }
 
+function safeExternalHref(rawHref) {
+  const value = String(rawHref || '').trim()
+  if (!value) return ''
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : ''
+  } catch {
+    return ''
+  }
+}
+
+function renderReadableMarkupSegment(text, highlightQuery = '', baseOffset = 0) {
+  const value = String(text ?? '')
+  let out = ''
+  let cursor = 0
+  const inlinePattern = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)|\*\*([^*\n]+)\*\*/g
+  let match
+  while ((match = inlinePattern.exec(value))) {
+    out += renderSearchHighlightedInline(value.slice(cursor, match.index), highlightQuery, baseOffset + cursor)
+    if (match[1] !== undefined) {
+      const href = safeExternalHref(match[2])
+      if (href) {
+        out += `<a href="${escAttr(href)}" target="_blank" rel="noopener noreferrer">${renderSearchHighlightedInline(match[1], highlightQuery, baseOffset + match.index + 1)}</a>`
+      } else {
+        out += renderSearchHighlightedInline(match[0], highlightQuery, baseOffset + match.index)
+      }
+    } else {
+      out += `<strong>${renderSearchHighlightedInline(match[3], highlightQuery, baseOffset + match.index + 2)}</strong>`
+    }
+    cursor = match.index + match[0].length
+  }
+  out += renderSearchHighlightedInline(value.slice(cursor), highlightQuery, baseOffset + cursor)
+  return out
+}
+
 function renderReadableInline(text, highlightQuery = '', baseOffset = 0) {
   const value = String(text ?? '')
   let out = ''
@@ -8156,11 +8872,11 @@ function renderReadableInline(text, highlightQuery = '', baseOffset = 0) {
   const codePattern = /`([^`]+)`/g
   let match
   while ((match = codePattern.exec(value))) {
-    out += renderSearchHighlightedInline(value.slice(cursor, match.index), highlightQuery, baseOffset + cursor)
+    out += renderReadableMarkupSegment(value.slice(cursor, match.index), highlightQuery, baseOffset + cursor)
     out += `<code>${renderSearchHighlightedInline(match[1], highlightQuery, baseOffset + match.index + 1)}</code>`
     cursor = match.index + match[0].length
   }
-  out += renderSearchHighlightedInline(value.slice(cursor), highlightQuery, baseOffset + cursor)
+  out += renderReadableMarkupSegment(value.slice(cursor), highlightQuery, baseOffset + cursor)
   return out
 }
 
@@ -8772,7 +9488,49 @@ function renderMessageAnnotationBar(msg) {
     <button class="anno-btn bm${state.bookmark ? ' active' : ''}" type="button" data-anno-kind="bookmark" title="Bookmark message" aria-label="Bookmark message">${state.bookmark ? ANNO_ICONS.bookmarkFill : ANNO_ICONS.bookmark}</button>
     <button class="anno-btn up${state.vote === 'up' ? ' active' : ''}" type="button" data-anno-kind="up" title="Thumbs up" aria-label="Thumbs up">${ANNO_ICONS.up}</button>
     <button class="anno-btn down${state.vote === 'down' ? ' active' : ''}" type="button" data-anno-kind="down" title="Thumbs down" aria-label="Thumbs down">${ANNO_ICONS.down}</button>
-  </span>`
+	  </span>`
+}
+
+function messageRoleLabel(msg) {
+  if (msg.role === 'user') return 'You'
+  if (msg.role === 'assistant') return 'Assistant'
+  if (msg.role === 'tool') return 'Tool'
+  return 'System'
+}
+
+function messageMetaText(msg) {
+  const when = msg.timestamp
+    ? new Date(msg.timestamp).toLocaleString([], {
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        second: '2-digit',
+      })
+    : ''
+  return [msg.model || activeSessionData?.model, msg.sourceEventType || msg.role, when]
+    .filter(Boolean)
+    .map(esc)
+    .join(' · ')
+}
+
+function renderMessageHeader(msg, messageIndex, label = messageRoleLabel(msg)) {
+  const meta = messageMetaText(msg)
+  return `<div class="message-role ${msg.role}">
+    <span class="role">${esc(label)}</span>${meta ? `<span class="msg-time">${meta}</span>` : ''}
+    <span class="message-header-actions">${renderMessageAnnotationBar(msg)}${renderMessageActions(messageIndex)}</span>
+  </div>`
+}
+
+function renderMessageShell(messageClass, messageAttrs, msg, messageIndex, bodyHtml, label) {
+  return `<div class="${messageClass}" ${messageAttrs}>
+    <div class="msg-rail"></div>
+    <div class="msg-body">
+      ${renderMessageHeader(msg, messageIndex, label)}
+      ${bodyHtml}
+    </div>
+  </div>`
 }
 
 function renderMessage(msg, messageIndex = 0) {
@@ -8783,19 +9541,15 @@ function renderMessage(msg, messageIndex = 0) {
   // events — render as specialized strips rather than normal chat bubbles.
   if (msg.sourceEventType === 'result') {
     const highlightTarget = searchHighlightTargetForBlock(messageIndex, 0)
-    return `<div class="message system${isSearchTargetMessage ? ' search-target-message' : ''}" ${messageAttrs}>
-      <div class="message-role system">turn summary <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
-      ${renderAttrStrip(msg, messageIndex)}
+    return renderMessageShell(`message system${isSearchTargetMessage ? ' search-target-message' : ''}`, messageAttrs, { ...msg, role: 'system' }, messageIndex, `
       ${renderTurnSummary(msg)}
       ${msg.content && msg.content[0]?.text ? renderTextDisplay(msg.content[0].text, 'text-block', msg.content[0].referencedAttachments, highlightTarget) : ''}
-    </div>`
+    `, 'Turn summary')
   }
   if (msg.sourceEventType === 'rate_limit_event') {
-    return `<div class="message system${isSearchTargetMessage ? ' search-target-message' : ''}" ${messageAttrs}>
-      <div class="message-role system">rate limit <span class="msg-time">${fmtTime(msg.timestamp)}</span></div>
-      ${renderAttrStrip(msg, messageIndex)}
+    return renderMessageShell(`message system${isSearchTargetMessage ? ' search-target-message' : ''}`, messageAttrs, { ...msg, role: 'system' }, messageIndex, `
       ${renderRateLimitStrip(msg)}
-    </div>`
+    `, 'Rate limit')
   }
 
   const blocks = msg.content.map((block, blockIndex) => {
@@ -8819,11 +9573,8 @@ function renderMessage(msg, messageIndex = 0) {
     }
     if (block.type === 'tool_use') {
       const rawInput = pretty(block.input ?? block.text ?? '')
-      return renderToolBlock('tool call', block.name || 'tool', messageIndex, blockIndex, highlightTarget, `
-        <details class="detail-block" open>
-          <summary>arguments</summary>
-          ${renderPreDisplay(rawInput, 'detail-pre', highlightTarget)}
-        </details>
+      return renderToolBlock('Tool call', block.name || 'tool', messageIndex, blockIndex, highlightTarget, `
+        ${renderPreDisplay(rawInput, 'detail-pre', highlightTarget)}
       `)
     }
     if (block.type === 'tool_result') {
@@ -8834,16 +9585,9 @@ function renderMessage(msg, messageIndex = 0) {
       const rawOutput = pretty(block.text ?? block.content ?? '')
       const fallbackOutput = imgs.length ? { text: rawOutput, imageHtml: '' } : inlineToolResultImageFallback(block.content, rawOutput)
       const previewHtml = imageHtml + fallbackOutput.imageHtml
-      const hasRenderedImagePreview = !!previewHtml.trim()
-      const detailsOpen = !hasRenderedImagePreview || !!highlightTarget
-      const detailClass = `detail-block${hasRenderedImagePreview ? ' raw-image-output' : ''}`
-      const detailSummary = hasRenderedImagePreview ? 'raw output' : 'output'
-      return renderToolBlock('tool output', block.name || 'result', messageIndex, blockIndex, highlightTarget, `
+      return renderToolBlock('Tool result', block.name || 'result', messageIndex, blockIndex, highlightTarget, `
+        ${rawOutput ? renderPreDisplay(fallbackOutput.text, 'detail-pre', highlightTarget) : ''}
         ${previewHtml}
-        ${rawOutput ? `<details class="${detailClass}"${detailsOpen ? ' open' : ''}>
-          <summary>${detailSummary}</summary>
-          ${renderPreDisplay(fallbackOutput.text, 'detail-pre', highlightTarget)}
-        </details>` : ''}
       `)
     }
     if (block.type === 'image') {
@@ -8884,17 +9628,10 @@ function renderMessage(msg, messageIndex = 0) {
     if (msg.usage.outputTokens) usageParts.push(`out <span>${msg.usage.outputTokens}</span>`)
     if (msg.usage.cacheReadTokens) usageParts.push(`cache_read <span>${msg.usage.cacheReadTokens}</span>`)
   }
-
-  return `<div class="${messageClass}" ${messageAttrs}>
-    <div class="message-role ${msg.role}">
-      ${msg.role}
-      <span class="msg-time">${fmtTime(msg.timestamp)}</span>
-      ${renderMessageAnnotationBar(msg)}
-    </div>
-    ${renderAttrStrip(msg, messageIndex)}
+  return renderMessageShell(messageClass, messageAttrs, msg, messageIndex, `
     ${blocks}
     ${usageParts.length ? `<div class="usage-line">${usageParts.join(' · ')}</div>` : ''}
-  </div>`
+  `)
 }
 
 function toggleThinking(id) {
@@ -10631,6 +11368,16 @@ document.getElementById('conversation')?.addEventListener('click', e => {
     toggleSessionBookmark(sessionBookmarkButton.dataset.sessionBookmark || activeId || '')
     return
   }
+  const searchToggle = target ? target.closest('button[data-session-search-toggle]') : null
+  if (searchToggle) {
+    setSessionSearchOpen(!(sessionSearchOpen || sessionSearchQ.length >= 2 || activeSearchNav || activeSearchTarget), true)
+    return
+  }
+  const searchClose = target ? target.closest('button[data-session-search-close]') : null
+  if (searchClose) {
+    setSessionSearchOpen(false)
+    return
+  }
   const headerToggle = target ? target.closest('[data-conv-header-toggle]') : null
   if (headerToggle) {
     toggleConversationHeaderHidden()
@@ -10644,6 +11391,11 @@ document.getElementById('conversation')?.addEventListener('click', e => {
   const copyContextButton = target ? target.closest('button[data-copy-context-through]') : null
   if (copyContextButton) {
     void copyContextThroughMessage(copyContextButton)
+    return
+  }
+  const exportButton = target ? target.closest('button[data-session-export]') : null
+  if (exportButton) {
+    void exportActiveSession(exportButton)
     return
   }
   const copyFullButton = target ? target.closest('button[data-session-copy-full]') : null
@@ -10851,6 +11603,8 @@ async function checkUpdatesNow() {
     syncPackagedUpdateNotice({ force: true })
     if (isPackagedManualUpdateAvailable(updateState) && updateState.availableVersion) {
       window.alert(appFmt('updateAvailableAlert', { version: updateState.availableVersion }))
+    } else if (updateState?.installMode === 'packaged' && updateState?.lastResult === 'up-to-date') {
+      window.alert(appTr('updateUpToDate'))
     }
   } catch (error) {
     setUpdatePanelMessage(error instanceof Error ? error.message : String(error), true)
@@ -10926,9 +11680,14 @@ async function installLatestVersion() {
       : await jsonOrThrow(await apiFetch('/api/update/install-latest', { method: 'POST' }))
     releasesUrl = data.url || releasesUrl
     if (data.state) updateState = normalizeUpdateStateForUi(data.state)
-    setUpdatePanelMessage(data.manualUpdateStarted
-      ? appTr('packagedDownloadStarted')
-      : appTr('latestDownloadOpened'), false)
+    if (data.upToDate || updateState?.lastResult === 'up-to-date') {
+      setUpdatePanelMessage(appTr('updateUpToDate'), false)
+      window.alert(appTr('updateUpToDate'))
+    } else {
+      setUpdatePanelMessage(data.manualUpdateStarted
+        ? appTr('packagedDownloadStarted')
+        : appTr('latestDownloadOpened'), false)
+    }
   } catch (error) {
     const fallback = releasesUrl
       ? appTr('latestDownloadFallback').replace('{url}', releasesUrl)
@@ -10960,6 +11719,10 @@ document.getElementById('search').addEventListener('input', e => {
   renderList()
   clearTimeout(searchTimer)
   if (searchQ.length >= 2) {
+    if (activeId && activeSessionData) {
+      sessionSearchOpen = true
+      handleSessionSearchInput(searchQ)
+    }
     searchTimer = setTimeout(() => doContentSearch(searchQ), 160)
   } else {
     contentSearchSeq += 1
@@ -10967,18 +11730,28 @@ document.getElementById('search').addEventListener('input', e => {
     contentSearchPending = false
   }
 })
-document.getElementById('conversation').addEventListener('scroll', e => {
-  maybeAutoLoadConversation(e.currentTarget)
-  updateConversationBottomState(e.currentTarget)
-})
-document.getElementById('conversation').addEventListener('wheel', () => {
-  cancelScheduledSearchScroll(true)
+const conversationShellEl = document.getElementById('conversation-shell')
+conversationShellEl?.addEventListener('scroll', e => {
+  const target = e.target instanceof Element ? e.target : null
+  const host = target?.classList.contains('conv-main') ? target : null
+  if (!host) return
+  if (host.closest('#conversation')) {
+    maybeAutoLoadConversation(host)
+    updateConversationBottomState(host)
+  }
+  void sendActivityPing()
+}, { passive: true, capture: true })
+conversationShellEl?.addEventListener('wheel', e => {
+  const target = e.target instanceof Element ? e.target : null
+  if (target?.closest('.conv-main')) cancelScheduledSearchScroll(true)
 }, { passive: true })
-document.getElementById('conversation').addEventListener('touchstart', () => {
-  cancelScheduledSearchScroll(true)
+conversationShellEl?.addEventListener('touchstart', e => {
+  const target = e.target instanceof Element ? e.target : null
+  if (target?.closest('.conv-main')) cancelScheduledSearchScroll(true)
 }, { passive: true })
-document.getElementById('conversation').addEventListener('pointerdown', () => {
-  cancelScheduledSearchScroll(true)
+conversationShellEl?.addEventListener('pointerdown', e => {
+  const target = e.target instanceof Element ? e.target : null
+  if (target?.closest('.conv-main')) cancelScheduledSearchScroll(true)
 }, { passive: true })
 
 // ── Helpers ──
@@ -11015,7 +11788,7 @@ function reltime(ts) {
   const diff = Date.now() - new Date(ts).getTime()
   const h = Math.floor(diff / 3600000)
   const d = Math.floor(h / 24)
-  if (d > 30) return new Date(ts).toLocaleDateString()
+  if (d > 2) return new Date(ts).toLocaleDateString()
   if (d > 0) return d + 'd ago'
   if (h > 0) return h + 'h ago'
   return 'recent'
@@ -11135,6 +11908,11 @@ document.getElementById('reinstall-source-path').addEventListener('input', e => 
   renderReinstallHelp()
 })
 function handleSessionListActivate(target) {
+  const collapseBtn = target ? target.closest('[data-sidebar-collapse]') : null
+  if (collapseBtn) {
+    toggleSidebarCollapsed()
+    return true
+  }
   const modeBtn = target ? target.closest('[data-panel-mode]') : null
   if (modeBtn) {
     setPanelMode(modeBtn.dataset.panelMode || 'search')
@@ -11238,8 +12016,6 @@ document.getElementById('conversation-shell')?.addEventListener('click', e => {
   if (headerToggle) toggleConversationHeaderHidden()
 })
 document.getElementById('session-list').addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
-document.getElementById('conversation').addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
-document.getElementById('conversation-split')?.addEventListener('scroll', () => { void sendActivityPing() }, { passive: true })
 window.addEventListener('pointerdown', () => { void sendActivityPing() })
 window.addEventListener('keydown', () => { void sendActivityPing() })
 window.addEventListener('mousemove', () => { void sendActivityPing() })
