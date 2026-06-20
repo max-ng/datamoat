@@ -39,7 +39,7 @@ For people and teams, every AI task becomes part of a private system that gets m
 - **Audit:** Hash-chained local audit checks with redacted diagnostics.
 - **Reuse:** No more repeating work; export context for your own RAG, internal database, or handoff.
 - **Customization:** Bookmark important messages and sessions.
-- **Free:** Personal use and internal company use are allowed by the Additional Use Grant.
+- **Free:** Personal use and internal company use are allowed.
 - **Decentralized local ownership:** No one else can access or own your archive without your permission.
 - **Protection:** AES-256-GCM, 24-word BIP39 recovery phrase, and Secure Enclave-backed unlock on supported Macs.
 
@@ -57,16 +57,16 @@ DataMoat keeps two layers:
 **Supported sources today:** ChatGPT export ZIP/folder imports, Claude CLI, Codex CLI, Codex app local sessions, Claude Desktop local-agent sessions on macOS, supported local Cursor agent transcripts, DeepSeek and Qwen sessions when written locally by Claude Code GUI workflows, and supported local OpenClaw session records.
 **More data sources and platform releases are on the roadmap:** star and watch this repository so you can follow new capture integrations and platform updates as they ship.  
 
-## New In 2.0.11
+## Storage, Backup, And Reuse
 
-This release focuses on a cleaner daily review surface, portable chat export,
-and safer Windows packaged behavior.
+DataMoat is designed to preserve AI work without turning your disk into a dump.
 
-- **Cleaner desktop review.** The conversation layout, metadata rows, bundled JetBrains Mono styling, and light/dark theme behavior are calmer and easier to scan.
-- **Portable chat exports.** Export conversations as a self-contained HTML viewer, clean JSON, Markdown context pack, and attachment folder.
-- **Better packaged Windows copy.** The desktop app now uses Electron's native clipboard bridge with browser fallback.
-- **Safer Windows updates and launchers.** Manual update checks no longer look like a downgrade, and no-screen/startup launchers avoid lingering command windows that can kill tray capture.
-- **Restore fixes for Windows.** Transfer/restore setup avoids overlay bounce on network drops, and Mac Touch ID refresh prompts stay hidden on Windows.
+- **Raw records, compressed.** DataMoat preserves original source records while storing repetitive raw backup data in compressed encrypted archives. Real source-record tests measured raw archive storage around 60% of original source bytes.
+- **Full coverage for supported records.** Sessions, tool outputs, supported images, file/PDF attachments, ChatGPT exports, and `SKILL.md` folders can live in the same encrypted memory archive.
+- **Search and analyze.** Find prompts, tool output, files, decisions, and attachments; answer questions like "How did we solve this bug before?" or "Why did the AI make this decision?"
+- **Reuse.** Export context for your own RAG, internal database, future agents, or teammate handoff.
+- **Move between computers.** Copy the DataMoat folder to another machine and restore across macOS, Windows, and Linux.
+- **Second backup.** Keep a duplicate encrypted DataMoat folder on USB or an external drive so your AI work history can travel separately from the source computer.
 
 ## New In 2.0.9: Annotations, ChatGPT Export Memory Import, And Safer Transfer
 
@@ -371,17 +371,9 @@ Questions or deployment help:
 
 ## License
 
-DataMoat is open-sourced under **Business Source License 1.1 (`BUSL-1.1`)** with an **Additional Use Grant**.
+Free: personal use and internal company use are allowed.
 
-This means:
-
-- personal use is allowed
-- internal company use is allowed
-- uses outside that grant require a separate commercial license from the licensor
-
-We chose **BUSL-1.1** to keep the code auditable while reducing the risk of misleading repackaged builds, malware clones, and unsupported commercial forks of a security-sensitive local archive tool. All application code is public for review.
-
-See [LICENSE.md](LICENSE.md) for the full terms.
+See [LICENSE.md](LICENSE.md) for the license and [LICENSE-DETAILS.md](LICENSE-DETAILS.md) for the short explanation.
 
 ---
 

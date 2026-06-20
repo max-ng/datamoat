@@ -343,17 +343,9 @@ Câu hỏi hoặc deployment help:
 
 ## License
 
-DataMoat được open-sourced theo **Business Source License 1.1 (`BUSL-1.1`)** với **Additional Use Grant**.
+Miễn phí: được phép dùng cá nhân và dùng nội bộ trong công ty.
 
-Điều này nghĩa là:
-
-- personal use được phép
-- internal company use được phép
-- uses ngoài grant này cần separate commercial license từ licensor
-
-Chúng tôi chọn **BUSL-1.1** để giữ code auditable trong khi giảm rủi ro từ misleading repackaged builds, malware clones và unsupported commercial forks của một security-sensitive local archive tool. Toàn bộ application code là public for review.
-
-Xem [LICENSE.md](LICENSE.md) để biết đầy đủ điều khoản.
+Xem giấy phép tại [LICENSE.md](LICENSE.md) và phần giải thích ngắn tại [LICENSE-DETAILS.md](LICENSE-DETAILS.md).
 
 ---
 

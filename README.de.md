@@ -343,17 +343,9 @@ Fragen oder Hilfe bei Deployment:
 
 ## Lizenz
 
-DataMoat ist unter der **Business Source License 1.1 (`BUSL-1.1`)** mit einem **Additional Use Grant** open-sourced.
+Kostenlos: persönliche Nutzung und interne Unternehmensnutzung sind erlaubt.
 
-Das bedeutet:
-
-- persönliche Nutzung ist erlaubt
-- interne Unternehmensnutzung ist erlaubt
-- Nutzungen außerhalb dieses Grants erfordern eine separate kommerzielle Lizenz vom Licensor
-
-Wir haben **BUSL-1.1** gewählt, damit der code auditable bleibt und zugleich das Risiko von misleading repackaged builds, malware clones und unsupported commercial forks eines security-sensitive local archive tool sinkt. Der gesamte application code ist public for review.
-
-Siehe [LICENSE.md](LICENSE.md) für die vollständigen Bedingungen.
+Siehe [LICENSE.md](LICENSE.md) für die Lizenz und [LICENSE-DETAILS.md](LICENSE-DETAILS.md) für die kurze Erklärung.
 
 ---
 

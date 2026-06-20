@@ -343,17 +343,9 @@ Sorular veya deployment help:
 
 ## License
 
-DataMoat **Business Source License 1.1 (`BUSL-1.1`)** ve **Additional Use Grant** altında open-sourced olarak sunulur.
+Ücretsiz: kişisel kullanım ve şirket içi kullanım izinlidir.
 
-Bu şu anlama gelir:
-
-- personal use izinlidir
-- internal company use izinlidir
-- bu grant dışındaki uses, licensor'dan separate commercial license gerektirir
-
-**BUSL-1.1** seçmemizin nedeni code'u auditable tutarken misleading repackaged builds, malware clones ve security-sensitive local archive tool için unsupported commercial forks riskini azaltmaktır. Tüm application code public for review durumundadır.
-
-Tam koşullar için [LICENSE.md](LICENSE.md) dosyasına bakın.
+Lisans için [LICENSE.md](LICENSE.md), kısa açıklama için [LICENSE-DETAILS.md](LICENSE-DETAILS.md) dosyasına bakın.
 
 ---
 
