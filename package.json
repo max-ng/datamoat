@@ -1,6 +1,6 @@
 {
   "name": "datamoat",
-  "version": "2.0.11",
+  "version": "2.0.14",
   "description": "DataMoat exports and backs up ChatGPT, Claude, Codex, Cursor, DeepSeek, Qwen, and OpenClaw work records into an encrypted local vault.",
   "license": "BUSL-1.1",
   "homepage": "https://datamoat.org",
