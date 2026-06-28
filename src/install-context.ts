@@ -11,6 +11,8 @@ export type UpdateStrategy = 'source-git-pull' | 'source-manual-reinstall' | 'pa
 export type InstallInfo = {
   schemaVersion?: number
   mode?: InstallMode
+  installSource?: string
+  updateSource?: string
   sourceRoot?: string
   nodeBin?: string
   scriptLauncherBin?: string
@@ -33,7 +35,7 @@ export type InstallContext = {
 
 export function loadInstallInfo(): InstallInfo | null {
   try {
-    return JSON.parse(fs.readFileSync(INSTALL_INFO_FILE, 'utf8')) as InstallInfo
+    return JSON.parse(fs.readFileSync(INSTALL_INFO_FILE, 'utf8').replace(/^\uFEFF/, '')) as InstallInfo
   } catch {
     return null
   }

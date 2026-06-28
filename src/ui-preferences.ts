@@ -4,6 +4,7 @@ import { STATE_DIR, UI_PREFERENCES_FILE } from './config'
 
 export type UiLanguageCode = 'en' | 'zh-CN' | 'zh-TW' | 'ja'
 export type UiTheme = 'dark' | 'light'
+export type ChatExportFormat = 'pdf' | 'html'
 
 export const SUPPORTED_UI_LANGUAGES: readonly { code: UiLanguageCode; label: string }[] = [
   { code: 'en', label: 'EN' },
@@ -17,6 +18,7 @@ type UiPreferences = {
   language: UiLanguageCode
   theme: UiTheme
   readableMessageFormatting: boolean
+  chatExportFormat: ChatExportFormat
   configured: boolean
 }
 
@@ -25,6 +27,7 @@ const DEFAULT_PREFERENCES: UiPreferences = {
   language: 'en',
   theme: 'dark',
   readableMessageFormatting: true,
+  chatExportFormat: 'pdf',
   configured: false,
 }
 
@@ -48,6 +51,10 @@ export function normalizeUiLanguage(value: unknown): UiLanguageCode {
 
 export function normalizeUiTheme(value: unknown): UiTheme {
   return value === 'light' ? 'light' : 'dark'
+}
+
+export function normalizeChatExportFormat(value: unknown): ChatExportFormat {
+  return value === 'html' ? 'html' : 'pdf'
 }
 
 function supportedLanguageOrNull(value: unknown): UiLanguageCode | null {
@@ -140,6 +147,7 @@ export function readUiPreferences(): UiPreferences {
       language: normalizeUiLanguage(parsed.language),
       theme: normalizeUiTheme(parsed.theme),
       readableMessageFormatting: parsed.readableMessageFormatting !== false,
+      chatExportFormat: normalizeChatExportFormat(parsed.chatExportFormat),
       configured: true,
     }
   } catch {
@@ -147,7 +155,7 @@ export function readUiPreferences(): UiPreferences {
   }
 }
 
-export function saveUiPreferences(input: { language?: unknown; theme?: unknown; readableMessageFormatting?: unknown }): UiPreferences {
+export function saveUiPreferences(input: { language?: unknown; theme?: unknown; readableMessageFormatting?: unknown; chatExportFormat?: unknown }): UiPreferences {
   const current = readUiPreferences()
   const preferences: UiPreferences = {
     schemaVersion: 1,
@@ -156,6 +164,9 @@ export function saveUiPreferences(input: { language?: unknown; theme?: unknown; 
     readableMessageFormatting: input.readableMessageFormatting === undefined
       ? current.readableMessageFormatting
       : input.readableMessageFormatting !== false,
+    chatExportFormat: input.chatExportFormat === undefined
+      ? current.chatExportFormat
+      : normalizeChatExportFormat(input.chatExportFormat),
     configured: true,
   }
 
@@ -167,6 +178,7 @@ export function saveUiPreferences(input: { language?: unknown; theme?: unknown; 
       language: preferences.language,
       theme: preferences.theme,
       readableMessageFormatting: preferences.readableMessageFormatting,
+      chatExportFormat: preferences.chatExportFormat,
     }, null, 2),
     { mode: 0o600 },
   )

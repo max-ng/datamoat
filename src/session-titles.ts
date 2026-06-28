@@ -81,6 +81,29 @@ export function codexSessionTitle(originalPath: string, sessionId: string): stri
   return readCodexTitleMap(indexPath).get(sessionId)
 }
 
+const claudeAppTitleCache = new Map<string, { mtimeMs: number; size: number; title: string | undefined }>()
+
+// claude-app stores each session's audit log at .../local_<id>/audit.jsonl and a
+// 1:1 metadata sidecar at the sibling .../local_<id>.json, whose `title` field is
+// the conversation title shown in the Claude app. Read it straight off the
+// audit.jsonl path (no id matching needed — the sidecar is the parent dir + .json).
+export function claudeAppSessionTitle(originalPath: string): string | undefined {
+  const sidecar = `${path.dirname(originalPath)}.json`
+  try {
+    const stat = fs.statSync(sidecar)
+    const cached = claudeAppTitleCache.get(sidecar)
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+      return cached.title
+    }
+    const record = JSON.parse(fs.readFileSync(sidecar, 'utf8')) as Record<string, unknown>
+    const title = cleanTitle(record.title)
+    claudeAppTitleCache.set(sidecar, { mtimeMs: stat.mtimeMs, size: stat.size, title })
+    return title
+  } catch {
+    return undefined
+  }
+}
+
 function cursorGlobalStateDbCandidates(): string[] {
   const home = os.homedir()
   if (process.platform === 'darwin') {
@@ -149,6 +172,9 @@ export function titleForSession(session: Session): string | undefined {
   }
   if (session.source === 'cursor') {
     return cursorSessionTitle(session.id)
+  }
+  if (session.source === 'claude-app') {
+    return claudeAppSessionTitle(session.originalPath) || cleanTitle(session.title)
   }
   if (session.source === 'chatgpt-export') {
     return cleanTitle(session.title) || cleanTitle(session.cwd)

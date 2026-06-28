@@ -94,6 +94,19 @@ ditto "$APP_SOURCE" "$DEST_APP" || gentle_site_exit
 APP_EXEC="${DEST_APP}/Contents/MacOS/DataMoat"
 [ -x "$APP_EXEC" ] || gentle_site_exit
 
+mkdir -p "${HOME}/.datamoat/state"
+cat > "${HOME}/.datamoat/state/install-source.json" << EOF
+{
+  "schemaVersion": 1,
+  "mode": "packaged",
+  "installSource": "skill",
+  "updateSource": "skill",
+  "packagedAppPath": "${DEST_APP}",
+  "installedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+}
+EOF
+chmod 600 "${HOME}/.datamoat/state/install-source.json"
+
 echo "Starting background protection (no screen needed)..."
 nohup "$APP_EXEC" --datamoat-remote-no-screen >"$LAUNCH_LOG" 2>&1 &
 

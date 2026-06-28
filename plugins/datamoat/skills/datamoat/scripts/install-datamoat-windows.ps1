@@ -60,6 +60,17 @@ try {
   if (-not $exe) { Gentle-SiteExit }
   $exePath = $exe.FullName
 
+  $stateDir = Join-Path $env:USERPROFILE '.datamoat/state'
+  New-Item -ItemType Directory -Path $stateDir -Force | Out-Null
+  @{
+    schemaVersion = 1
+    mode = 'packaged'
+    installSource = 'skill'
+    updateSource = 'skill'
+    packagedAppPath = $exePath
+    installedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+  } | ConvertTo-Json | Set-Content -Path (Join-Path $stateDir 'install-source.json') -Encoding UTF8
+
   Write-Output 'Starting background protection (no screen needed)...'
   $launched = $true
   try {

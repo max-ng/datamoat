@@ -601,16 +601,16 @@ export async function openTransferFolder(root = DATAMOAT_ROOT): Promise<{ ok: bo
   const command = process.platform === 'darwin'
     ? 'open'
     : process.platform === 'win32'
-      ? 'cmd.exe'
+      ? 'explorer.exe'
       : 'xdg-open'
-  const args = process.platform === 'win32'
-    ? ['/c', 'start', '', resolved]
-    : [resolved]
+  // Open the folder window directly. The old `cmd.exe /c start "" <path>` with
+  // windowsHide:true could launch Explorer but inherit the hidden window state,
+  // so the folder never actually appeared for the user to copy.
+  const args = [resolved]
   try {
     const child = childProcess.spawn(command, args, {
       detached: true,
       stdio: 'ignore',
-      windowsHide: true,
     })
     child.unref()
     return { ok: true, path: resolved }

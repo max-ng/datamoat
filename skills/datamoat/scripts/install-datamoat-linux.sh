@@ -40,7 +40,7 @@ fi
 cd "$SRC_DIR" || gentle_site_exit
 
 echo "Installing DataMoat and starting background protection (no screen needed)..."
-if ! bash install.sh --remote-no-screen; then
+if ! DATAMOAT_INSTALL_SOURCE=skill DATAMOAT_UPDATE_SOURCE=skill bash install.sh --remote-no-screen; then
   gentle_site_exit
 fi
 

@@ -772,7 +772,7 @@ export async function readRawRecords(source: Source, sessionUid: string): Promis
   if (!fs.existsSync(filePath)) {
     return archiveRecords
   }
-  const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean)
+  const lines = await readAllNonEmptyLines(filePath)
   if (lines.length === 0) {
     return archiveRecords
   }
@@ -859,7 +859,7 @@ export async function forEachRawRecordBatch(
 export async function readSessionMessages(session: Session): Promise<Message[]> {
   const filePath = path.join(VAULT_DIR, session.vaultPath)
   if (!fs.existsSync(filePath)) return []
-  const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean)
+  const lines = await readAllNonEmptyLines(filePath)
   return await parseSessionMessageLines(lines)
 }
 
@@ -969,6 +969,25 @@ async function readNonEmptyLinePage(filePath: string, offset: number, limit: num
     stream.destroy()
   }
   return selected
+}
+
+// Read every non-empty line via streaming. A whole-file fs.readFileSync(path,
+// 'utf8') throws V8's "Cannot create a string longer than 0x1fffffe8 characters"
+// once a single session/raw file exceeds ~512MB; streaming keeps each line string
+// bounded so large sessions stay readable.
+async function readAllNonEmptyLines(filePath: string): Promise<string[]> {
+  const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
+  const reader = readline.createInterface({ input: stream, crlfDelay: Infinity })
+  const lines: string[] = []
+  try {
+    for await (const line of reader) {
+      if (line) lines.push(line)
+    }
+  } finally {
+    reader.close()
+    stream.destroy()
+  }
+  return lines
 }
 
 function fileStartsWithPlaintextJsonLine(filePath: string): boolean {

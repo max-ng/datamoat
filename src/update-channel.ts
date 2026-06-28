@@ -1,4 +1,5 @@
 import type { GenericServerOptions, GithubOptions } from 'builder-util-runtime'
+import { loadInstallInfo } from './install-context'
 
 function envTrimmed(name: string): string | null {
   const value = process.env[name]?.trim()
@@ -25,16 +26,42 @@ export const DL_RELAY_BASE = (DL_RELAY_RAW === undefined ? 'https://dl.datamoat.
 // health check passes (see selectUpdateFeedBase). Updates never block on it.
 let effectiveDownloadBase = DOWNLOAD_BASE_URL
 
+function normalizedTrackingSource(value: string | null | undefined): string | null {
+  const source = String(value || '').trim()
+  return /^[a-z0-9_-]{1,32}$/i.test(source) ? source : null
+}
+
+export function updateTrackingSource(): string | null {
+  const info = loadInstallInfo()
+  return normalizedTrackingSource(
+    envTrimmed('DATAMOAT_UPDATE_SOURCE')
+      || info?.updateSource
+      || info?.installSource,
+  )
+}
+
+export function addUpdateTrackingSource(url: string): string {
+  const source = updateTrackingSource()
+  if (!source) return url
+  try {
+    const parsed = new URL(url)
+    if (!parsed.searchParams.has('s')) parsed.searchParams.set('s', source)
+    return parsed.toString()
+  } catch {
+    return url
+  }
+}
+
 export function setEffectiveDownloadBase(base: string): void {
   effectiveDownloadBase = base.replace(/\/+$/, '')
 }
 
 export function effectiveGenericFeedUrl(): string {
-  return ensureTrailingSlash(envTrimmed('DATAMOAT_UPDATE_GENERIC_URL') || `${effectiveDownloadBase}/releases/latest/`)
+  return addUpdateTrackingSource(ensureTrailingSlash(envTrimmed('DATAMOAT_UPDATE_GENERIC_URL') || `${effectiveDownloadBase}/releases/latest/`))
 }
 
 export function effectiveWindowsManifestUrl(): string {
-  return envTrimmed('DATAMOAT_WINDOWS_UPDATE_MANIFEST_URL') || `${effectiveDownloadBase}/releases/latest/manifest.json`
+  return addUpdateTrackingSource(envTrimmed('DATAMOAT_WINDOWS_UPDATE_MANIFEST_URL') || `${effectiveDownloadBase}/releases/latest/manifest.json`)
 }
 
 // Probe the relay once; use it only if healthy. Falls back to the direct

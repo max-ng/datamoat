@@ -68,37 +68,41 @@
     --meta-text: rgba(255,255,255,0.38);
     --meta-strong: rgba(255,255,255,0.58);
     --sidebar-bg: var(--bg);
-    --content-bg: var(--surface);
+    --content-bg: var(--bg);
     --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei UI', sans-serif;
     --font-mono: 'JetBrains Mono', 'PingFang SC', 'Microsoft YaHei UI', 'Noto Sans CJK SC', 'Noto Sans CJK TC', monospace;
   }
   html[data-theme="light"] {
     color-scheme: light;
-    --bg:        #ffffff;
+    --bg:        #f6f7f7;
     --surface:   #ffffff;
-    --surface2:  #f5f5f5;
-    --surface3:  #ececec;
+    --surface2:  #eef1f0;
+    --surface3:  #e3e8e6;
     --panel:     #ffffff;
-    --panel2:    #f7f7f7;
-    --border:    #e8e8e8;
-    --border2:   #d7d7d7;
-    --text:      #1f1f1f;
-    --muted:     #8b8b8b;
-    --muted2:    #5f6368;
-    --think-bg:  rgba(116, 182, 165, 0.12);
-    --think-border: rgba(15, 157, 118, 0.24);
-    --think-text:   #4d8d7d;
+    --panel2:    #f2f5f4;
+    --border:    #dfe5e2;
+    --border2:   #cbd5d1;
+    --text:      #202423;
+    --muted:     #7b8581;
+    --muted2:    #59635f;
+    --accent:    #3f8f7f;
+    --accent2:   #2f7d70;
+    --chatgpt:   #3f8f7f;
+    --app:       #3f8f7f;
+    --think-bg:  rgba(63, 143, 127, 0.10);
+    --think-border: rgba(63, 143, 127, 0.24);
+    --think-text:   #32796c;
     --input-bg: #ffffff;
     --input-focus-bg: #ffffff;
     --control-bg: #ffffff;
-    --control-hover-bg: #f2f2f2;
-    --control-active-bg: #e9e9e9;
-    --code-bg: #f6f6f6;
+    --control-hover-bg: #eef1f0;
+    --control-active-bg: #e3e8e6;
+    --code-bg: #f2f5f4;
     --tooltip-bg: #ffffff;
-    --modal-backdrop: rgba(245, 245, 245, 0.72);
+    --modal-backdrop: rgba(246, 247, 247, 0.72);
     --shadow-strong: rgba(0, 0, 0, 0.14);
-    --scrollbar-thumb: #c7c7c7;
-    --video-bg: #e9e9e9;
+    --scrollbar-thumb: #cbd5d1;
+    --video-bg: #e3e8e6;
     --info-bg: #edf4ff;
     --info-border: #c9dbf6;
     --info-text: #426184;
@@ -111,8 +115,8 @@
     --meta-border: rgba(0,0,0,0.075);
     --meta-text: rgba(0,0,0,0.40);
     --meta-strong: rgba(0,0,0,0.62);
-    --sidebar-bg: #fbfbfb;
-    --content-bg: #ffffff;
+    --sidebar-bg: var(--bg);
+    --content-bg: var(--bg);
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
@@ -1689,6 +1693,57 @@
     color: var(--muted);
     opacity: 0.65;
   }
+  .conv-resume-id {
+    appearance: none;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    max-width: 100%;
+    margin: 8px 0 0;
+    padding: 4px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--control-bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .conv-resume-id:hover {
+    border-color: var(--accent);
+    background: rgba(0, 200, 160, 0.06);
+  }
+  .conv-resume-id-label {
+    flex-shrink: 0;
+    color: var(--muted);
+  }
+  .conv-resume-id-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* The "copy to resume" hint is hover-only; the resting state shows just id: <uuid>. */
+  .conv-resume-id-hint {
+    flex-shrink: 0;
+    display: none;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-size: 9px;
+  }
+  .conv-resume-id:hover .conv-resume-id-hint,
+  .conv-resume-id.copied .conv-resume-id-hint {
+    display: inline;
+  }
+  .conv-resume-id.copied {
+    border-color: var(--accent);
+  }
+  .conv-resume-id.copied .conv-resume-id-hint {
+    color: var(--accent);
+  }
   .conv-search-strip {
     position: sticky;
     top: 0;
@@ -2357,6 +2412,28 @@
     white-space: pre;
     font-size: 12.5px;
     line-height: 1.5;
+    scrollbar-color: var(--border2) var(--panel);
+    scrollbar-width: thin;
+  }
+  .text-block.readable pre.markdown-code::-webkit-scrollbar,
+  .detail-pre::-webkit-scrollbar {
+    height: 10px;
+    width: 10px;
+  }
+  .text-block.readable pre.markdown-code::-webkit-scrollbar-track,
+  .detail-pre::-webkit-scrollbar-track {
+    background: var(--panel);
+    border-top: 1px solid var(--border);
+  }
+  .text-block.readable pre.markdown-code::-webkit-scrollbar-thumb,
+  .detail-pre::-webkit-scrollbar-thumb {
+    background: var(--border2);
+    border-radius: 999px;
+    border: 2px solid var(--panel);
+  }
+  .text-block.readable pre.markdown-code::-webkit-scrollbar-thumb:hover,
+  .detail-pre::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
   }
   .text-block.readable pre.markdown-code code {
     border: 0;
@@ -2465,6 +2542,8 @@
     color: var(--text);
     white-space: pre;
     overflow: auto;
+    scrollbar-color: var(--border2) var(--panel);
+    scrollbar-width: thin;
   }
   .attachment-open-btn {
     display: inline-flex;
@@ -2640,6 +2719,8 @@
     font-size: 12.5px;
     line-height: 1.5;
     color: var(--meta-strong);
+    scrollbar-color: var(--border2) var(--panel);
+    scrollbar-width: thin;
   }
   .other-block {
     background: var(--control-bg);
@@ -2678,6 +2759,11 @@
   .empty-icon { font-size: 32px; opacity: 0.3; }
   .empty-title { font-family: var(--font-mono); font-size: 14px; }
   .empty-sub { font-size: 12px; max-width: 280px; line-height: 1.6; }
+  .empty-show-all {
+    background: none; border: none; padding: 0; cursor: pointer;
+    color: var(--accent); font: inherit; text-decoration: underline;
+  }
+  .empty-show-all:hover { opacity: 0.8; }
   .searching-empty {
     gap: 8px;
   }
@@ -2843,11 +2929,11 @@
     background: #282828;
   }
   .theme-swatch.light {
-    background: #ffffff;
+    background: #f6f7f7;
   }
   .theme-swatch.light::before {
     content: '';
-    background: #f3f3f3;
+    background: #ffffff;
   }
   .language-current {
     min-width: 156px;
@@ -4048,6 +4134,22 @@
                 </span>
               </button>
             </div>
+            <div class="settings-card wide" id="export-format-settings-card">
+              <div class="theme-card-head">
+                <div>
+                  <div class="settings-label" id="export-format-settings-title">Chat export</div>
+                  <div class="settings-value" id="export-format-settings-subtitle">Default file type when exporting a chat.</div>
+                </div>
+                <div class="theme-choice-group" id="chat-export-format-picker" role="radiogroup" aria-label="Chat export format">
+                  <button class="theme-choice active" type="button" role="radio" aria-checked="true" data-export-format-choice="pdf">
+                    <span id="export-format-pdf-label">PDF</span>
+                  </button>
+                  <button class="theme-choice" type="button" role="radio" aria-checked="false" data-export-format-choice="html">
+                    <span id="export-format-html-label">HTML</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="settings-card wide referenced-backup-card" id="referenced-attachments-card">
               <div class="referenced-backup-head">
                 <div>
@@ -4085,7 +4187,7 @@
                   <div class="settings-label" id="release-notes-title">New in this version</div>
                   <div class="settings-value" id="release-notes-subtitle">What changed in the installed DataMoat version.</div>
                 </div>
-                <div class="release-notes-version" id="release-notes-version">v2.0.11</div>
+                <div class="release-notes-version" id="release-notes-version">v2.0.14</div>
               </div>
               <ul class="release-notes-list" id="release-notes-list"></ul>
             </div>
@@ -4347,7 +4449,6 @@ const TOUCH_ID_REFRESH_DISMISSED_KEY = 'dm_touchid_refresh_dismissed'
 const UPDATE_READY_DISMISSED_KEY = 'dm_update_ready_dismissed_version'
 const UPDATE_APPLIED_NOTICE_KEY = 'dm_update_applied_notice_version'
 const UPDATE_APPLIED_FEATURE_NOTICE_KEY = 'dm_update_applied_feature_notice_version'
-let chatGptExportFeatureNoticeCheckStarted = false
 const LARGE_SESSION_MESSAGE_THRESHOLD = 1000
 const SESSION_PAGE_SIZE = 500
 const SEARCH_CONTEXT_BEFORE = 80
@@ -4401,11 +4502,11 @@ const SOURCE_LABELS = {
   'chatgpt-export': 'chatgpt export',
 }
 
-const CURRENT_RELEASE_NOTES_VERSION = '2.0.11'
+const CURRENT_RELEASE_NOTES_VERSION = '2.0.14'
 const CURRENT_RELEASE_NOTES = {
   en: [
     "Refreshes the desktop UI with cleaner conversation layout, bundled JetBrains Mono styling, quieter metadata rows, and better light/dark theme consistency.",
-    "Adds chat export tools for portable DataMoat conversation exports: HTML viewer, clean JSON, Markdown context pack, and attachments.",
+    "Adds chat export: save any conversation as a PDF or a self-contained HTML viewer, plus clean JSON, a Markdown context pack, and attachments.",
     "Fixes packaged Windows copy-to-clipboard by using Electron's native clipboard bridge with browser fallback.",
     "Fixes Windows manual update checks so DataMoat no longer opens an older release page or looks like it is offering a downgrade.",
     "Hardens Windows no-screen/startup launchers so command windows do not stay open or kill tray/background capture when closed.",
@@ -4420,9 +4521,58 @@ function sessionSourceLabel(session) {
   return SOURCE_LABELS[session?.source] || session?.source || 'unknown'
 }
 
+// The internal session id doubles as the CLI resume id for claude-cli / codex-cli
+// (claude --resume <id> / codex resume <id>). Other sources have no CLI resume, so
+// surfacing the id there would be misleading — return '' to hide the chip.
+function sessionResumeId(session) {
+  if (session?.source !== 'claude-cli' && session?.source !== 'codex-cli') return ''
+  const id = String(session?.id || '').trim()
+  return id
+}
+
 function dmCookie(name) {
   const match = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/[-/\\\\^$*+?.()|[\\]{}]/g, '\\\\$&') + '=([^;]+)'))
   return match ? decodeURIComponent(match[1]) : ''
+}
+
+// Records WHY the UI is about to bounce back to /unlock. Without this the
+// redirect was silent: writeLog only persists with DATAMOAT_DEBUG_LOGS=1, and
+// the client wrote nothing, so a bounce mid-load left no trace. This posts a
+// bounded record to health.json (keepalive so it survives the navigation) and
+// drops a localStorage breadcrumb. Never throws — it must not block the bounce.
+function recordUnlockBounce(reason, extra) {
+  try {
+    let sinceUnlockMs = null
+    try {
+      const ts = Number(localStorage.getItem('dm_unlock_ts') || '')
+      if (Number.isFinite(ts) && ts > 0) sinceUnlockMs = Date.now() - ts
+    } catch {}
+    let navType = ''
+    try {
+      const nav = performance.getEntriesByType('navigation')[0]
+      navType = nav && nav.type ? String(nav.type) : ''
+    } catch {}
+    const payload = {
+      event: 'unlock_bounce',
+      reason: String(reason || ''),
+      navType,
+      path: (location.pathname || '') + (location.search || ''),
+      api: extra && extra.url ? String(extra.url) : '',
+      status: extra && typeof extra.status === 'number' ? extra.status : null,
+      sinceUnlockMs,
+      at: new Date().toISOString(),
+    }
+    try { localStorage.setItem('dm_last_bounce', JSON.stringify(payload)) } catch {}
+    fetch('/api/ui-event', {
+      method: 'POST',
+      cache: 'no-store',
+      keepalive: true,
+      headers: { 'Content-Type': 'application/json', 'X-DM-CSRF': dmCookie('dm_csrf') },
+      body: JSON.stringify(payload),
+    }).catch(() => {})
+  } catch {
+    /* never block the bounce */
+  }
 }
 
 async function apiFetch(url, options) {
@@ -4441,6 +4591,7 @@ async function apiFetch(url, options) {
   if (!('cache' in opts)) opts.cache = 'no-store'
   const res = await fetch(url, opts)
   if (res.status === 401) {
+    recordUnlockBounce('apifetch_401', { status: 401, url })
     window.location.replace('/unlock')
     throw new Error('authentication required')
   }
@@ -4450,6 +4601,8 @@ async function apiFetch(url, options) {
 const appText = {
   en: {
     searchPlaceholder: 'search conversations...',
+    resumeIdHint: 'copy to resume',
+    resumeIdCopied: 'copied',
     settings: 'Settings',
     closeSettings: 'Close settings',
     about: 'about',
@@ -4462,6 +4615,10 @@ const appText = {
     themeLight: 'Light',
     readableFormatting: 'Readable message formatting',
     readableFormattingCopy: 'Render captured Markdown-like text for easier reading. Turn off to show exact plain text layout.',
+    exportFormatTitle: 'Chat export',
+    exportFormatSubtitle: 'Default file type when exporting a chat.',
+    exportFormatPdf: 'PDF',
+    exportFormatHtml: 'HTML',
     settingsPanelGeneral: 'General',
     settingsPanelUpdates: 'Updates',
     settingsPanelFiles: 'File backup',
@@ -4581,6 +4738,8 @@ const appText = {
 	  },
   'zh-CN': {
     searchPlaceholder: '搜索对话...',
+    resumeIdHint: '点按复制以继续对话',
+    resumeIdCopied: '已复制',
     settings: '设置',
     closeSettings: '关闭设置',
     about: '关于',
@@ -4591,6 +4750,10 @@ const appText = {
     themeSubtitle: '选择 app 颜色主题。',
     themeDark: '深色',
     themeLight: '浅色',
+    exportFormatTitle: '对话导出',
+    exportFormatSubtitle: '导出对话时默认使用的文件类型。',
+    exportFormatPdf: 'PDF',
+    exportFormatHtml: 'HTML',
     settingsPanelGeneral: '通用',
     settingsPanelUpdates: '更新',
     settingsPanelFiles: '文件备份',
@@ -4710,6 +4873,8 @@ const appText = {
 	  },
   ja: {
     searchPlaceholder: '会話を検索...',
+    resumeIdHint: 'クリックでコピーして再開',
+    resumeIdCopied: 'コピーしました',
     settings: '設定',
     closeSettings: '設定を閉じる',
     about: '情報',
@@ -4720,6 +4885,10 @@ const appText = {
     themeSubtitle: 'アプリのカラーテーマを選択します。',
     themeDark: 'ダーク',
     themeLight: 'ライト',
+    exportFormatTitle: 'チャットエクスポート',
+    exportFormatSubtitle: 'チャットを書き出すときの既定ファイル形式です。',
+    exportFormatPdf: 'PDF',
+    exportFormatHtml: 'HTML',
     settingsPanelGeneral: '一般',
     settingsPanelUpdates: '更新',
     settingsPanelFiles: 'ファイルバックアップ',
@@ -5398,6 +5567,8 @@ function appToTraditionalText(text) {
 }
 appText['zh-TW'] = Object.fromEntries(Object.entries(appText['zh-CN']).map(([key, value]) => [key, appToTraditionalText(value)]))
 Object.assign(appText['zh-TW'], {
+  resumeIdHint: '點按複製以繼續對話',
+  resumeIdCopied: '已複製',
   releaseNotesTitle: '這個版本更新了什麼',
   releaseNotesSubtitle: 'DataMoat {version} 的主要改動。',
   overviewAllTimeVault: '全部工作記憶庫',
@@ -5444,6 +5615,7 @@ Object.assign(appText['zh-TW'], {
 let appLanguage = 'en'
 let appTheme = 'dark'
 let readableMessageFormatting = true
+let chatExportFormat = 'pdf'
 function normalizeAppLanguage(value) {
   const code = String(value || '').replace('_', '-').toLowerCase()
   if (code.startsWith('zh') || code.startsWith('yue')) {
@@ -5456,6 +5628,9 @@ function normalizeAppLanguage(value) {
 }
 function normalizeAppTheme(value) {
   return value === 'light' ? 'light' : 'dark'
+}
+function normalizeChatExportFormat(value) {
+  return value === 'html' ? 'html' : 'pdf'
 }
 function detectAppLanguage() {
   const languages = Array.isArray(navigator.languages) && navigator.languages.length > 0
@@ -5586,6 +5761,14 @@ function applyAppTheme() {
     btn.setAttribute('aria-checked', active ? 'true' : 'false')
   })
 }
+function applyChatExportFormatState() {
+  chatExportFormat = normalizeChatExportFormat(chatExportFormat)
+  document.querySelectorAll('[data-export-format-choice]').forEach(btn => {
+    const active = btn.dataset.exportFormatChoice === chatExportFormat
+    btn.classList.toggle('active', active)
+    btn.setAttribute('aria-checked', active ? 'true' : 'false')
+  })
+}
 function applyAppLanguage(options = {}) {
   document.documentElement.lang = appLanguage === 'zh-CN' ? 'zh-CN' : appLanguage
   const currentLanguageButton = document.getElementById('app-language-current')
@@ -5616,6 +5799,10 @@ function applyAppLanguage(options = {}) {
   setAppText('theme-settings-subtitle', 'themeSubtitle')
   setAppText('theme-dark-label', 'themeDark')
   setAppText('theme-light-label', 'themeLight')
+  setAppText('export-format-settings-title', 'exportFormatTitle')
+  setAppText('export-format-settings-subtitle', 'exportFormatSubtitle')
+  setAppText('export-format-pdf-label', 'exportFormatPdf')
+  setAppText('export-format-html-label', 'exportFormatHtml')
   setAppText('language-settings-title', 'languageTitle')
   setAppText('language-settings-subtitle', 'languageSubtitle')
   document.querySelector('#readable-format-toggle .switch-title') && (document.querySelector('#readable-format-toggle .switch-title').textContent = appTr('readableFormatting'))
@@ -5710,10 +5897,12 @@ async function loadAppPreferences() {
     }
     appTheme = normalizeAppTheme(data?.theme)
     readableMessageFormatting = data?.readableMessageFormatting !== false
+    chatExportFormat = normalizeChatExportFormat(data?.chatExportFormat)
   } catch {}
   applyAppTheme()
   applyAppLanguage()
   applyReadableMessageFormattingState()
+  applyChatExportFormatState()
   rerenderLocalizedSettingsPanels()
 }
 async function saveAppLanguage(language) {
@@ -5776,6 +5965,19 @@ async function toggleReadableMessageFormatting() {
     applyReadableMessageFormattingState()
   }
 }
+async function saveChatExportFormat(format) {
+  chatExportFormat = normalizeChatExportFormat(format)
+  applyChatExportFormatState()
+  try {
+    const data = await jsonOrThrow(await apiFetch('/api/preferences', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatExportFormat }),
+    }))
+    chatExportFormat = normalizeChatExportFormat(data?.chatExportFormat)
+  } catch {}
+  applyChatExportFormatState()
+}
 
 async function jsonOrThrow(res) {
   const contentType = res.headers.get('content-type') || ''
@@ -5791,6 +5993,7 @@ async function jsonOrThrow(res) {
 async function relockOnReload() {
   const nav = performance.getEntriesByType('navigation')[0]
   if (nav && nav.type === 'reload') {
+    recordUnlockBounce('relock_on_reload')
     try { await apiFetch('/api/auth/logout', { method: 'POST' }) } catch {}
     window.location.replace('/unlock')
     throw new Error('relocked after reload')
@@ -5967,26 +6170,10 @@ function showChatGptExportFeatureNotice(version, options = {}) {
     `DataMoat has been updated to version ${version || 'this build'}. New: chatgpt-export ZIP/folder import is now supported.`,
     {
       actionLabel: 'Open Settings',
-      onAction: openSettingsToChatGptExport,
+      onAction: openSettings,
     },
   )
   return true
-}
-
-async function checkChatGptExportFeatureNotice() {
-  if (chatGptExportFeatureNoticeCheckStarted) return
-  chatGptExportFeatureNoticeCheckStarted = true
-  let version = settingsAppVersion || ''
-  if (!version) {
-    try {
-      const meta = await jsonOrThrow(await apiFetch('/api/meta'))
-      version = meta.version || ''
-      settingsAppVersion = version || settingsAppVersion
-    } catch {
-      // If metadata is temporarily unavailable, show a generic build notice.
-    }
-  }
-  showChatGptExportFeatureNotice(version)
 }
 
 function syncPackagedUpdateNotice(options = {}) {
@@ -6691,21 +6878,34 @@ function renderList() {
   if (panelMode === 'bookmarks' || panelMode === 'up' || panelMode === 'down') {
     body = renderAnnotationView(filtered)
   } else if (filtered.length === 0) {
-    const emptyTitle = searchQ
-      ? (contentSearchPending ? 'searching content…' : 'no results')
-      : 'no results'
-    const emptySub = searchQ && !contentSearchPending
-      ? `No conversations matched "${esc(searchQ)}".`
-      : ''
-    body = contentSearchPending
-      ? `<div class="empty searching-empty">
-        <div class="empty-title scan-title">searching content<span class="scan-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></div>
-      </div>`
-      : `<div class="empty">
+    // A source filter that matches nothing (while the vault still has other
+    // conversations) must not look like the data vanished — say it is a filter
+    // and offer one click back to "all".
+    const sourceFiltered = !searchQ && filterSrc !== 'all' && sessions.length > 0
+    if (sourceFiltered) {
+      const label = SOURCE_LABELS[filterSrc] || filterSrc
+      body = `<div class="empty">
         <div class="empty-icon">∅</div>
-        <div class="empty-title">${emptyTitle}</div>
-        ${emptySub ? `<div class="empty-sub">${emptySub}</div>` : ''}
+        <div class="empty-title">No ${esc(label)} conversations</div>
+        <div class="empty-sub">${sessions.length} conversation${sessions.length === 1 ? '' : 's'} in other sources. <button type="button" class="empty-show-all" data-show-all="1">Show all</button></div>
       </div>`
+    } else {
+      const emptyTitle = searchQ
+        ? (contentSearchPending ? 'searching content…' : 'no results')
+        : 'no results'
+      const emptySub = searchQ && !contentSearchPending
+        ? `No conversations matched "${esc(searchQ)}".`
+        : ''
+      body = contentSearchPending
+        ? `<div class="empty searching-empty">
+          <div class="empty-title scan-title">searching content<span class="scan-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></div>
+        </div>`
+        : `<div class="empty">
+          <div class="empty-icon">∅</div>
+          <div class="empty-title">${emptyTitle}</div>
+          ${emptySub ? `<div class="empty-sub">${emptySub}</div>` : ''}
+        </div>`
+    }
   } else if (panelMode === 'folders') {
     body = renderFolderView(filtered)
   } else {
@@ -7583,6 +7783,10 @@ function renderConversationMarkup(session, messages, opts = {}) {
   const safeVersion = esc(session.appVersion)
   const sourceInfo = session.sourceAccount ? `${session.source} · ${session.sourceAccount}` : session.source
   const metaTitle = escAttr(`source: ${sourceInfo}`)
+  const resumeId = sessionResumeId(session)
+  const resumeChip = resumeId
+    ? `<button class="conv-resume-id" type="button" data-copy-resume-id="${escAttr(resumeId)}" title="${escAttr(`${resumeId} — ${appTr('resumeIdHint')}`)}" aria-label="${escAttr(`id ${resumeId} — ${appTr('resumeIdHint')}`)}"><span class="conv-resume-id-label">id:</span><span class="conv-resume-id-value">${esc(resumeId)}</span><span class="conv-resume-id-hint">${esc(appTr('resumeIdHint'))}</span></button>`
+    : ''
   const splitPane = opts.splitPane === true
   const toolbar = renderConversationActions(session, opts.pageInfo, { splitPane })
   return `
@@ -7601,6 +7805,7 @@ function renderConversationMarkup(session, messages, opts = {}) {
               <span>${fmtDate(session.firstTimestamp)}</span>
             </div>
           </div>
+          ${resumeChip}
         </div>
         ${renderConversationSearchStrip(splitPane)}
         ${splitPane ? '' : renderBranchBanner()}
@@ -8300,6 +8505,28 @@ async function openLocalVideoFile(button) {
   }
 }
 
+async function copyResumeId(button) {
+  const id = button.getAttribute('data-copy-resume-id') || ''
+  if (!id) return
+  const hint = button.querySelector('.conv-resume-id-hint')
+  try {
+    await writeClipboardText(id)
+    if (hint) {
+      if (!hint.dataset.defaultLabel) hint.dataset.defaultLabel = hint.textContent
+      hint.textContent = appTr('resumeIdCopied')
+      button.classList.add('copied')
+      window.clearTimeout(button._resumeCopiedTimer)
+      button._resumeCopiedTimer = window.setTimeout(() => {
+        hint.textContent = hint.dataset.defaultLabel || appTr('resumeIdHint')
+        button.classList.remove('copied')
+      }, 1400)
+    }
+  } catch {
+    // Clipboard can fail on locked-down surfaces; leave the id visible so the
+    // user can still select and copy it manually.
+  }
+}
+
 async function writeClipboardText(text) {
   if (window.datamoatDesktop?.clipboard?.write) {
     try {
@@ -8371,7 +8598,11 @@ async function exportActiveSession(button) {
   button.disabled = true
   showCopyInlineStatus(appTr('exportingNotice') || 'Exporting…')
   try {
-    const data = await jsonOrThrow(await apiFetch(`/api/session/${encodeURIComponent(activeId)}/export`, { method: 'POST' }))
+    const data = await jsonOrThrow(await apiFetch(`/api/session/${encodeURIComponent(activeId)}/export`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: chatExportFormat }),
+    }))
     button.classList.add('copied')
     const parts = []
     if (data.imageCount) parts.push(`${fmtNumber(data.imageCount)} image${data.imageCount === 1 ? '' : 's'}`)
@@ -11388,6 +11619,11 @@ document.getElementById('conversation')?.addEventListener('click', e => {
     setAllToolBlocksCollapsed(!toolBlocksCollapsedByDefault)
     return
   }
+  const resumeIdButton = target ? target.closest('button[data-copy-resume-id]') : null
+  if (resumeIdButton) {
+    void copyResumeId(resumeIdButton)
+    return
+  }
   const copyContextButton = target ? target.closest('button[data-copy-context-through]') : null
   if (copyContextButton) {
     void copyContextThroughMessage(copyContextButton)
@@ -11499,7 +11735,6 @@ async function refreshUpdatePanel() {
     }
     updateState = normalizeUpdateStateForUi(latestState)
     syncPackagedUpdateNotice()
-    void checkChatGptExportFeatureNotice()
     if (settingsOpen) renderUpdatePanel()
   } catch {
     // Ignore background refresh errors; the next manual action will surface them.
@@ -11836,6 +12071,9 @@ document.querySelectorAll('[data-settings-target]').forEach(btn => {
 document.querySelectorAll('[data-theme-choice]').forEach(btn => {
   btn.addEventListener('click', () => { void saveAppTheme(btn.dataset.themeChoice) })
 })
+document.querySelectorAll('[data-export-format-choice]').forEach(btn => {
+  btn.addEventListener('click', () => { void saveChatExportFormat(btn.dataset.exportFormatChoice) })
+})
 document.getElementById('app-language-current')?.addEventListener('click', event => {
   event.preventDefault()
   toggleLanguageMenu()
@@ -11916,6 +12154,11 @@ function handleSessionListActivate(target) {
   const modeBtn = target ? target.closest('[data-panel-mode]') : null
   if (modeBtn) {
     setPanelMode(modeBtn.dataset.panelMode || 'search')
+    return true
+  }
+  const showAllBtn = target ? target.closest('[data-show-all]') : null
+  if (showAllBtn) {
+    setSourceFilter('all')
     return true
   }
   const folderHeader = target ? target.closest('.folder-group-header[data-folder-key]') : null

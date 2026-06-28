@@ -10,7 +10,7 @@ import { autoUpdater, type ProgressInfo, type UpdateDownloadedEvent, type Update
 import { detectInstallContext } from '../install-context'
 import { writeLog } from '../logging'
 import { loadAppConfig, loadUpdateState, saveAppConfig, writeUpdateState, type UpdateState } from '../update-config'
-import { DOWNLOAD_BASE_URL, UPDATE_GITHUB_HOST, UPDATE_GITHUB_OWNER, UPDATE_GITHUB_REPO, effectiveWindowsManifestUrl, packagedUpdateFeedOptions, selectUpdateFeedBase, updateReleasesUrl } from '../update-channel'
+import { DOWNLOAD_BASE_URL, UPDATE_GITHUB_HOST, UPDATE_GITHUB_OWNER, UPDATE_GITHUB_REPO, addUpdateTrackingSource, effectiveWindowsManifestUrl, packagedUpdateFeedOptions, selectUpdateFeedBase, updateReleasesUrl } from '../update-channel'
 
 type PackagedUpdateSettingsResponse = {
   autoUpdateEnabled: boolean
@@ -630,7 +630,7 @@ async function resolveWindowsManualUpdateFromManifest(manifestUrl: string): Prom
   const zip = manifest.artifacts?.[windowsManifestArtifactKey(arch)] || manifest.artifacts?.zip
   const zipPath = zip?.url || zip?.path
   if (!zipPath) throw new Error(`R2 update manifest does not include a Windows ${arch} artifact URL`)
-  const zipUrl = new URL(zipPath, manifestUrl).toString()
+  const zipUrl = addUpdateTrackingSource(new URL(zipPath, manifestUrl).toString())
   return {
     version: normalizeVersion(manifest.version || manifest.tag),
     zipUrl,
@@ -707,7 +707,7 @@ async function resolveWindowsManualUpdate(): Promise<{
   }
   // If the relay manifest was used and failed, try the direct downloads origin
   // before falling back to GitHub (reachable where GitHub is blocked).
-  const directManifestUrl = `${DOWNLOAD_BASE_URL}/releases/latest/manifest.json`
+  const directManifestUrl = addUpdateTrackingSource(`${DOWNLOAD_BASE_URL}/releases/latest/manifest.json`)
   if (manifestUrl !== directManifestUrl) {
     try {
       return await resolveWindowsManualUpdateFromManifest(directManifestUrl)

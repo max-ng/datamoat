@@ -17,6 +17,7 @@ const windowsTrayIconPaths = {
 }
 const trayTemplatePath = path.join(releaseDir, 'DataMoatStatusTemplate.png')
 const trayTemplate2xPath = path.join(releaseDir, 'DataMoatStatusTemplate@2x.png')
+const appIconSourcePng = path.join(root, 'assets', 'logos', 'datamoat-app-icon.png')
 const bundleRoot = path.join(releaseDir, `DataMoat-darwin-${process.arch}`)
 const bundlePath = path.join(bundleRoot, 'DataMoat.app')
 const bundleResourcesPath = path.join(bundlePath, 'Contents', 'Resources')
@@ -385,12 +386,12 @@ function trayTemplateSvg() {
 
 function writeIcon(outputIcns) {
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'datamoat-icon-'))
-  const svgPath = path.join(tmpRoot, 'datamoat-icon.svg')
   const iconset = path.join(tmpRoot, 'DataMoat.iconset')
-  fs.writeFileSync(svgPath, professionalFortressAppIconSvg().trim())
   fs.mkdirSync(iconset, { recursive: true })
-  execFileSync('qlmanage', ['-t', '-s', '1024', '-o', tmpRoot, svgPath], { stdio: 'ignore' })
-  const basePng = `${svgPath}.png`
+  // Source of truth for the app/dock icon is the rounded emerald-gem PNG
+  // (assets/logos/datamoat-app-icon.png). It already carries the dark rounded
+  // squircle, so each iconset size is just a downscale of that master.
+  const basePng = appIconSourcePng
   const sizes = [
     ['icon_16x16.png', 16],
     ['icon_16x16@2x.png', 32],
@@ -462,50 +463,50 @@ draw_icon(32, r"${outputPng2x}")
 }
 
 function writeDraftTrayTemplates(outputPng, outputPng2x) {
+  // macOS status-bar (menu bar) template icon: an emerald-cut gem silhouette that
+  // matches the app logo. Template images are drawn in black + alpha; macOS renders
+  // them white in the dark menu bar (and dark in a light menu bar), which is the
+  // "white status-bar icon" we want without shipping two colour variants.
+  // Generated directly from the emerald-gem logo (not hand-drawn) so it keeps the
+  // real emerald-cut facets. Template images use only the alpha channel — macOS
+  // paints them white in the dark menu bar — so we map the gem's luminance into
+  // alpha: the near-black rounded-square background drops out, the gem body stays,
+  // and the bright table/facets read clearly. Cropped tight so the gem fills the
+  // icon instead of looking like a small round blob.
   const script = `
-from PIL import Image, ImageDraw
-
-def draw_icon(size, out_path):
+from PIL import Image
+src = r"${appIconSourcePng}"
+rgba = Image.open(src).convert("RGBA")
+L = Image.open(src).convert("L")
+px = L.load(); ax = rgba.split()[3].load()
+W, H = L.size
+tmpl = Image.new("L", (W, H), 0); tp = tmpl.load()
+minx, miny, maxx, maxy = W, H, 0, 0
+for y in range(H):
+    for x in range(W):
+        if ax[x, y] == 0:
+            continue
+        l = px[x, y]
+        v = 0 if l < 40 else min(255, int(55 + (l - 40) * 1.5))
+        tp[x, y] = v
+        if v > 30:
+            minx = min(minx, x); miny = min(miny, y); maxx = max(maxx, x); maxy = max(maxy, y)
+pad = int((maxx - minx) * 0.05)
+tmpl = tmpl.crop((max(0, minx - pad), max(0, miny - pad), min(W, maxx + pad), min(H, maxy + pad)))
+gw, gh = tmpl.size  # the emerald cut is portrait (~0.71 wide:tall) — keep that aspect
+def save(size, out_path):
+    ss = size * 8
+    new_h = int(ss * 0.98)
+    new_w = int(round(new_h * gw / gh))   # narrower than tall, never stretched to square
+    g = tmpl.resize((new_w, new_h), Image.LANCZOS)
+    canvas = Image.new("L", (ss, ss), 0)
+    canvas.paste(g, ((ss - new_w) // 2, (ss - new_h) // 2))
+    a = canvas.resize((size, size), Image.LANCZOS)
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-    scale = size / 32.0
-
-    globe = [10.5 * scale, 3.5 * scale, 21.5 * scale, 14.5 * scale]
-    draw.ellipse(globe, outline=(0, 0, 0, 255), width=max(2, round(1.8 * scale)))
-    draw.arc(globe, start=35, end=145, fill=(0, 0, 0, 255), width=max(1, round(1.1 * scale)))
-    draw.arc(globe, start=215, end=325, fill=(0, 0, 0, 255), width=max(1, round(1.1 * scale)))
-    draw.ellipse([13.7 * scale, 3.5 * scale, 18.3 * scale, 14.5 * scale], outline=(0, 0, 0, 255), width=max(1, round(1.0 * scale)))
-    draw.ellipse([11.5 * scale, 12.8 * scale, 20.5 * scale, 16.8 * scale], outline=(0, 0, 0, 255), width=max(1, round(1.2 * scale)))
-
-    draw.rectangle([4.8 * scale, 10.0 * scale, 8.4 * scale, 22.2 * scale], fill=(0, 0, 0, 255))
-    draw.rectangle([23.6 * scale, 10.0 * scale, 27.2 * scale, 22.2 * scale], fill=(0, 0, 0, 255))
-    draw.line([(6.6 * scale, 10.0 * scale), (6.6 * scale, 4.2 * scale)], fill=(0, 0, 0, 255), width=max(1, round(1.3 * scale)))
-    draw.line([(25.4 * scale, 10.0 * scale), (25.4 * scale, 4.2 * scale)], fill=(0, 0, 0, 255), width=max(1, round(1.3 * scale)))
-    draw.polygon([(6.6 * scale, 5.0 * scale), (2.4 * scale, 7.5 * scale), (6.6 * scale, 8.6 * scale)], fill=(0, 0, 0, 255))
-    draw.polygon([(25.4 * scale, 5.0 * scale), (29.6 * scale, 2.7 * scale), (25.4 * scale, 1.9 * scale)], fill=(0, 0, 0, 255))
-
-    top = [(9.5 * scale, 11.2 * scale), (13.6 * scale, 8.2 * scale), (18.4 * scale, 8.2 * scale), (22.5 * scale, 11.2 * scale), (16.0 * scale, 14.2 * scale)]
-    left = [(4.4 * scale, 13.2 * scale), (9.5 * scale, 11.2 * scale), (16.0 * scale, 14.2 * scale), (16.0 * scale, 28.0 * scale), (4.4 * scale, 22.3 * scale)]
-    right = [(16.0 * scale, 14.2 * scale), (22.5 * scale, 11.2 * scale), (27.6 * scale, 13.2 * scale), (27.6 * scale, 22.3 * scale), (16.0 * scale, 28.0 * scale)]
-
-    draw.polygon(left, outline=(0, 0, 0, 255), fill=None)
-    draw.polygon(right, outline=(0, 0, 0, 255), fill=None)
-    draw.polygon(top, outline=(0, 0, 0, 255), fill=None)
-
-    draw.line([(16.0 * scale, 14.2 * scale), (16.0 * scale, 28.0 * scale)], fill=(0, 0, 0, 255), width=max(1, round(1.1 * scale)))
-    draw.line([(8.0 * scale, 14.2 * scale), (8.0 * scale, 23.8 * scale)], fill=(0, 0, 0, 255), width=max(1, round(1.0 * scale)))
-    draw.line([(12.0 * scale, 11.4 * scale), (12.0 * scale, 25.8 * scale)], fill=(0, 0, 0, 255), width=max(1, round(1.0 * scale)))
-    draw.line([(20.0 * scale, 11.4 * scale), (20.0 * scale, 25.8 * scale)], fill=(0, 0, 0, 255), width=max(1, round(1.0 * scale)))
-    draw.line([(24.0 * scale, 14.2 * scale), (24.0 * scale, 23.8 * scale)], fill=(0, 0, 0, 255), width=max(1, round(1.0 * scale)))
-
-    for y in [16.8, 21.0, 25.0]:
-        draw.line([(6.1 * scale, y * scale), (16.0 * scale, (y - 0.6) * scale)], fill=(0, 0, 0, 255), width=max(1, round(0.95 * scale)))
-        draw.line([(16.0 * scale, (y - 0.6) * scale), (25.9 * scale, y * scale)], fill=(0, 0, 0, 255), width=max(1, round(0.95 * scale)))
-
+    img.putalpha(a)
     img.save(out_path)
-
-draw_icon(16, r"${outputPng}")
-draw_icon(32, r"${outputPng2x}")
+save(16, r"${outputPng}")
+save(32, r"${outputPng2x}")
 `
   execFileSync('python3', ['-c', script], { stdio: 'ignore' })
 }
@@ -788,12 +789,58 @@ function writeWindowsIco(outputPath, sizes, mode = 'idle', variant = 'app') {
   fs.writeFileSync(outputPath, Buffer.concat([header, directory, ...images]))
 }
 
+// Build a multi-size Windows .ico straight from the emerald-gem PNG, so the
+// Windows app/tray icon matches the macOS app icon. PIL downscales the master to
+// each requested size. Supersedes the hand-rolled castle encoder
+// (writeWindowsIco / drawWindowsIconImage), which is now unused.
+function writeIcoFromPng(outputPath, sourcePng, sizes) {
+  const sizesPy = sizes.map(value => `(${value}, ${value})`).join(', ')
+  const script = `
+from PIL import Image
+img = Image.open(r"${sourcePng}").convert("RGBA")
+img.save(r"${outputPath}", format="ICO", sizes=[${sizesPy}])
+`
+  execFileSync('python3', ['-c', script], { stdio: 'ignore' })
+}
+
+// Windows system-tray icon: the BARE emerald gem on a transparent background.
+// Using the full rounded app icon here shows a black box at 16px in the
+// notification area; dropping the dark rounded-square (by luminance) and keeping
+// the gem's colour gives a clean icon on both light and dark taskbars.
+function writeWindowsGemTrayIco(outputPath, sizes) {
+  const sizesPy = sizes.map(value => `(${value}, ${value})`).join(', ')
+  const script = `
+from PIL import Image
+src = r"${appIconSourcePng}"
+rgba = Image.open(src).convert("RGBA"); L = Image.open(src).convert("L")
+lp = L.load(); pp = rgba.load(); W, H = L.size
+gem = Image.new("RGBA", (W, H), (0, 0, 0, 0)); gp = gem.load()
+minx, miny, maxx, maxy = W, H, 0, 0
+for y in range(H):
+    for x in range(W):
+        r, g, b, a = pp[x, y]
+        if a == 0 or lp[x, y] < 42:
+            continue
+        gp[x, y] = (r, g, b, 255)
+        minx = min(minx, x); miny = min(miny, y); maxx = max(maxx, x); maxy = max(maxy, y)
+pad = int((maxx - minx) * 0.04)
+gem = gem.crop((max(0, minx - pad), max(0, miny - pad), min(W, maxx + pad), min(H, maxy + pad)))
+gw, gh = gem.size
+new_h = int(256 * 0.98); new_w = int(round(new_h * gw / gh))   # keep portrait aspect
+g = gem.resize((new_w, new_h), Image.LANCZOS)
+base = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+base.paste(g, ((256 - new_w) // 2, (256 - new_h) // 2), g)
+base.save(r"${outputPath}", format="ICO", sizes=[${sizesPy}])
+`
+  execFileSync('python3', ['-c', script], { stdio: 'ignore' })
+}
+
 function writeWindowsIconAssets() {
   fs.mkdirSync(releaseDir, { recursive: true })
-  writeWindowsIco(windowsIconPath, [16, 24, 32, 48, 64, 128, 256], 'idle', 'app')
-  writeWindowsIco(windowsTrayIconPaths.active, [16, 20, 24, 32], 'active', 'tray')
-  writeWindowsIco(windowsTrayIconPaths.idle, [16, 20, 24, 32], 'idle', 'tray')
-  writeWindowsIco(windowsTrayIconPaths.error, [16, 20, 24, 32], 'error', 'tray')
+  writeIcoFromPng(windowsIconPath, appIconSourcePng, [16, 24, 32, 48, 64, 128, 256])
+  writeWindowsGemTrayIco(windowsTrayIconPaths.active, [16, 20, 24, 32])
+  writeWindowsGemTrayIco(windowsTrayIconPaths.idle, [16, 20, 24, 32])
+  writeWindowsGemTrayIco(windowsTrayIconPaths.error, [16, 20, 24, 32])
 }
 
 async function packageDarwin() {
@@ -925,16 +972,34 @@ function writeWindowsPortableScripts(appRoot) {
   const remoteScript = [
     '@echo off',
     'setlocal',
-    'set "APP_EXE=%~dp0DataMoat.exe"',
+    'set "APP_DIR=%~dp0"',
+    'set "APP_EXE=%APP_DIR%DataMoat.exe"',
+    'set "LOG_DIR=%APP_DIR%"',
+    'if not exist "%LOG_DIR%" set "LOG_DIR=%TEMP%\\"',
+    'set "LOG_FILE=%LOG_DIR%DataMoat Remote No Screen.log"',
+    '> "%LOG_FILE%" echo [%DATE% %TIME%] DataMoat remote no-screen launcher',
+    '>> "%LOG_FILE%" echo Script: %~f0',
+    '>> "%LOG_FILE%" echo App: %APP_EXE%',
+    '>> "%LOG_FILE%" echo Expected health: %USERPROFILE%\\.datamoat\\state\\health.json',
     'if not exist "%APP_EXE%" (',
-    '  echo DataMoat.exe was not found next to this script.',
+    '  >> "%LOG_FILE%" echo ERROR: DataMoat.exe was not found next to this script.',
+    '  >> "%LOG_FILE%" echo Extract the whole ZIP first, then run this script inside the DataMoat-win32 folder.',
+    '  start "" notepad.exe "%LOG_FILE%" >nul 2>nul',
     '  exit /b 1',
     ')',
     'set "TMP_VBS=%TEMP%\\dm-%RANDOM%.vbs"',
     '> "%TMP_VBS%" echo Set shell = CreateObject("WScript.Shell")',
     '>> "%TMP_VBS%" echo shell.Run """" ^& "%APP_EXE%" ^& """ --datamoat-remote-no-screen", 0, False',
     'wscript.exe //nologo "%TMP_VBS%"',
+    'set "LAUNCH_EXIT=%ERRORLEVEL%"',
     'del "%TMP_VBS%" >nul 2>nul',
+    'if not "%LAUNCH_EXIT%"=="0" (',
+    '  >> "%LOG_FILE%" echo ERROR: wscript.exe failed with exit code %LAUNCH_EXIT%.',
+    '  start "" notepad.exe "%LOG_FILE%" >nul 2>nul',
+    '  exit /b %LAUNCH_EXIT%',
+    ')',
+    '>> "%LOG_FILE%" echo Launch handed to DataMoat.exe with --datamoat-remote-no-screen.',
+    '>> "%LOG_FILE%" echo If health.json is still missing after a few seconds, DataMoat did not reach its crash logger.',
     'exit /b 0',
     '',
   ].join('\r\n')

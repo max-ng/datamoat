@@ -52,6 +52,7 @@ import {
 import { authConfigHasTouchId, shouldExposeTouchIdUnlock, touchIdFailureNeedsPasswordRefresh } from '../auth-options'
 import { IS_MAC, secureEnclaveStatus, backgroundCaptureSecretDelete } from '../keychain'
 import { safeError, updateHealth, writeAuditEvent, writeLog } from '../logging'
+import { DATAMOAT_GEM_DATA_URI } from './brand-gem'
 import { scheduleVaultDuplicateMaintenance } from '../vault-maintenance'
 import { scheduleVaultLineRepair } from '../vault-line-repair'
 import {
@@ -135,8 +136,10 @@ import { cleanupAllSourceArchivePending } from '../source-archive'
 import {
   readUiPreferences,
   saveUiPreferences,
+  normalizeChatExportFormat,
   SUPPORTED_UI_LANGUAGES,
 } from '../ui-preferences'
+import type { ChatExportFormat } from '../ui-preferences'
 
 type SessionFlow =
   | 'touchid'
@@ -247,6 +250,32 @@ function openPathWithSystem(filePath: string): Promise<void> {
       resolve()
     })
   })
+}
+
+function revealPathWithSystem(filePath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const command = process.platform === 'darwin'
+      ? 'open'
+      : process.platform === 'win32'
+        ? 'explorer.exe'
+        : 'xdg-open'
+    // Windows: open the containing folder directly. `explorer.exe /select,<path>`
+    // mis-parses paths with spaces (e.g. "DataMoat Exports") and silently opens
+    // the wrong/default folder, so reveal the export folder itself instead.
+    const args = process.platform === 'darwin'
+      ? ['-R', filePath]
+      : [path.dirname(filePath)]
+    const child = spawn(command, args, { detached: true, stdio: 'ignore' })
+    child.once('error', reject)
+    child.once('spawn', () => {
+      child.unref()
+      resolve()
+    })
+  })
+}
+
+function waitMs(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 type SetupActivationProgress = {
@@ -1691,6 +1720,7 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
         language: req.body?.language,
         theme: req.body?.theme,
         readableMessageFormatting: req.body?.readableMessageFormatting,
+        chatExportFormat: req.body?.chatExportFormat,
       }),
       supportedLanguages: SUPPORTED_UI_LANGUAGES,
     })
@@ -2352,6 +2382,46 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     res.json({ ok: true, expiresAt: activeSession?.expiresAt ?? null, flow: activeSession?.flow ?? null })
   })
 
+  // Diagnostic-only: the renderer posts here right before it sends the user back
+  // to /unlock, so health.json keeps a durable record of WHY the UI bounced
+  // (relock-on-reload, or a 401 from a protected call). Deliberately public — in
+  // exactly the cases we need to capture, the session is already gone, so a
+  // requireAuth gate would drop the record. The write is bounded and must never
+  // block or throw the bounce.
+  app.post('/api/ui-event', (req, res) => {
+    try {
+      const body = (req.body && typeof req.body === 'object') ? req.body as Record<string, unknown> : {}
+      if (body.event === 'unlock_bounce') {
+        const str = (value: unknown, max: number): string =>
+          typeof value === 'string' ? value.slice(0, max) : ''
+        const int = (value: unknown): number | null =>
+          typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null
+        const detail = {
+          reason: str(body.reason, 48),
+          navType: str(body.navType, 24),
+          path: str(body.path, 160),
+          api: str(body.api, 120),
+          status: int(body.status),
+          sinceUnlockMs: int(body.sinceUnlockMs),
+          at: new Date().toISOString(),
+        }
+        updateHealth('ui', {
+          lastUnlockBounceAt: detail.at,
+          lastUnlockBounceReason: detail.reason,
+          lastUnlockBounceNavType: detail.navType,
+          lastUnlockBouncePath: detail.path,
+          lastUnlockBounceApi: detail.api,
+          lastUnlockBounceStatus: detail.status,
+          lastUnlockBounceSinceUnlockMs: detail.sinceUnlockMs,
+        })
+        writeLog('warn', 'ui', 'unlock_bounce', detail)
+      }
+    } catch {
+      /* diagnostic record must never break the bounce */
+    }
+    try { res.status(204).end() } catch { /* response already gone */ }
+  })
+
   // ── Protected API ──────────────────────────────────────────────────────────
 
   app.get('/api/sessions', requireAuth, async (_req, res) => {
@@ -2546,18 +2616,25 @@ export async function startUIServer(): Promise<{ port: number; url: string }> {
     const session = sessions.find(s => (s.uid ?? s.id) === req.params.id)
     if (!session) return res.status(404).json({ error: 'not found' })
     try {
+      const format = normalizeChatExportFormat(req.body?.format ?? readUiPreferences().chatExportFormat)
       const total = Math.max(0, Number(session.messageCount || 0))
       const messages = total > 0 ? await readMessagesForUI(session, { offset: 0, limit: total }) : []
-      const result = await exportChatToFolder(session, messages)
-      // Reveal the folder + open the viewer so the user immediately sees the result.
-      await openPathWithSystem(result.dir).catch(() => {})
-      await openPathWithSystem(result.viewerPath).catch(() => {})
+      const result = await exportChatToFolder(session, messages, { format })
+      // Reveal the actual output file, then open it. For PDF this avoids leaving
+      // the user in a folder view with the PDF visually hidden or unselected.
+      await revealPathWithSystem(result.openPath).catch(() => openPathWithSystem(result.dir).catch(() => {}))
+      await waitMs(350)
+      await openPathWithSystem(result.openPath).catch(() => {})
       res.json({
         ok: true,
+        format: result.format,
         dir: result.dir,
-        messageCount: messages.length,
+        path: result.openPath,
+        messageCount: result.messageCount,
+        sourceMessageCount: result.sourceMessageCount,
         imageCount: result.imageCount,
         fileCount: result.fileCount,
+        pdfRenderMs: result.pdfRenderMs,
       })
     } catch (error) {
       writeLog('warn', 'export', 'failed', { error })
@@ -3480,12 +3557,163 @@ function formatContextPackForClipboard(session: Session, messages: Message[], th
 const EXPORTS_DIR = path.join(os.homedir(), 'DataMoat Exports')
 const EXPORT_INLINE_MAX_BYTES = 1_500_000      // embed images up to ~1.5MB each
 const EXPORT_INLINE_TOTAL_BUDGET = 20_000_000  // ...up to ~20MB embedded total
+const EXPORT_FILE_NAME_MAX_CHARS = 120
 
 interface ChatExportResult {
   dir: string
-  viewerPath: string
+  openPath: string
+  format: ChatExportFormat
+  messageCount: number
+  sourceMessageCount: number
   imageCount: number
   fileCount: number
+  pdfRenderMs?: number
+}
+
+type ExportOptions = {
+  format: ChatExportFormat
+}
+
+function safeExportFileStem(value: unknown, fallback: string): string {
+  const text = String(value || '').normalize('NFC')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/[\\/:"*?<>|]+/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[.\s-]+|[.\s-]+$/g, '')
+  if (text) return Array.from(text).slice(0, EXPORT_FILE_NAME_MAX_CHARS).join('')
+  return exportSlugify(fallback || 'chat')
+}
+
+function knownExportMediaTypeFromName(name: string): string | null {
+  const ext = path.extname(name || '').replace(/^\./, '').toLowerCase()
+  const map: Record<string, string> = {
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    svg: 'image/svg+xml',
+    mp4: 'video/mp4',
+    m4v: 'video/mp4',
+    mov: 'video/quicktime',
+    qt: 'video/quicktime',
+    webm: 'video/webm',
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    pdf: 'application/pdf',
+    zip: 'application/zip',
+    json: 'application/json',
+    md: 'text/markdown',
+    txt: 'text/plain',
+    html: 'text/html',
+    htm: 'text/html',
+    csv: 'text/csv',
+  }
+  return map[ext] || null
+}
+
+function usefulExportMediaType(mediaType: unknown): string {
+  const value = typeof mediaType === 'string' ? mediaType.trim().toLowerCase() : ''
+  if (!value || value === 'application/octet-stream' || value === 'binary/octet-stream') return ''
+  return value
+}
+
+function sniffExportMediaType(filePath: string, fallbackName: string, declaredMediaType: unknown): string {
+  const declared = usefulExportMediaType(declaredMediaType)
+  let sample = Buffer.alloc(0)
+  try {
+    const fd = fs.openSync(filePath, 'r')
+    try {
+      sample = Buffer.alloc(4096)
+      const bytes = fs.readSync(fd, sample, 0, sample.length, 0)
+      sample = sample.subarray(0, bytes)
+    } finally {
+      fs.closeSync(fd)
+    }
+  } catch {
+    return declared || knownExportMediaTypeFromName(fallbackName) || 'application/octet-stream'
+  }
+
+  if (sample.length >= 8 && sample.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png'
+  if (sample.length >= 3 && sample[0] === 0xff && sample[1] === 0xd8 && sample[2] === 0xff) return 'image/jpeg'
+  if (sample.length >= 6 && (sample.subarray(0, 6).toString('ascii') === 'GIF87a' || sample.subarray(0, 6).toString('ascii') === 'GIF89a')) return 'image/gif'
+  if (sample.length >= 12 && sample.subarray(0, 4).toString('ascii') === 'RIFF' && sample.subarray(8, 12).toString('ascii') === 'WEBP') return 'image/webp'
+  if (sample.length >= 5 && sample.subarray(0, 5).toString('ascii') === '%PDF-') return 'application/pdf'
+  if (sample.length >= 12 && sample.subarray(4, 8).toString('ascii') === 'ftyp') return /\.mov$/i.test(fallbackName) ? 'video/quicktime' : 'video/mp4'
+  if (sample.length >= 4 && sample[0] === 0x1a && sample[1] === 0x45 && sample[2] === 0xdf && sample[3] === 0xa3) return 'video/webm'
+
+  const named = knownExportMediaTypeFromName(fallbackName)
+  if (named) return named
+  if (declared) return declared
+
+  const prefix = sample.subarray(0, Math.min(sample.length, 512)).toString('utf8').trimStart().toLowerCase()
+  if (prefix.startsWith('<!doctype html') || prefix.startsWith('<html')) return 'text/html'
+  if (sample.length > 0) {
+    let printable = 0
+    for (const byte of sample) {
+      if (byte === 9 || byte === 10 || byte === 13 || (byte >= 32 && byte < 127) || byte >= 0xc2) printable += 1
+    }
+    if (printable / sample.length > 0.85) return 'text/plain'
+  }
+  return 'application/octet-stream'
+}
+
+function electronPdfWorkerCommand(): { command: string; argsPrefix: string[]; env: NodeJS.ProcessEnv } {
+  const env: NodeJS.ProcessEnv = { ...process.env, DATAMOAT_EXPORT_PDF_WORKER: '1' }
+  delete env.ELECTRON_RUN_AS_NODE
+  delete env.DATAMOAT_DAEMON
+  delete env.DATAMOAT_TRAY_ONLY
+
+  if (process.versions.electron) {
+    return { command: process.execPath, argsPrefix: [], env }
+  }
+
+  let electronPath = ''
+  try {
+    const electronModule = require('electron') as unknown
+    electronPath = typeof electronModule === 'string' ? electronModule : ''
+  } catch {
+    electronPath = ''
+  }
+  const mainPath = path.join(__dirname, '..', 'electron', 'main.js')
+  if (!electronPath || !fs.existsSync(mainPath)) {
+    throw new Error('PDF export needs the built Electron renderer. Run npm run build, or choose HTML export.')
+  }
+  return { command: electronPath, argsPrefix: [mainPath], env }
+}
+
+function renderHtmlToPdfWithElectron(htmlPath: string, pdfPath: string): Promise<number> {
+  const startedAt = Date.now()
+  const worker = electronPdfWorkerCommand()
+  const args = [...worker.argsPrefix, '--datamoat-export-pdf', htmlPath, pdfPath]
+  return new Promise((resolve, reject) => {
+    const child = spawn(worker.command, args, {
+      env: worker.env,
+      stdio: ['ignore', 'ignore', 'pipe'],
+      windowsHide: true,
+    })
+    let stderr = ''
+    const timer = setTimeout(() => {
+      child.kill()
+      reject(new Error('PDF export timed out'))
+    }, 45_000)
+    child.stderr?.on('data', chunk => {
+      stderr += String(chunk)
+    })
+    child.on('error', error => {
+      clearTimeout(timer)
+      reject(error)
+    })
+    child.on('exit', code => {
+      clearTimeout(timer)
+      if (code === 0 && fs.existsSync(pdfPath)) {
+        resolve(Date.now() - startedAt)
+        return
+      }
+      reject(new Error(`PDF export renderer failed${stderr.trim() ? `: ${stderr.trim().slice(-1200)}` : ''}`))
+    })
+  })
 }
 
 function collectAttachmentRefs(messages: Message[]): Array<{ id: string; name?: string; mediaType?: string }> {
@@ -3505,29 +3733,72 @@ function collectAttachmentRefs(messages: Message[]): Array<{ id: string; name?: 
   return refs
 }
 
-async function exportChatToFolder(session: Session, messages: Message[]): Promise<ChatExportResult> {
+function isVisibleChatExportMessage(message: Message): boolean {
+  // Keep the encrypted vault and main UI faithful, but make shareable exports
+  // read like the actual conversation instead of exposing internal system setup.
+  if (message.role === 'system') return false
+  if (looksLikeInternalChatExportText(message)) return false
+  return true
+}
+
+function looksLikeInternalChatExportText(message: Message): boolean {
+  const text = (message.content || [])
+    .map(block => {
+      if (block.type === 'text' && block.text) return block.text
+      if (block.type === 'other' && block.text) return block.text
+      if (block.type === 'thinking' && block.thinking) return block.thinking
+      return ''
+    })
+    .join('\n')
+    .trim()
+  if (!text) return false
+  return /^<(permissions instructions|app-context|developer|system)\b/i.test(text)
+    || /^# AGENTS\.md instructions for\b/i.test(text)
+    || /^<INSTRUCTIONS>/i.test(text)
+    || /^# Codex desktop context\b/i.test(text)
+}
+
+async function exportChatToFolder(session: Session, messages: Message[], options: ExportOptions): Promise<ChatExportResult> {
   const title = titleForSession(session) || session.title || session.id
+  const exportMessages = messages.filter(isVisibleChatExportMessage)
   const exportId = exportSlugify(session.id || session.uid || 'chat')
   const slug = `datamoat-chat-export-${exportId}`
   fs.mkdirSync(EXPORTS_DIR, { recursive: true })
   const outDir = path.join(EXPORTS_DIR, slug)
   const filesDir = path.join(outDir, 'files')
+  fs.mkdirSync(outDir, { recursive: true })
+  fs.rmSync(filesDir, { recursive: true, force: true })
+  fs.rmSync(path.join(outDir, 'viewer.html'), { force: true })
+  fs.rmSync(path.join(outDir, 'viewer.pdf'), { force: true })
+  fs.rmSync(path.join(outDir, '.viewer-print.html'), { force: true })
+  for (const entry of fs.readdirSync(outDir)) {
+    if (/\.pdf$/i.test(entry)) fs.rmSync(path.join(outDir, entry), { force: true })
+  }
   fs.mkdirSync(filesDir, { recursive: true })
 
   const assets: ExportAssets = emptyAssets()
   let inlineBudget = EXPORT_INLINE_TOTAL_BUDGET
   let seq = 0
-  for (const ref of collectAttachmentRefs(messages)) {
+  for (const ref of collectAttachmentRefs(exportMessages)) {
     const meta = attachmentMetadata(ref.id)
     if (!meta) continue
     seq += 1
-    const mediaType = ref.mediaType || meta.mediaType || 'application/octet-stream'
-    const ext = extForAttachment(mediaType, ref.name)
+    const declaredMediaType = ref.mediaType || meta.mediaType || 'application/octet-stream'
+    const ext = extForAttachment(declaredMediaType, ref.name)
     const base = ref.name ? exportSlugify(ref.name.replace(/\.[^.]+$/, '')) : `attachment-${String(seq).padStart(3, '0')}`
-    const name = `${String(seq).padStart(3, '0')}-${base}.${ext}`
-    const destPath = path.join(filesDir, name)
+    let name = `${String(seq).padStart(3, '0')}-${base}.${ext}`
+    let destPath = path.join(filesDir, name)
     const written = await writeAttachmentToFile(ref.id, destPath)
     if (!written) { seq -= 1; continue }
+    const mediaType = sniffExportMediaType(destPath, ref.name || name, ref.mediaType || written.mediaType || meta.mediaType)
+    const finalExt = extForAttachment(mediaType, ref.name)
+    const finalName = `${String(seq).padStart(3, '0')}-${base}.${finalExt}`
+    if (finalName !== name) {
+      const finalPath = path.join(filesDir, finalName)
+      fs.renameSync(destPath, finalPath)
+      name = finalName
+      destPath = finalPath
+    }
     const size = fs.statSync(destPath).size
     const isImage = /^image\//.test(mediaType)
     let dataUri = ''
@@ -3542,18 +3813,52 @@ async function exportChatToFolder(session: Session, messages: Message[]): Promis
   }
 
   const fileFor = (id?: string): string | null => (id && assets.byId[id]) ? assets.byId[id].name : null
-  const clean = buildCleanExport(session, messages, fileFor, title)
+  const clean = buildCleanExport(session, exportMessages, fileFor, title)
   const viewerPath = path.join(outDir, 'viewer.html')
-  fs.writeFileSync(viewerPath, renderChatViewerHtml(clean, assets))
+  const pdfFileName = `${path.basename(outDir)}.pdf`
+  const pdfPath = path.join(outDir, pdfFileName)
+  fs.rmSync(pdfPath, { force: true })
+  let openPath = viewerPath
+  let pdfRenderMs: number | undefined
+  if (options.format === 'html') {
+    const viewerHtml = renderChatViewerHtml(clean, assets)
+    fs.writeFileSync(viewerPath, viewerHtml)
+  } else {
+    const viewerHtml = renderChatViewerHtml(clean, assets, {
+      toolDetails: 'summary',
+      showTitle: false,
+      documentTitle: path.basename(outDir),
+    })
+    const tempHtmlPath = path.join(outDir, '.viewer-print.html')
+    fs.writeFileSync(tempHtmlPath, viewerHtml)
+    try {
+      pdfRenderMs = await renderHtmlToPdfWithElectron(tempHtmlPath, pdfPath)
+    } finally {
+      fs.rmSync(tempHtmlPath, { force: true })
+    }
+    openPath = pdfPath
+  }
   fs.writeFileSync(path.join(outDir, 'chat.json'), JSON.stringify(clean, null, 2))
 
   const imageCount = assets.list.filter(a => a.isImage).length
   writeAuditEvent('export', 'chat_exported', {
     sessionUid: session.uid,
-    messageCount: messages.length,
+    messageCount: exportMessages.length,
+    sourceMessageCount: messages.length,
     attachmentCount: assets.list.length,
+    format: options.format,
+    pdfRenderMs,
   })
-  return { dir: outDir, viewerPath, imageCount, fileCount: assets.list.length - imageCount }
+  return {
+    dir: outDir,
+    openPath,
+    format: options.format,
+    messageCount: exportMessages.length,
+    sourceMessageCount: messages.length,
+    imageCount,
+    fileCount: assets.list.length - imageCount,
+    pdfRenderMs,
+  }
 }
 
 async function readMessagesForUI(session: Session, options: ReadMessagesForUIOptions = {}): Promise<Message[]> {
@@ -5133,6 +5438,7 @@ ${UI_FONT_FACE_CSS}
 </style>
 </head>
 <body>
+<div style="display:flex;justify-content:center;margin-bottom:16px">${datamoatGemMark(64)}</div>
 <div class="logo">DataMoat — <span id="setup-logo-text">first-run setup</span></div>
 
 <div class="card">
@@ -6814,10 +7120,18 @@ init();
 </html>`
 }
 
+// Brand mark for the unlock / first-run setup screens: the REAL emerald-gem app
+// icon image (datamoat-app-icon.png as a data URI), not a hand-drawn shape — so
+// it always matches the actual logo.
+function datamoatGemMark(px: number): string {
+  return `<img class="dm-gem-mark" src="${DATAMOAT_GEM_DATA_URI}" width="${px}" height="${px}" alt="DataMoat" draggable="false" />`
+}
+
 function unlockPageHTML(): string {
   const language = initialUiLanguage()
+  const theme = initialUiTheme()
   return `<!DOCTYPE html>
-<html lang="${language}">
+<html lang="${language}" data-theme="${theme}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -6990,22 +7304,16 @@ ${UI_FONT_FACE_CSS}
     color: rgba(255,255,255,0.88);
   }
   .lock-icon {
-    width: 42px;
-    height: 42px;
     display: grid;
     place-items: center;
     margin-bottom: 18px;
-    border: 1px solid rgba(116,182,165,0.3);
-    border-radius: 8px;
-    background: rgba(116,182,165,0.12);
-    color: #74b6a5;
+    border: 0;
+    background: none;
     font-size: 0;
     filter: none;
     animation: none;
   }
-  .lock-icon svg {
-    width: 22px;
-    height: 22px;
+  .dm-gem-mark {
     display: block;
   }
   .card {
@@ -7066,15 +7374,87 @@ ${UI_FONT_FACE_CSS}
   .error-msg {
     color: #f28b82;
   }
+  html[data-theme="light"],
+  html[data-theme="light"] body {
+    background: #f6f7f7;
+    color: #1f2926;
+  }
+  html[data-theme="light"] .logo {
+    color: #3f8f7f;
+  }
+  html[data-theme="light"] .logo span {
+    color: #6f7b76;
+  }
+  html[data-theme="light"] .language-switch,
+  html[data-theme="light"] .card {
+    background: #ffffff;
+    border-color: #dfe5e2;
+  }
+  html[data-theme="light"] .card-header,
+  html[data-theme="light"] .card-body {
+    background: #ffffff;
+  }
+  html[data-theme="light"] .card-header {
+    border-bottom-color: #dfe5e2;
+  }
+  html[data-theme="light"] .card-header h1 {
+    color: #1f2926;
+  }
+  html[data-theme="light"] .card-header p,
+  html[data-theme="light"] .method-note,
+  html[data-theme="light"] .divider,
+  html[data-theme="light"] .recovery-link button,
+  html[data-theme="light"] .skip-link button {
+    color: #6f7b76;
+  }
+  html[data-theme="light"] .label,
+  html[data-theme="light"] .language-btn {
+    color: #586661;
+  }
+  html[data-theme="light"] .language-btn.active,
+  html[data-theme="light"] .btn-primary,
+  html[data-theme="light"] .btn-touchid {
+    background: rgba(63,143,127,0.13);
+    border-color: rgba(63,143,127,0.32);
+    color: #1f2926;
+  }
+  html[data-theme="light"] .btn-primary:hover:not(:disabled),
+  html[data-theme="light"] .btn-touchid:hover {
+    background: rgba(63,143,127,0.18);
+  }
+  html[data-theme="light"] .lock-icon {
+    border-color: rgba(63,143,127,0.26);
+    background: rgba(63,143,127,0.10);
+    color: #3f8f7f;
+  }
+  html[data-theme="light"] .pw-input,
+  html[data-theme="light"] .totp-big,
+  html[data-theme="light"] .recovery-input {
+    background: #f6f7f7;
+    border-color: #cbd5d1;
+    color: #1f2926;
+  }
+  html[data-theme="light"] .pw-input:focus,
+  html[data-theme="light"] .totp-big:focus,
+  html[data-theme="light"] .recovery-input:focus {
+    border-color: rgba(63,143,127,0.58);
+  }
+  html[data-theme="light"] .card.dm-unlock-success {
+    border-color: rgba(63,143,127,0.44);
+    background: #f2f5f4;
+  }
+  html[data-theme="light"] .card.dm-unlock-error {
+    border-color: rgba(211,73,68,0.46);
+  }
+  html[data-theme="light"] .error-msg {
+    color: #b8403a;
+  }
 </style>
 </head>
 <body>
 <div class="logo">DataMoat</div>
 <div class="lock-icon" aria-hidden="true">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-    <rect x="4" y="10" width="16" height="10" rx="2"></rect>
-    <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
-  </svg>
+  ${datamoatGemMark(60)}
 </div>
 
 <div class="card">
@@ -7464,6 +7844,10 @@ async function finishUnlock(payload) {
   // cold-open Touch ID auto-prompt then. A fresh app launch is a new window with
   // empty sessionStorage, so the auto-prompt fires.
   try { sessionStorage.setItem('dm_unlocked_window', '1'); } catch {}
+  // Timestamp the successful unlock so a later bounce back to /unlock can record
+  // how long after unlock it happened — a bounce milliseconds after unlock is a
+  // regression; one after a long idle is a legitimate relock.
+  try { localStorage.setItem('dm_unlock_ts', String(Date.now())); } catch {}
   const card = document.querySelector('.card');
   if (card) {
     card.classList.remove('dm-unlock-error');

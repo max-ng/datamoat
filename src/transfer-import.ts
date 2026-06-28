@@ -2,6 +2,7 @@ import * as crypto from 'crypto'
 import * as fs from 'fs'
 import * as os from 'os'
 import * as path from 'path'
+import * as readline from 'readline'
 import {
   loadAuthConfig,
   normalizeMnemonic,
@@ -498,9 +499,27 @@ async function readSourceProtectedJson<T>(root: string, helperSessionId: string,
   }
 }
 
+// Read a newline-delimited file without ever materializing it as one string.
+// V8 caps a single string at ~512MB (0x1fffffe8). A large session/raw file read
+// with fs.readFileSync(path, 'utf8') throws "Cannot create a string longer than
+// 0x1fffffe8 characters" and used to abort the whole transfer import. Streaming
+// line-by-line keeps each string bounded to one encrypted record.
+async function readNewlineDelimitedLines(filePath: string): Promise<string[]> {
+  const lines: string[] = []
+  await new Promise<void>((resolve, reject) => {
+    const stream = fs.createReadStream(filePath, { encoding: 'utf8' })
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity })
+    rl.on('line', line => { if (line) lines.push(line) })
+    rl.on('close', () => resolve())
+    rl.on('error', reject)
+    stream.on('error', reject)
+  })
+  return lines
+}
+
 async function readSourceJsonLinePayload<T>(filePath: string, helperSessionId: string): Promise<SourceJsonLinePayload<T>> {
   if (!fs.existsSync(filePath)) return { values: [], lines: [] }
-  const lines = fs.readFileSync(filePath, 'utf8').split('\n').filter(Boolean)
+  const lines = await readNewlineDelimitedLines(filePath)
   if (lines.length === 0) return { values: [], lines: [] }
   const decoded = lines[0].startsWith('{')
     ? lines
@@ -854,7 +873,16 @@ async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: Trans
       continue
     }
 
-    const payload = await readSourceSessionPayload(source.root, source.helperSessionId, sourceSession)
+    let payload: SourceSessionPayload
+    try {
+      payload = await readSourceSessionPayload(source.root, source.helperSessionId, sourceSession)
+    } catch (error) {
+      // One unreadable/oversized session must not abort the remaining import.
+      nextJob.failed.sessions += 1
+      writeLog('warn', 'transfer', 'session_read_failed', { uid: sourceSession.uid, source: sourceSession.source, error: safeError(error) })
+      writeJob(nextJob)
+      continue
+    }
 
     if (
       importsState.sessionIdentities[payload.identity]
@@ -904,7 +932,12 @@ async function mergeSourceIntoCurrentVault(job: TransferImportJob, source: Trans
       existingUids.delete(destinationUid)
       const mergedIndex = mergedSessions.findIndex(session => session.uid === destinationUid)
       if (mergedIndex >= 0) mergedSessions.splice(mergedIndex, 1)
-      throw error
+      // Record and skip this session instead of aborting the whole import so the
+      // remaining sessions still come through.
+      nextJob.failed.sessions += 1
+      writeLog('warn', 'transfer', 'session_import_failed', { uid: sourceSession.uid, source: sourceSession.source, error: safeError(error) })
+      writeJob(nextJob)
+      continue
     }
 
     const importedAt = nowIso()
@@ -1047,6 +1080,15 @@ function isTransferTransientPath(relativePath: string): boolean {
     || normalized === 'state/transfer-import-job.json'
     || normalized === 'state/transfer-imports.json'
     || normalized === 'state/transfer-replace-journal.json'
+    // The chatgpt-export import-job file is only the last-import progress shown
+    // in Settings. It is machine-local display state, not vault data, so a
+    // restored backup must not inherit the source machine's "imported" banner.
+    // (The dedup ledger chatgpt-export-imports.json is intentionally left alone.)
+    || normalized === 'state/chatgpt-export-import-job.json'
+    // UI preferences (language/theme/export format) follow the machine, not the
+    // backup. A vault restored onto an English machine must re-detect the OS
+    // language instead of inheriting the source machine's language choice.
+    || normalized === 'state/ui-preferences.json'
 }
 
 function hasCurrentBootstrapCapture(): boolean {
@@ -1188,6 +1230,10 @@ function cleanMachineBoundTransferredState(root: string): void {
     'state/transfer-import-job.json',
     'state/transfer-imports.json',
     'state/transfer-replace-journal.json',
+    // Stale chatgpt-export import-progress display from a previous machine/vault.
+    'state/chatgpt-export-import-job.json',
+    // Machine-local UI prefs (language/theme) — re-detect OS language on restore.
+    'state/ui-preferences.json',
     'state/bootstrap-capture.json',
     'state/bootstrap-capture-index.json',
     'state/bootstrap-capture-secret',

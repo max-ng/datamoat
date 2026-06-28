@@ -520,6 +520,8 @@ function reportRemoteNoScreenDaemonFailure(error: unknown, reason: string): void
   updateHealth('electron', {
     running: true,
     trayOnly: true,
+    daemonStartingAt: new Date().toISOString(),
+    daemonStartingReason: reason,
     daemonStartFailedAt: new Date().toISOString(),
     daemonStartError: error instanceof Error ? error.message : String(error),
     daemonStartErrorReason: reason,
@@ -537,6 +539,8 @@ async function ensureDaemonRunningForRemoteNoScreenWithRetry(reason: string): Pr
       startedAt: new Date().toISOString(),
       stoppedAt: null,
       trayOnly: true,
+      daemonStartingAt: null,
+      daemonStartingReason: null,
       daemonStartError: null,
       daemonStartFailedAt: null,
       daemonStartErrorReason: null,
@@ -833,7 +837,7 @@ function professionalFortressAppIcon(): Electron.NativeImage {
   return nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`)
 }
 
-type TrayMode = 'active' | 'idle' | 'error'
+type TrayMode = 'active' | 'idle' | 'starting' | 'error'
 
 type TrayStatus = {
   mode: TrayMode
@@ -865,7 +869,8 @@ function macTrayTemplateIcon(): Electron.NativeImage | null {
 
 function resolveLinuxTrayAsset(mode: TrayMode): string | null {
   if (process.platform !== 'linux') return null
-  const candidate = path.join(__dirname, 'assets', `tray-${mode}.png`)
+  const assetMode = mode === 'starting' ? 'idle' : mode
+  const candidate = path.join(__dirname, 'assets', `tray-${assetMode}.png`)
   return fs.existsSync(candidate) ? candidate : null
 }
 
@@ -885,16 +890,28 @@ function resolveRuntimeIcon(): Electron.NativeImage {
       path.join(__dirname, '..', '..', 'release', 'DataMoat.ico'),
     ])
     if (image) return image
+  } else {
+    // Dock/window icon: use the bundled emerald-gem app icon so it matches the
+    // .icns the packager set. electron.icns ships in Resources; the release/ and
+    // assets/ paths cover dev runs. Falls back to the generated icon only if none
+    // of those exist.
+    const image = nativeImageFromFirstExistingPath([
+      path.join(process.resourcesPath, 'electron.icns'),
+      path.join(__dirname, '..', '..', 'release', 'DataMoat.icns'),
+      path.join(__dirname, '..', '..', 'assets', 'logos', 'datamoat-app-icon.png'),
+    ])
+    if (image) return image
   }
   return professionalFortressAppIcon()
 }
 
 function resolveWindowsTrayIcon(mode: TrayMode): Electron.NativeImage | null {
   if (process.platform !== 'win32') return null
+  const assetMode = mode === 'starting' ? 'idle' : mode
   return nativeImageFromFirstExistingPath([
-    path.join(process.resourcesPath, `DataMoatTray-${mode}.ico`),
+    path.join(process.resourcesPath, `DataMoatTray-${assetMode}.ico`),
     path.join(process.resourcesPath, 'DataMoat.ico'),
-    path.join(__dirname, '..', '..', 'release', `DataMoatTray-${mode}.ico`),
+    path.join(__dirname, '..', '..', 'release', `DataMoatTray-${assetMode}.ico`),
     path.join(__dirname, '..', '..', 'release', 'DataMoat.ico'),
   ])
 }
@@ -1016,15 +1033,22 @@ function transferImportJobIsActive(): boolean {
 function currentTrayStatus(): TrayStatus {
   const health = readJsonFile<any>(HEALTH_FILE)
   const publicStatus = readJsonFile<any>(PUBLIC_STATUS_FILE)
+  const electron = health?.components?.electron ?? {}
   const daemon = health?.components?.daemon ?? {}
   const capture = health?.components?.capture ?? {}
   const daemonRunning = daemon.running === true && daemonProcessLooksAlive(daemon.pid)
+  const startFailedAt = typeof electron.daemonStartFailedAt === 'string' ? Date.parse(electron.daemonStartFailedAt) : NaN
+  const recentlyStarted = Number.isFinite(startFailedAt) && Date.now() - startFailedAt < 120000
+  const stillStarting = !daemonRunning
+    && recentlyStarted
+    && electron.bootstrapCapture === true
+    && !electron.daemonRecoveryFailedAt
   const captureRunning = daemonRunning && (capture.running === true || daemon.captureRunning === true)
   const locked = typeof daemon.locked === 'boolean' ? daemon.locked : null
   const sessionCount = typeof publicStatus?.totalSessions === 'number' ? publicStatus.totalSessions : null
   const port = typeof daemon.port === 'number' ? daemon.port : null
   return {
-    mode: !daemonRunning ? 'error' : captureRunning ? 'active' : 'idle',
+    mode: !daemonRunning ? (stillStarting ? 'starting' : 'error') : captureRunning ? 'active' : 'idle',
     daemonRunning,
     captureRunning,
     locked,
@@ -1170,7 +1194,25 @@ function ensureDaemonRecoveredInBackground(reason: string): void {
       const runtime = await ensureHealthyRuntime(reason)
       const win = usableWindow()
       if (win && runtime.recovered) {
-        await ensureExistingWindowRuntime(win, `${reason}:reload`, true)
+        // `recovered` goes true even from a single transient resolveActivePort
+        // miss — common right after unlock, when the daemon is busy with backfill
+        // and vault maintenance. If the daemon is healthy on the SAME origin the
+        // window already uses, nothing actually moved: reloading would re-fetch
+        // the page as a `reload`, which relockOnReload treats as a manual refresh
+        // and bounces a just-unlocked user back to /unlock. Only reload on a real
+        // origin change.
+        const currentUrl = safeWindowUrl(win)
+        const currentOrigin = currentUrl ? urlOrigin(currentUrl) : null
+        const nextOrigin = `http://localhost:${runtime.port}`
+        if (currentOrigin && currentOrigin === nextOrigin) {
+          updateHealth('electron', {
+            daemonRecoveryReloadSkippedAt: new Date().toISOString(),
+            daemonRecoveryReloadSkippedReason: reason,
+            daemonRecoveryReloadSkippedOrigin: currentOrigin,
+          })
+        } else {
+          await ensureExistingWindowRuntime(win, `${reason}:reload`, true)
+        }
       }
     } catch (error) {
       writeLog('warn', 'electron', 'daemon_recovery_failed', { reason, error })
@@ -1833,6 +1875,8 @@ function updateTray(): void {
     activeTray.setToolTip(
       status.mode === 'active'
         ? 'DataMoat: background capture active'
+        : status.mode === 'starting'
+          ? 'DataMoat: starting background capture'
         : status.mode === 'idle'
           ? 'DataMoat: running, waiting for full capture'
           : 'DataMoat: daemon unavailable',
@@ -1854,7 +1898,7 @@ function updateTray(): void {
     if (mainWindow === win) mainWindow = null
   }
   const menu = Menu.buildFromTemplate([
-    { label: status.mode === 'active' ? 'Background capture active' : status.mode === 'idle' ? 'Running, waiting for capture' : 'Daemon unavailable', enabled: false },
+    { label: status.mode === 'active' ? 'Background capture active' : status.mode === 'starting' ? 'Starting background capture' : status.mode === 'idle' ? 'Running, waiting for capture' : 'Daemon unavailable', enabled: false },
     { label: `Vault: ${status.locked === null ? 'unknown' : status.locked ? 'locked' : 'unlocked'}`, enabled: false },
     { label: `Sessions: ${status.sessionCount ?? 'unavailable'}`, enabled: false },
     { type: 'separator' },
@@ -1961,7 +2005,87 @@ function installDesktopIpc(): void {
   })
 }
 
-if (rejectWindowsSystemLaunchIfNeeded()) {
+type ExportPdfWorkerArgs = {
+  inputHtmlPath: string
+  outputPdfPath: string
+}
+
+const EXPORT_PDF_WIDTH_PX = 1000
+
+function exportPdfWorkerArgs(argv = process.argv): ExportPdfWorkerArgs | null {
+  const index = argv.indexOf('--datamoat-export-pdf')
+  if (index < 0) return null
+  const inputHtmlPath = argv[index + 1]
+  const outputPdfPath = argv[index + 2]
+  if (!inputHtmlPath || !outputPdfPath) {
+    throw new Error('usage: --datamoat-export-pdf <input.html> <output.pdf>')
+  }
+  return { inputHtmlPath, outputPdfPath }
+}
+
+async function waitForExportPdfAssets(win: BrowserWindow): Promise<void> {
+  await win.webContents.executeJavaScript(`
+    (async () => {
+      if (document.fonts && document.fonts.ready) await document.fonts.ready.catch(() => {});
+      await Promise.all(Array.from(document.images || []).map(img => {
+        if (img.complete) return true;
+        return new Promise(resolve => {
+          img.addEventListener('load', resolve, { once: true });
+          img.addEventListener('error', resolve, { once: true });
+        });
+      }));
+    })()
+  `)
+}
+
+async function runExportPdfWorker(args: ExportPdfWorkerArgs): Promise<void> {
+  app.disableHardwareAcceleration()
+  await app.whenReady()
+  const win = new BrowserWindow({
+    show: false,
+    width: EXPORT_PDF_WIDTH_PX,
+    height: 1414,
+    webPreferences: {
+      sandbox: true,
+      contextIsolation: true,
+      nodeIntegration: false,
+      webSecurity: false,
+    },
+  })
+  try {
+    await win.loadFile(path.resolve(args.inputHtmlPath))
+    await waitForExportPdfAssets(win)
+    const pdf = await win.webContents.printToPDF({
+      printBackground: true,
+      preferCSSPageSize: true,
+      margins: { marginType: 'none' },
+    })
+    fs.mkdirSync(path.dirname(path.resolve(args.outputPdfPath)), { recursive: true })
+    fs.writeFileSync(path.resolve(args.outputPdfPath), pdf)
+  } finally {
+    if (!win.isDestroyed()) win.destroy()
+  }
+}
+
+let parsedExportPdfWorkerArgs: ExportPdfWorkerArgs | null = null
+let exportPdfWorkerParseError: unknown = null
+try {
+  parsedExportPdfWorkerArgs = exportPdfWorkerArgs()
+} catch (error) {
+  exportPdfWorkerParseError = error
+}
+
+if (exportPdfWorkerParseError) {
+  console.error(exportPdfWorkerParseError instanceof Error ? exportPdfWorkerParseError.message : String(exportPdfWorkerParseError))
+  app.exit(1)
+} else if (parsedExportPdfWorkerArgs) {
+  void runExportPdfWorker(parsedExportPdfWorkerArgs)
+    .then(() => app.exit(0))
+    .catch(error => {
+      console.error(error instanceof Error ? error.stack || error.message : String(error))
+      app.exit(1)
+    })
+} else if (rejectWindowsSystemLaunchIfNeeded()) {
   // Do not create a systemprofile vault or bind the local UI port.
 } else if (!app.requestSingleInstanceLock()) {
   void takeOverStalePackagedInstanceAfterLockFailure()

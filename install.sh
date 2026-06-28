@@ -14,6 +14,16 @@ echo ""
 SOURCE_DIR="$(pwd -P)"
 BOOTSTRAP_CAPTURE=0
 BOOTSTRAP_REQUESTED_BY=""
+TRACKING_SOURCE="${DATAMOAT_UPDATE_SOURCE:-${DATAMOAT_INSTALL_SOURCE:-}}"
+if [[ ! "$TRACKING_SOURCE" =~ ^[A-Za-z0-9_-]{1,32}$ ]]; then
+  TRACKING_SOURCE=""
+fi
+TRACKING_LINES=""
+if [ -n "$TRACKING_SOURCE" ]; then
+  TRACKING_LINES=",
+  \"installSource\": \"${TRACKING_SOURCE}\",
+  \"updateSource\": \"${TRACKING_SOURCE}\""
+fi
 
 for arg in "$@"; do
   case "$arg" in
@@ -123,7 +133,7 @@ cat > "$HOME/.datamoat/state/install-source.json" << EOF
   "scriptLauncherBin": "${SOURCE_APP_BIN}",
   "sourceCommit": "${SOURCE_COMMIT}",
   "installedAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-  "mode": "source-copy"
+  "mode": "source-copy"${TRACKING_LINES}
 }
 EOF
 

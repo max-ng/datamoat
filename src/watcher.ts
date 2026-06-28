@@ -24,7 +24,7 @@ import { buildSessionUid, sourceAccountFromPath, claudeForkGroupKey, claudeForkG
 import { normalizedMessageKey } from './message-key'
 import { queueReferencedAttachmentBackupForRawRecords } from './referenced-attachments'
 import { appendSourceArchiveChunk } from './source-archive'
-import { codexSessionTitle, cursorSessionTitle } from './session-titles'
+import { claudeAppSessionTitle, codexSessionTitle, cursorSessionTitle } from './session-titles'
 
 function log(event: string, fields: Record<string, unknown> = {}): void {
   writeLog('info', 'watcher', event, fields)
@@ -1088,6 +1088,9 @@ function refreshStateTitle(filePath: string, source: Source, state: FileState): 
     if (title) state.title = title
   } else if (source === 'cursor') {
     const title = cursorSessionTitle(state.sessionId)
+    if (title) state.title = title
+  } else if (source === 'claude-app') {
+    const title = claudeAppSessionTitle(filePath)
     if (title) state.title = title
   }
 }
